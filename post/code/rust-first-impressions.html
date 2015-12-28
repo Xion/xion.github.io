@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
+  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this cumbersome language evokes on regular basis. When I was working in it less sporadically, I was shrugging it off and telling myself it’s all because of the low level ..." />
+<meta name="keywords" content="Rust, pointers, types, FP, OOP, traits">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Rust: first&nbsp;impressions"/>
+<meta property="og:description" content="Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this cumbersome language evokes on regular basis. When I was working in it less sporadically, I was shrugging it off and telling myself it’s all because of the low level ..."/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/rust-first-impressions.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2015-12-10 20:33:00-08:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Rust"/>
+<meta property="article:tag" content="pointers"/>
+<meta property="article:tag" content="types"/>
+<meta property="article:tag" content="FP"/>
+<meta property="article:tag" content="OOP"/>
+<meta property="article:tag" content="traits"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; Rust: first&nbsp;impressions</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>def code(tea):<br>return 42</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+      <a href="http://xion.io/feeds/atom.xml">Atom</a>
+      <a href="http://xion.io/feeds/rss.xml">RSS</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="rust-first-impressions">Rust: first&nbsp;impressions</h1>
+    <p>Posted on Thu 10 December 2015 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this
+cumbersome language evokes on regular basis. When I was working in it less sporadically, I was shrugging it off
+and telling myself it&#8217;s all because of the low level it operates on. Superior performance was the other side of the deal,
+and it was supposed to make all the trade-offs&nbsp;worthwhile.</p>
+<p>Now, however, I realized that running close to the metal by no means excuses the sort of clunkiness that C++ permits.
+There really is no reason, for example, why the archaically asinine separation of header <span class="amp">&amp;</span> source files &#8212;
+with its inevitable redundancy of declarations and definitions, worked around with Java-esque contraptions such as
+<a href="http://c2.com/cgi/wiki?PimplIdiom">pimpl</a> &#8212; is still the bread and butter of C++ programs.<br/>
+Same goes for the lack of sane dependency management, or a universal, portable build system. None of those would be
+at odds with native compilation to machine code, or runtime speeds that are adequate for real-time&nbsp;programs.</p>
+<p>Rather than dwelling on those gripes, I thought it&#8217;d be more productive to look around and see what&#8217;s
+the modern offerring in the domain of lower level, <em>really</em> fast languages. The search wasn&#8217;t long at all, because
+right now it seems there is just one viable contender: Rust<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>Rusty&nbsp;systems</h4>
+<p><a href="https://www.rust-lang.org">Rust</a> introduces itself as a
+<a href="https://en.wikipedia.org/wiki/System_programming_language">&#8220;systems programming language&#8221;</a>, which is quite a bold claim.
+What followed the last time this phrase has been applied to an emerging language &#8212; Go &#8212; was a kind of
+<a href="https://www.quora.com/Of-the-emerging-systems-languages-Rust-D-Go-and-Nim-which-is-the-strongest-language-and-why">word twisting</a>
+that&#8217;s more indicative of politics, not computer&nbsp;science.</p>
+<p>But Rust&#8217;s pretense to the system level is well justified. It clearly provides the requisite toolkit for working
+directly with the hardware, be it <a href="https://github.com/miselin/rustic">embedded controllers</a> or
+<a href="http://www.redox-os.org/">fully featured computers</a>. It offers compilation to native machine code;
+direct memory access; running time guarantees thanks to the lack of <span class="caps">GC</span>-incuded stops;
+and great interoperability through static and dynamic&nbsp;linkage.</p>
+<p>In short, with Rust you can wreak havoc against the <span class="caps">RAM</span> and twiddle bits to your heart&#8217;s&nbsp;content.</p>
+<h4>Safe and&nbsp;sound</h4>
+<p>To be fair, though, the &#8220;havoc&#8221; part is not entirely accurate. Despite its focus on the low level, efficient computing,
+Rust aims to be a very safe language. Unlike C, it actively tries to prevent the programmer from shooting themselves
+in the foot &#8212; though it will hand you the gun if you but ask for&nbsp;it.</p>
+<p>The safety guarantees provided by Rust apply to resource management, with the specific emphasis on memory
+and pointers to it. The way that most contemporary languages deal with memory is by introducing a <em>garbage collector</em>
+which mostly (though not wholly) relieves the programmer from thinking about allocations and deallocations.
+However, the kind of global, stop-the-world garbage collections
+(e.g. <a href="https://en.wikipedia.org/wiki/Tracing_garbage_collection#Na.C3.AFve_mark-and-sweep">mark-and-sweep</a>)
+is costly and unpredictable, ruling it out as a mechanism for real-time&nbsp;systems.</p>
+<p>For this reason, Rust doesn&#8217;t mandate a <span class="caps">GC</span> of this kind<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And although it offers mechanisms that are similar to
+smart pointers from C++ (e.g. <code>std::shared_ptr</code>), it is actually preferrable and <em>safer</em> to use regular, &#8220;naked&#8221; pointers:
+<code>&amp;Foo</code> versus <code>Cell&lt;Foo&gt;</code> or <code>RefCell&lt;Foo&gt;</code> (which are some of the Rust&#8217;s &#8220;smart pointer&#8221;&nbsp;types).</p>
+<p>The trick is in the clever compiler. As long as we use regular pointers, it is capable of detecting potential memory
+bugs at <em>compilation time</em>. They are referred to as &#8220;data races&#8221; in Rust&#8217;s terminology, and include
+<a href="https://doc.rust-lang.org/stable/book/references-and-borrowing.html#issues-borrowing-prevents">perennial problems</a>
+that can segfault any C code that wasn&#8217;t written with utmost&nbsp;care.</p>
+<p>Part of those safety guarantees is also the <em>default immutability</em> of references (pointers). The simplest reference
+of type <code>&amp;Foo</code> in Rust translates to something like <code>const Foo * const</code> in C<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. You have to explicitly request
+mutability with the <code>mut</code> keyword, and Rust ensures there is always at most one mutable reference to any value,
+thus preventing problems caused by <a href="https://en.wikipedia.org/wiki/Pointer_aliasing">pointer aliasing</a>.</p>
+<p>What if you really must sling raw pointers and access arbitrary memory locations, because e.g. you are programming
+a microcontroller where I/O is done through a special memory region? For those occassions, there is the <code>unsafe</code>
+keyword:</p>
+<div class="highlight"><pre><span class="c1">// Read the state of a diode in some imaginary uC.</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">get_led_state</span><span class="p">(</span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="n">isize</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">assert</span><span class="o">!</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;There are FOUR lights!&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x1234</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">;</span><span class="w">  </span><span class="c1">// known memory location</span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="p">.</span><span class="n">offset</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Its usage, like in the above example, can be <em>very</em> localized, limited only to those places where it&#8217;s truly necessary
+and guarded by appropriate checks. As a result, the interface exposed by a function like this can be deemed&nbsp;safe.</p>
+<h4>Typing&nbsp;counts</h4>
+<p>Those advanced facilities that ensure memory safety are not the only way in which Rust differentiates itself from C.
+What separates those two languages is also a few decades of practice and research into programming semantics.
+It&#8217;s only natural to expect Rust to take advantage of this&nbsp;progress.</p>
+<p>And advantage it takes! Although Rust&#8217;s type system isn&#8217;t nearly as advanced and complex like &#8212; say &#8212; Scala&#8217;s,
+it exhibits several interesting properties that are indicative of its relatively modern&nbsp;origin.</p>
+<p>First, it mixes the two most popular programming paradigms &#8212; functional and object-oriented &#8212; in roughly equal
+concentrations, as opposed to being biased towards the latter. Rust doesn&#8217;t have interfaces or classes: it has <em>traits</em>
+and their <em>implementations</em>. Even though they often fulfill similar purposes of abstraction and encapsulation,
+these constructs are closer to the concepts of <a href="https://en.wikipedia.org/wiki/Type_class">type classes</a>
+and their instances, which are found for example in&nbsp;Haskell.</p>
+<p>Still, the possibly more familiar notions of <span class="caps">OOP</span> aren&#8217;t too far off. Most of the key functionality of classes,
+for example, can be simulated by implementing &#8220;default&#8221; traits for user-defined&nbsp;types:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">impl</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">new</span><span class="p">(</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">first_name</span><span class="p">.</span><span class="n">to_string</span><span class="p">(),</span><span class="w"></span>
+<span class="w">            </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">last_name</span><span class="p">.</span><span class="n">to_string</span><span class="p">(),</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">greet</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">first_name</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="c1">// usage</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="s">&quot;John&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Doe&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="n">p</span><span class="p">.</span><span class="n">greet</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>The second aspect of Rust&#8217;s type system that we would come to expect from a new language is its expressive power.
+<em>Type inference</em> is nowadays a staple, and above we can observe the simplest form of it. But it extends further,
+to generic parameters, closure arguments, and closure return&nbsp;values.</p>
+<p>Generics, by the way, are quite nice as well. Besides their applicability to structs, type aliases, functions,
+traits, trait implementations, etc., they allow for constraining their arguments with traits. This is similar to
+the abandoned-and-not-quite-revived-yet idea of <a href="https://en.wikipedia.org/wiki/Concepts_%28C%2B%2B%29">concepts in C++</a>,
+or to an analogous mechanism from&nbsp;C#.</p>
+<p>The third common trend in contemporary language design is using type system to solve common tasks.
+Rust doesn&#8217;t go full Haskell and opt for monads for everything, but its <code>Option</code> and <code>Result</code> types are evidently
+the functional approach to error handling<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>. To facilitate their use, a powerful
+<a href="https://doc.rust-lang.org/stable/book/patterns.html"><em>pattern matching</em> facility</a> is also present in&nbsp;Rust.</p>
+<h4>Unexpectedly&nbsp;pythonic</h4>
+<p>If your general go-to language is Python, you will find Rust a very nice complement and possibly a valuable weapon
+in your coding arsenal. Interoperability between Python and Rust is
+<a href="https://doc.rust-lang.org/stable/book/rust-inside-other-languages.html#python">stupidly easy</a>,
+thanks to both the <a href="https://docs.python.org/3.5/library/ctypes.html"><code>ctypes</code> module</a> and the extreme simplicity
+of creating portable,
+<a href="https://doc.rust-lang.org/stable/book/rust-inside-other-languages.html#a-rust-library">shared libraries</a> in Rust.
+Offloading some expensive, <a href="https://wiki.python.org/moin/GlobalInterpreterLock"><span class="caps">GIL</span></a>-bypassing computation to a fast,
+native code written in Rust can thus be a relatively painless way of speeding up crucial parts of a Python&nbsp;program.</p>
+<p>But somewhat more surprisingly, Rust has quite a few bits that seem to be directly inspired by Python semantics.
+Granted, those two languages are conceptually pretty far apart in general, but the analogies are&nbsp;there:</p>
+<ul>
+<li>
+<p>The concept of <a href="https://doc.rust-lang.org/stable/book/iterators.html">iterators</a> in Rust is very similar to
+<a href="https://docs.python.org/2/glossary.html#term-iterable">iterables</a> in Python. Even the <code>for</code> loop is basically identical:
+rather than manually increment a counter, both in <a href="https://doc.rust-lang.org/stable/book/loops.html#for">Rust</a>
+and <a href="https://wiki.python.org/moin/ForLoop">Python</a> you iterate over a <em>range of numbers</em>.<br/>
+Oh, and both languages have an <code>enumerate</code> <a href="https://doc.rust-lang.org/stable/book/loops.html#enumerate">method</a>/
+<a href="https://docs.python.org/2/library/functions.html#enumerate">function</a> that yields pairs of <code>(index, element)</code>.</p>
+</li>
+<li>
+<p>Syntax for <a href="https://doc.rust-lang.org/stable/book/method-syntax.html#method-calls">method definition</a>
+in Rust uses the <code>self</code> keyword as first argument to distinguish between instance methods and &#8220;class&#8221;/&#8221;static&#8221; methods
+(or <em>associated functions</em> in Rust&#8217;s parlance).
+This is even more pythonic than in actual Python, where <code>self</code> is technically just a convention,
+albeit an extremely strong&nbsp;one.</p>
+</li>
+<li>
+<p>In either language, overloading operators doesn&#8217;t use any new keywords or special syntax,
+like it does in C++, C#, and others. Python accomplishes it through <code>__magic__</code> methods, whereas Rust
+has very similarly named <a href="https://doc.rust-lang.org/stable/book/operators-and-overloading.html">operator traits</a>.</p>
+</li>
+<li>
+<p>Rust basically <a href="https://doc.rust-lang.org/stable/book/documentation.html#documentation-as-tests">has <code>doctest</code></a>.
+If you don&#8217;t know, the <a href="https://docs.python.org/2/library/doctest.html"><code>doctest</code> module</a> is a standard Python testing
+utility that can run usage examples found in documentation comments and verify their correctness. Rust version (<code>rustdoc</code>)
+is even more powerful and flexible, allowing for example to mark additional boilerplate lines that should be run
+when testing examples, but <em>not</em> included in the generated&nbsp;documentation.</p>
+</li>
+</ul>
+<p>I&#8217;m sure the list doesn&#8217;t end here and will grow over time. As of this writing, for example, nightly builds of Rust
+already offer <a href="https://doc.rust-lang.org/stable/book/slice-patterns.html">advanced slice pattern matching</a> which are
+very similar to the <a href="https://www.python.org/dev/peps/pep-3132/">extend iterable unpacking</a> from Python&nbsp;3.</p>
+<h4>Is it worth&nbsp;it?</h4>
+<p>Depending on your background and the programming domain you are working in, you may be wondering if Rust
+is a language that&#8217;s worth looking into now or in the near&nbsp;future.</p>
+<p>Firstly, let me emphasize that it&#8217;s still in its early stages. Although the stable version 1.0 has been released
+<a href="http://blog.rust-lang.org/2015/05/15/Rust-1.0.html">a good couple months ago</a>, the ecosystem isn&#8217;t nearly as diverse
+and abundant as in some of the other new&nbsp;languages.</p>
+<p>If you are specifically looking to deploying Rust-written <span class="caps">API</span> servers, backends, and other &#8212; shall I use the word
+&#8212; microservices, then right now you&#8217;ll probably be better served by more established solutions, like node.js,
+Go, Java with <a href="http://docs.paralleluniverse.co/quasar/">fibers</a>, asynchronous Python on PyPy, Erlang, or similar.
+I predict Rust catching up here in the coming months, though, because the prospect of writing native speed <span class="caps">JSON</span> slingers
+with relative ease is just too compelling to&nbsp;pass.</p>
+<p>The other interesting area for Rust is <em>game programming</em>, because it&#8217;s one of the few languages capable of supporting
+even the most demanding <span class="caps">AAA</span>+ productions. The good news is that portable, open source
+<a href="http://www.piston.rs/">game engines</a> are already there. The bad news is that most of the existing knowledge
+about designing and coding high performance games is geared towards writing (stripped down) C++. Tthe community
+is also rather <del>stubborn</del> reluctant to adopt anything that may carry even a <em>hint</em> of potentially unknown
+performance implications. Although some inroads have been made (here&#8217;s, for example,
+an <a href="https://github.com/HeroesGrave/ecs-rs">entity component system</a> written in Rust), and I wouldn&#8217;t be surprised
+to see indie games written in Rust, it probably won&#8217;t take over the industry anytime&nbsp;soon.</p>
+<p>When it comes to hardware, though, Rust may already have an upper hand. It is obviously much easier language to program
+than pure C. Along with its toolchain&#8217;s ability to produce
+<a href="https://doc.rust-lang.org/stable/book/no-stdlib.html">minimal executables</a>, it makes for a compelling language to
+program microcontrollers and other embedded devices&nbsp;in.</p>
+<p>So in short, Rust is pretty nice. And if you have read that far, I think you should just go ahead
+and <a href="https://www.rust-lang.org/">have a look</a> for yourself&nbsp;:)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Because as much as we&#8217;d like for <a href="http://dlang.org/">D</a> to finally get <em>somewhere</em>, at this point
+we may have better luck waiting for the Year of Linux on Desktop to dawn&#8230;&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Of course, nobody has stopped the community from <a href="https://github.com/Manishearth/rust-gc">implementing it</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Strictly speaking, it&#8217;s the binding such as <code>let x = &amp;foo;</code> that translates to it. Unadorned C pointer type
+<code>Foo*</code> would correspond to mutable binding to a mutable reference in Rust, i.e. <code>let mut x = &amp;mut foo;</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Their Haskell equivalents are <code>Maybe</code> and <code>Either</code> type classes, respectively.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/rust.html">Rust</a>
+      <a href="http://xion.io/tag/pointers.html">pointers</a>
+      <a href="http://xion.io/tag/types.html">types</a>
+      <a href="http://xion.io/tag/fp.html">FP</a>
+      <a href="http://xion.io/tag/oop.html">OOP</a>
+      <a href="http://xion.io/tag/traits.html">traits</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Rust: first&nbsp;impressions",
+  "headline": "Rust: first&nbsp;impressions",
+  "datePublished": "2015-12-10 20:33:00-08:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/rust-first-impressions.html",
+  "description": "Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this cumbersome language evokes on regular basis. When I was working in it less sporadically, I was shrugging it off and telling myself it’s all because of the low level ..."
+}
+</script></body>
+</html>

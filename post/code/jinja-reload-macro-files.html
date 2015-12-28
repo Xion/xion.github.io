@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
+  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="The integration between Jinja templating engine and the Flask microframework for Python is quite seamless most of the time. It also facilitates rapid development: when we run our web application through Flask’s development server, any changes in Python code will get picked up immediately without restarting it. Similarly, Jinja ..." />
+<meta name="keywords" content="Python, Jinja, Flask, Werkzeug, Flask-Script">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Reload Jinja macro&nbsp;files"/>
+<meta property="og:description" content="The integration between Jinja templating engine and the Flask microframework for Python is quite seamless most of the time. It also facilitates rapid development: when we run our web application through Flask’s development server, any changes in Python code will get picked up immediately without restarting it. Similarly, Jinja ..."/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/jinja-reload-macro-files.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2015-09-24 20:36:00-07:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Python"/>
+<meta property="article:tag" content="Jinja"/>
+<meta property="article:tag" content="Flask"/>
+<meta property="article:tag" content="Werkzeug"/>
+<meta property="article:tag" content="Flask-Script"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; Reload Jinja macro&nbsp;files</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>def code(tea):<br>return 42</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+      <a href="http://xion.io/feeds/atom.xml">Atom</a>
+      <a href="http://xion.io/feeds/rss.xml">RSS</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="jinja-reload-macro-files">Reload Jinja macro&nbsp;files</h1>
+    <p>Posted on Thu 24 September 2015 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>The integration between <a href="http://jinja.pocoo.org">Jinja templating engine</a> and the
+<a href="http://flask.pocoo.org">Flask microframework</a> for Python is quite seamless most of the time. It also facilitates
+rapid development: when we run our web application through Flask&#8217;s development server, any changes in Python code
+will get picked up immediately without restarting it. Similarly, Jinja&#8217;s default template loader will detect
+whether any template has been modified after its last compilation and recompile it if&nbsp;necessary.</p>
+<p>One instance when it <em>doesn&#8217;t</em> seem to work that well, though, is template files that only contain
+<a href="http://jinja.pocoo.org/docs/dev/templates/#macros">Jinja macros</a>. They apparently aren&#8217;t subject to the same caching
+rules that apply to regular templates. Modifications to those files alone may not be picked up by Jinja <code>Environment</code>,
+causing <a href="http://flask.pocoo.org/docs/0.10/api/#flask.render_template"><code>render_template</code> calls</a> in Flask
+to (indirectly) use their stale&nbsp;versions.</p>
+<h4>I&#8217;ll be watching&nbsp;you</h4>
+<p>This problem can be alleviated by making the server watch those macro files explicitly, not unlike the Python sources
+it already monitors. When running a Flask server through
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.run">the <code>Flask.run</code> method</a>, you can pass additional keyword arguments
+which aren&#8217;t handled by Flask itself, but by the underlying <a href="http://wsgi.readthedocs.org/en/latest/what.html"><span class="caps">WSGI</span></a>
+scaffolding called <a href="http://werkzeug.pocoo.org/">Werkzeug</a>. The automatic reloader is actually part of it and is quite
+configurable. Most importantly, it allows passing a list of <code>extra_files=</code> to&nbsp;watch:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&#39;0.0.0.0&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)),</span>
+        <span class="n">extra_files</span><span class="o">=</span><span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="s">&#39;macros.html&#39;</span><span class="p">)])</span>
+</pre></div>
+
+
+<p>But of course it&#8217;s tedious and error-prone to keep this list up to date manually, so let&#8217;s try to do&nbsp;better.</p>
+<h4>&#8230;all of&nbsp;you</h4>
+<p>I&#8217;m going to assume you&#8217;re keeping all your Jinja macro files inside a single directory. This makes sense,
+as macros are reusable pieces of template code that are imported by multiple regular templates,
+so they shouldn&#8217;t be scattered around the codebase without some order. The folder may be named <em>macros</em>, <em>util</em>,
+<em>common</em>, or similar; what&#8217;s important is that all the macros have a designated place in the project source&nbsp;tree.</p>
+<p>Under this assumption, it&#8217;s not difficult to programmatically compute their complete list<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>  <span class="c"># Flask application object</span>
+
+
+<span class="c">#: Directories under app&#39;s template folder that contain files</span>
+<span class="c">#: with only Jinja macros.</span>
+<span class="n">JINJA_MACRO_DIRS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;macros&#39;</span><span class="p">,)</span>
+
+
+<span class="k">def</span> <span class="nf">get_extra_files</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;Returns an iterable of the extra files that the Flask server</span>
+<span class="sd">    should monitor for changes and reload the app if any has been modified.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">app_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">dirname</span> <span class="ow">in</span> <span class="n">JINJA_MACRO_DIRS</span><span class="p">:</span>
+        <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">app_root</span> <span class="o">/</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
+        <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+
+
+<p>If you&#8217;re using Flask <a href="http://flask.pocoo.org/docs/0.10/blueprints/">blueprints</a>,
+in addition to the global application templates you&#8217;d also want to monitor any blueprint-specific macro&nbsp;files:</p>
+<div class="highlight"><pre>        <span class="k">for</span> <span class="n">bp</span> <span class="ow">in</span> <span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">blueprints</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">bp</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span> <span class="o">/</span> <span class="n">bp</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
+            <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+
+
+<h4>A new&nbsp;start</h4>
+<p>How you&#8217;re going to use the <code>get_extra_files</code> function from the snippet above depends on how exactly you&#8217;re running
+the Flask development server. In the simplest case, when <code>Flask.run</code> is invoked at the top-level scope of some module,
+it&#8217;s pretty&nbsp;obvious:</p>
+<div class="highlight"><pre><span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">extra_files</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">()))</span>
+</pre></div>
+
+
+<p>More realistically, though, you may be using the <a href="http://flask-script.readthedocs.org/">Flask-Script</a> extension
+for all management tasks, including starting the server. If so, calling <code>Flask.run</code> will be relegated to it,
+so you&#8217;ll need to override the <code>Server</code> command to inject additional parameters&nbsp;there:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">from</span> <span class="nn">flask.ext.script</span> <span class="kn">import</span> <span class="n">Manager</span><span class="p">,</span> <span class="n">Server</span> <span class="k">as</span> <span class="n">_Server</span>
+
+<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>
+
+
+<span class="k">class</span> <span class="nc">Server</span><span class="p">(</span><span class="n">_Server</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;use_reloader&#39;</span><span class="p">,</span> <span class="bp">True</span><span class="p">):</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s">&#39;extra_files&#39;</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">())</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Server</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="n">manager</span> <span class="o">=</span> <span class="n">Manager</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">with_default_commands</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+<span class="n">server</span> <span class="o">=</span> <span class="n">Server</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)))</span>
+<span class="n">manager</span><span class="o">.</span><span class="n">add_command</span><span class="p">(</span><span class="s">&#39;server&#39;</span><span class="p">,</span> <span class="n">server</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This new <code>server</code> command should work just like the default one provided by Flask-Script out of the box,
+except that all your Jinja macro files will now be monitored for&nbsp;changes.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Like <a href="http://xion.io/post/code/flask-auto-error-pages.html">before</a>, I&#8217;m using the
+<a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a>, for which there is a
+<a href="https://pypi.python.org/pypi/pathlib/">backport</a> if you&#8217;re using Python 3.3 or older.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/python.html">Python</a>
+      <a href="http://xion.io/tag/jinja.html">Jinja</a>
+      <a href="http://xion.io/tag/flask.html">Flask</a>
+      <a href="http://xion.io/tag/werkzeug.html">Werkzeug</a>
+      <a href="http://xion.io/tag/flask-script.html">Flask-Script</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Reload Jinja macro&nbsp;files",
+  "headline": "Reload Jinja macro&nbsp;files",
+  "datePublished": "2015-09-24 20:36:00-07:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/jinja-reload-macro-files.html",
+  "description": "The integration between Jinja templating engine and the Flask microframework for Python is quite seamless most of the time. It also facilitates rapid development: when we run our web application through Flask’s development server, any changes in Python code will get picked up immediately without restarting it. Similarly, Jinja ..."
+}
+</script></body>
+</html>

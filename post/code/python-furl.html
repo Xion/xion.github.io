@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
+  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their ..." />
+<meta name="keywords" content="Python, URL, furl">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="<span class="caps">URL</span> library for&nbsp;Python"/>
+<meta property="og:description" content="Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their ..."/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/python-furl.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2015-11-27 19:37:00-08:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Python"/>
+<meta property="article:tag" content="URL"/>
+<meta property="article:tag" content="furl"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; <span class="caps">URL</span> library for&nbsp;Python</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>def code(tea):<br>return 42</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+      <a href="http://xion.io/feeds/atom.xml">Atom</a>
+      <a href="http://xion.io/feeds/rss.xml">RSS</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="python-furl"><span class="caps">URL</span> library for&nbsp;Python</h1>
+    <p>Posted on Fri 27 November 2015 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Python has many <a href="https://docs.python.org/3/library/">batteries included</a>, but a few things are still conspicuously&nbsp;missing.</p>
+<p>One of them is a standardized and convenient approach to <span class="caps">URL</span> manipulation, akin to the
+<a href="http://docs.oracle.com/javase/7/docs/api/java/net/URI.html"><code>URI</code> class</a> in Java.
+There are some functions in <a href="https://docs.python.org/2/library/urllib.html"><code>urllib</code></a>, of course
+(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their <span class="caps">HTTP</span>-related
+comrades, they prove rather verbose and somewhat&nbsp;clunky.</p>
+<p><span class="caps">HTTP</span>, however, is solved by the <a href="http://python-requests.org/">Requests</a> package, so you may wonder
+if there is some analogous package for <span class="caps">URL</span> operations. The answer is affirmative, and the library in question is,
+quite whimsically, called <a href="https://github.com/gruns/furl"><em>furl</em></a>.</p>
+<h4><span class="caps">URL</span> in a&nbsp;wrap</h4>
+<p>The sole interesting part of the <em>furl</em> interface is the <code>furl</code> class. It represents a single <span class="caps">URL</span>, broken down to
+its constituents, with properties and methods for both reading them out and replacing with new&nbsp;values.</p>
+<p>Thanks to this handy (and quite obvious) abstraction, common <span class="caps">URL</span> operations become quite simple and&nbsp;self-documenting:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">furl</span> <span class="kn">import</span> <span class="n">furl</span>
+
+
+<span class="k">def</span> <span class="nf">to_absolute</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;If given ``url`` is a relative path,</span>
+<span class="sd">    make it relative to the ``base``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">furled</span><span class="o">.</span><span class="n">scheme</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">furl</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+    <span class="k">return</span> <span class="n">url</span>
+
+
+<span class="k">def</span> <span class="nf">is_same_origin</span><span class="p">(</span><span class="o">*</span><span class="n">urls</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check whether URLs are from the same origin (host:port).&quot;&quot;&quot;</span>
+    <span class="n">origins</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">netloc</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">furl</span><span class="p">,</span> <span class="n">urls</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">get_facebook_username</span><span class="p">(</span><span class="n">profile_url</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get Facebook user ID from their profile URL.&quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">profile_url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">furled</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="s">&#39;facebook.com&#39;</span> <span class="ow">or</span>
+            <span class="n">furled</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.facebook.com&#39;</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;not a Facebook URL: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">profile_url</span><span class="p">,))</span>
+    <span class="k">return</span> <span class="n">furled</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="c"># etc.</span>
+</pre></div>
+
+
+<p>This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string&nbsp;interpolation:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">?</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BASE_URL</span><span class="p">,</span> <span class="n">urlencode</span><span class="p">(</span><span class="n">query_params</span><span class="p">))</span>
+</pre></div>
+
+
+<p>Besides looking unpythonically ugly, it&#8217;s also inflexible and error-prone. If <code>BASE_URL</code> gains some innate query string
+params (<code>'http://example.com/?a=b'</code>), this method will start producing completely invalid <code>url</code>s (with two question marks,
+e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
+<p>The equivalent in <em>furl</em> has none of these&nbsp;flaws:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">BASE_URL</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+</pre></div>
+
+
+<h4>The full&nbsp;package</h4>
+<p>To see the full power of <em>furl</em>, I recommend having a look at its
+<a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/python.html">Python</a>
+      <a href="http://xion.io/tag/url.html">URL</a>
+      <a href="http://xion.io/tag/furl.html">furl</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "<span class="caps">URL</span> library for&nbsp;Python",
+  "headline": "<span class="caps">URL</span> library for&nbsp;Python",
+  "datePublished": "2015-11-27 19:37:00-08:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/python-furl.html",
+  "description": "Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their ..."
+}
+</script></body>
+</html>

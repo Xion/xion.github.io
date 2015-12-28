@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
+  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially ..." />
+<meta name="keywords" content="SQLAlchemy, SQL, databases">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Turn SQLAlchemy queries into literal <span class="caps">SQL</span>"/>
+<meta property="og:description" content="Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially ..."/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/sqlalchemy-query-to-sql.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2015-11-12 22:56:00-08:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="SQLAlchemy"/>
+<meta property="article:tag" content="SQL"/>
+<meta property="article:tag" content="databases"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; Turn SQLAlchemy queries into literal <span class="caps">SQL</span></title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>def code(tea):<br>return 42</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+      <a href="http://xion.io/feeds/atom.xml">Atom</a>
+      <a href="http://xion.io/feeds/rss.xml">RSS</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="sqlalchemy-query-to-sql">Turn SQLAlchemy queries into literal <span class="caps">SQL</span></h1>
+    <p>Posted on Thu 12 November 2015 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Like I mentioned in the <a href="http://xion.io/post/code/sqlalchemy-regex-filters.html">post about adding regular expression support</a>,
+the nice thing about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a> is the clean, layered structure of various abstractions
+it&nbsp;utilizes.</p>
+<p>Regretably, though, we know that <a href="https://en.wikipedia.org/wiki/Leaky_abstraction">software abstractions tend to leak</a>.
+Inn particular, any <span class="caps">ORM</span> seem to be a poster child of this rule, especially in the popular opinion among
+<a href="https://www.reddit.com/r/programming/search?q=ORM&amp;restrict_sr=on">developer crowds</a>.
+By design, they&#8217;re intended to hide at least <em>some</em> details of the operations on a database,
+but those very details can be quite critical at times. There are situations when we simply want to know
+what <em>exactly</em> is going on, and how all those model classes and mappers and relationships translate
+to the actual <span class="caps">SQL</span>&nbsp;code.</p>
+<p>To make it a little more concrete, let&#8217;s focus on the SQLAlchemy <code>Query</code> class. Given such a query, we&#8217;d like to get
+the final <span class="caps">SQL</span> representation of it, the one that&#8217;s ultimately sent to the database, It could be useful
+for any number of things, from logging<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> to profiling, or just displaying in the web page&#8217;s footer,
+or even solely for prototyping in the Python <span class="caps">REPL</span>.</p>
+<p>In other words, we want to turn&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">some_email</span><span class="p">)</span>
+</pre></div>
+
+
+<p>into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">SELECT</span> <span class="n">users</span><span class="p">.</span><span class="n">id</span> <span class="k">FROM</span> <span class="n">users</span> <span class="k">WHERE</span> <span class="n">users</span><span class="p">.</span><span class="n">email</span> <span class="o">=</span> <span class="p">:</span><span class="mi">1</span>
+</pre></div>
+
+
+<p>regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related
+<code>JOIN</code>s it&nbsp;involves.</p>
+<h4>It&#8217;s a&nbsp;dialect</h4>
+<p>There is one aspect we cannot really universalize, though. It&#8217;s the specific <em>database backend</em> that SQLAlchemy
+should compile our query for. Shrugging off syntactical and semantical differences between database engines
+is one thing that using an <span class="caps">ORM</span> can potentially buy us, but if we want to get down to the <span class="caps">SQL</span> level,
+we need to be specific about&nbsp;it.</p>
+<p>In SQLAlchemy&#8217;s parlance, any specific variant of the <span class="caps">SQL</span> language is called a <em>dialect</em>. Most of the time,
+you&#8217;ll be interested in the particular dialect your database of choice is using. This is easily obtainable from
+the <a href="docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session">database <code>Session</code></a>:</p>
+<div class="highlight"><pre><span class="n">dialect</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
+</pre></div>
+
+
+<p>The resulting
+<a href="http://docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Dialect"><code>Dialect</code> object</a>
+is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of
+the database backends it supports. For our purposes, though, it can be treated as a completely opaque&nbsp;token.</p>
+<h4>Compile <span class="amp">&amp;</span>&nbsp;unwrap</h4>
+<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representatio of our <code>Query</code>.
+Or, to be more precise, the compiled version of the query&#8217;s
+<a href="docs.sqlalchemy.org/en/latest/core/selectable.html#sqlalchemy.sql.expression.Select"><code>Select</code> statement</a></p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="s">&#39;foo@example.com&#39;</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">print</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span><span class="p">))</span>
+<span class="n">SELECT</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span>
+<span class="n">FROM</span> <span class="n">users</span>
+<span class="n">WHERE</span> <span class="n">users</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="o">%</span><span class="p">(</span><span class="n">email_1</span><span class="p">)</span><span class="n">s</span>
+</pre></div>
+
+
+<p>Perhaps unsurprisingly, even after compilation the result is still just <em>another object</em>:
+the <a href="docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Compiled"><code>Compiled</code> one</a>.
+As you can see, however, the actual <span class="caps">SQL</span> text is just its <code>__str__</code><span class="quo">&#8216;</span>ing representation, which we can <code>print</code> directly
+or obtain with <code>str()</code> or <code>unicode()</code>.</p>
+<h4><code>Query.to_sql</code></h4>
+<p>But obviously, we don&#8217;t want to type the above incantations everytime we need to take a peek at the generated <span class="caps">SQL</span>
+for an <span class="caps">ORM</span> query. Probably the best solution is to extend the <code>Query</code> class so that it offers this additional
+functionality under a new&nbsp;method:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
+
+
+<span class="k">class</span> <span class="nc">Query</span><span class="p">(</span><span class="n">_Query</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Custom, enhanced SQLALchemy Query class.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">to_sql</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return a literal SQL representation of the query.&quot;&quot;&quot;</span>
+        <span class="n">dialect</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">dialect</span><span class="p">))</span>
+</pre></div>
+
+
+<p>This new <code>Query</code> class needs then be passed as
+<a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.params.query_cls"><code>query_cls</code> argument</a>
+to the constructor of <code>Session</code>. Details may vary a little bit dependening on how exactly your application is set up,
+but in most cases, it should be <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">easy enough to figure out</a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>If you&#8217;re only interested in indiscriminate logging of all queries, setting the
+<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine.params.echo"><code>echo</code> parameter</a>
+in <a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine"><code>create_engine</code></a> may be sufficient.
+Another alternative is to look directly at the
+<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#configuring-logging">logging configuration options</a>
+for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>
+      <a href="http://xion.io/tag/sql.html">SQL</a>
+      <a href="http://xion.io/tag/databases.html">databases</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Turn SQLAlchemy queries into literal <span class="caps">SQL</span>",
+  "headline": "Turn SQLAlchemy queries into literal <span class="caps">SQL</span>",
+  "datePublished": "2015-11-12 22:56:00-08:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/sqlalchemy-query-to-sql.html",
+  "description": "Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially ..."
+}
+</script></body>
+</html>

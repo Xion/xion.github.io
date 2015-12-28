@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
+  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Little over two years ago, I was writing about my skepticism towards the addition of enum types to Python. My stance has changed somewhat since then, and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent in the circumstances involving ..." />
+<meta name="keywords" content="Python, enums, serialization">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Actually, Python enums are pretty <span class="caps">OK</span>"/>
+<meta property="og:description" content="Little over two years ago, I was writing about my skepticism towards the addition of enum types to Python. My stance has changed somewhat since then, and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent in the circumstances involving ..."/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/python-enums-are-ok.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2015-10-25 20:59:00-07:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Python"/>
+<meta property="article:tag" content="enums"/>
+<meta property="article:tag" content="serialization"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; Actually, Python enums are pretty <span class="caps">OK</span></title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>def code(tea):<br>return 42</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+      <a href="http://xion.io/feeds/atom.xml">Atom</a>
+      <a href="http://xion.io/feeds/rss.xml">RSS</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></h1>
+    <p>Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Little over two years ago, I was writing about
+<a href="http://xion.org.pl/2013/05/13/we-dont-need-no-enums-in-python/">my skepticism</a> towards the
+<a href="https://www.python.org/dev/peps/pep-0435/">addition of enum types to Python</a>. My stance has changed somewhat since then,
+and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent
+in the circumstances involving any kind of persistence,
+from <a href="https://docs.python.org/2/library/pickle.html">pickling</a> to&nbsp;databases.</p>
+<p>I will elaborate on that through the rest of this&nbsp;post.</p>
+<h4>Revision</h4>
+<p>First, let&#8217;s recap (or perhaps introduce) the important facts about enums in Python. An <em>enum</em>, or an enumeration type,
+is a special class that inherits from <code>enum.Enum</code><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> and defines one or more&nbsp;constants:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+
+<span class="k">class</span> <span class="nc">Cutlery</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">knife</span> <span class="o">=</span> <span class="s">&#39;knife&#39;</span>
+    <span class="n">fork</span> <span class="o">=</span> <span class="s">&#39;fork&#39;</span>
+    <span class="n">spoon</span> <span class="o">=</span> <span class="s">&#39;spoon&#39;</span>
+</pre></div>
+
+
+<p>Their values are then converted into singleton objects with distinct identity.
+They available as attributes of the enumeration&nbsp;type:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>As a shorthand for when the values themselves are not important, the <code>Enum</code> class can be directly invoked
+with constant names as&nbsp;strings:</p>
+<div class="highlight"><pre><span class="n">Cutlery</span> <span class="o">=</span> <span class="n">Enum</span><span class="p">(</span><span class="s">&#39;Cutlery&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<p>Resulting class offers some useful <span class="caps">API</span> that we&#8217;d expect from an enumeration type in any programming&nbsp;language:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">Cutlery</span><span class="p">)</span>
+<span class="p">[</span><span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span><span class="p">:</span> <span class="s">&#39;knife&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span><span class="p">]</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">Cutlery</span><span class="p">]</span>
+<span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">]</span>
+<span class="o">&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span> <span class="ow">in</span> <span class="n">Cutlery</span>
+<span class="bp">True</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spoon&#39;</span><span class="p">)</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spork&#39;</span><span class="p">)</span>
+<span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+<span class="c"># (...)</span>
+<span class="ne">ValueError</span><span class="p">:</span> <span class="s">&#39;spork&#39;</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">a</span> <span class="n">valid</span> <span class="n">Cutlery</span>
+</pre></div>
+
+
+<h4>How it was done&nbsp;previously</h4>
+<p>Of course, there is nothing really groundbreaking about assigning some values to &#8220;constants&#8221;. It&#8217;s been done like that
+since times immemorial, and quite often those constants have been grouped within finite&nbsp;sets.</p>
+<p>Here&#8217;s an example of a comment model in some imaginary <span class="caps">ORM</span>, complete with a status&nbsp;&#8220;enumeration&#8221;:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="n">APPROVED</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+    <span class="n">REJECTED</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+    <span class="n">IN_REVIEW</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+    <span class="n">STATES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">([</span><span class="n">APPROVED</span><span class="p">,</span> <span class="n">REJECTED</span><span class="p">,</span> <span class="n">IN_REVIEW</span><span class="p">])</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">String</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="n">STATES</span><span class="p">)</span>
+
+<span class="c"># usage</span>
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Boo&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">IN_REVIEW</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Converting it to use an <code>Enum</code> is relatively&nbsp;straightforward:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="n">approved</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+        <span class="n">rejected</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+        <span class="n">in_review</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">State</span><span class="p">])</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Meh.&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span><span class="o">.</span><span class="n">value</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>It is not apparent, though, if there is any immediate benefit of doing so. True, we no longer need to define the <code>STATES</code>
+set explicitly, but saving on this bit of boilerplate is balanced out by having to access the enum&#8217;s <code>value</code>
+when assigning it to a string&nbsp;property.</p>
+<p>All in all, it seems like a wash &#8212; though at least we&#8217;ve established that enums are <em>no worse</em> than their alternatives&nbsp;:)</p>
+<h4>Enums are&nbsp;interoperable</h4>
+<p>Obviously, this doesn&#8217;t exactly sound like high praise. Thing is, we haven&#8217;t really replaced the previous solution
+<em>completely</em>. Remnants of it still linger in the way the <code>state</code> property is declared. Even though it&#8217;s supposed to hold
+enum constants, it is defined as string, which at this point is more of an implementation detail of how those constants
+are&nbsp;serialized.</p>
+<p>What were really need here is a kind of <code>EnumProperty</code> that&#8217;d allow us to work solely with enum objects.
+Before the introduction of a standard <code>Enum</code> base, however, there was little incentive for ORMs and other similiar
+libraries to provide such a functionality. But now, it makes much more sense to support enums as first-class citizens,
+at least for data exchange and serialization, because users can be expected to already prefer the standard <code>Enum</code>
+in their own&nbsp;code.</p>
+<p>Thus, the previous example changes into something along these&nbsp;lines:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">EnumProperty</span><span class="p">(</span><span class="n">State</span><span class="p">)</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Yay!&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span>  <span class="c"># no .value!</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Details of <code>EnumProperty</code>, or some equivalent construct, are of course specific to any given data management library.
+In SQLAlchemy, for example, a <a href="https://gist.github.com/Xion/5564b907e5f4e883511c">custom column type</a>
+can handle the necessary serialization and deserialization between Python code and <span class="caps">SQL</span> queries,
+allowing you to define your models like this<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="c"># ...</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">255</span><span class="p">))</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">EnumType</span><span class="p">(</span><span class="n">State</span><span class="p">,</span> <span class="n">impl</span><span class="o">=</span><span class="n">String</span><span class="p">(</span><span class="mi">32</span><span class="p">)))</span>
+
+<span class="c"># usage like above</span>
+</pre></div>
+
+
+<p>In any case, the point is to have Python code operate solely on enum objects, while the persistence layer takes
+care of converting between them and their serializable&nbsp;values.</p>
+<h4>Enums are&nbsp;extensible</h4>
+<p>The other advantage <code>Enum</code>s have over loose collections of constants is that they are proper <em>types</em>.
+Like all user-defined types in Python, they can have additional methods and properties defined on their instances,
+or even on the type&nbsp;itself.</p>
+<p>Although this capability is (by default) not as powerful as e.g. in Java &#8212; where <em>each enum constant</em> can
+<a href="https://gist.github.com/chandrasekhar4u/431839b9eac715c08b71">override a method in its own way</a> &#8212; it can nevertheless
+be quite convenient at times. Typical use cases include constant&nbsp;classification:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_horizontal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_vertical</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">)</span>
+</pre></div>
+
+
+<p>and&nbsp;conversion:</p>
+<div class="highlight"><pre>    <span class="k">def</span> <span class="nf">as_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+</pre></div>
+
+
+<p>For the latter, it would be handy to have the Java&#8217;s ability to
+<a href="https://docs.oracle.com/javase/tutorial/java/javaOO/enum.html">attach additional data</a> to an enum constant.
+As it turns out, Python supports this feature natively in a very similar way.
+We simply have to override enum&#8217;s <code>__new__</code> method to parse out any extra values from the initializer
+and turn them into attributes of the enum&nbsp;instance:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">keycode</span><span class="p">,</span> <span class="n">vector</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">)</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_value_</span> <span class="o">=</span> <span class="n">keycode</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">vector</span> <span class="o">=</span> <span class="n">vector</span>
+        <span class="k">return</span> <span class="n">obj</span>
+</pre></div>
+
+
+<p>It&#8217;s possible, in fact, to insert any arbitrary computation here that yields the final <code>_value_</code> of an enum constant<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
+This trick can be used to, for example, construct enums that
+<a href="https://docs.python.org/3/library/enum.html#autonumber">automatically number themselves</a>.</p>
+<p>Finally, we can add static methods, class methods, or <a href="http://stackoverflow.com/a/3203659">class properties</a> to the
+<code>Enum</code> subclass, just like we would do with any other&nbsp;class:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">MyEnum</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="nd">@classproperty</span>
+    <span class="k">def</span> <span class="nf">__values__</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">cls</span><span class="p">]</span>
+</pre></div>
+
+
+<h4>Enums just&nbsp;are</h4>
+<p>All these things are possible primarly because of the most notable aspect of Python enums: their existence
+as an <em>explicit concept</em>. A syntactically unorganized bunch of constants cannot offer half of the highlighted features
+because there is nowhere to pin them&nbsp;on.</p>
+<p>For that reason alone, using enums as an explicit &#8212; rather than implicit &#8212; pattern seems worthwhile.
+The one benefit we&#8217;re certain to reap is better code structure through separation of important&nbsp;concepts.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The <code>enum</code> module is part of the Python standard library
+<a href="https://docs.python.org/3/library/enum.html">since version 3.4</a>
+but <a href="https://pypi.python.org/pypi/enum/">a fully functional backport</a> is available for Python 2.x as well.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>It is even possible to instruct SQLAlchemy how to map Python enums to
+<a href="http://www.postgresql.org/docs/9.1/static/datatype-enum.html"><code>ENUM</code> types</a> in database engines that support it,
+but details are outside of the scope of this article.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>If you&#8217;re fine with the enum&#8217;s <code>value</code> being the <em>whole</em> tuple (everything after the <code>=</code> sign),
+you can override <code>__init__</code> instead of <code>__new__</code>
+(cf. <a href="https://docs.python.org/3/library/enum.html#planet">the planet example</a> from standard docs).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/python.html">Python</a>
+      <a href="http://xion.io/tag/enums.html">enums</a>
+      <a href="http://xion.io/tag/serialization.html">serialization</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Actually, Python enums are pretty <span class="caps">OK</span>",
+  "headline": "Actually, Python enums are pretty <span class="caps">OK</span>",
+  "datePublished": "2015-10-25 20:59:00-07:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/python-enums-are-ok.html",
+  "description": "Little over two years ago, I was writing about my skepticism towards the addition of enum types to Python. My stance has changed somewhat since then, and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent in the circumstances involving ..."
+}
+</script></body>
+</html>

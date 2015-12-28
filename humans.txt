@@ -1,0 +1,12 @@
+/* AUTHOR */
+    Name: Karol Kuczmarski
+    Contact: karol.kuczmarski [at] gmail.com
+    GitHub: Xion
+    Twitter: @Xion__
+    From: San Francisco, CA, US
+
+/* SITE */
+    Language: English
+    Doctype: HTML5
+    IDE: Sublime Text 2
+    Tools: Git, Python, Pelican, Fabric

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
+  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+  <meta name="author" content="Karol Kuczmarski" />
+  <meta name="description" content="" />
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:type" content="blog"/>
+<meta property="og:title" content="Karol Kuczmarski's Blog"/>
+<meta property="og:description" content=""/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Tag: Jinja</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>def code(tea):<br>return 42</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+      <a href="http://xion.io/feeds/atom.xml">Atom</a>
+      <a href="http://xion.io/feeds/rss.xml">RSS</a>
+    </nav>
+
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
+    <p>
+      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
+in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
+<code>div.content</code>, and other presentational elements are still a common fact of life.
+Unless ...</p>
+      <a class="btn" href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Reload Jinja macro&nbsp;files</a></h2>
+    <p>
+      Posted on Thu 24 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/werkzeug.html">Werkzeug</a>,      <a href="http://xion.io/tag/flask-script.html">Flask-Script</a>      &#8226; <a href="http://xion.io/post/code/jinja-reload-macro-files.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>The integration between <a href="http://jinja.pocoo.org">Jinja templating engine</a> and the
+<a href="http://flask.pocoo.org">Flask microframework</a> for Python is quite seamless most of the time. It also facilitates
+rapid development: when we run our web application through Flask&#8217;s development server, any changes in Python code
+will get picked up immediately without restarting it. Similarly, Jinja ...</p>
+      <a class="btn" href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/jinja-custom-errors.html#jinja-custom-errors">Custom errors in Jinja&nbsp;templates</a></h2>
+    <p>
+      Posted on Sun 23 August 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/templates.html">templates</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/errors.html">errors</a>      &#8226; <a href="http://xion.io/post/code/jinja-custom-errors.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://jinja.pocoo.org">Jinja</a> is a pretty great templating engine for Python.
+Unlike the likes of <a href="https://mustache.github.io/">Mustache</a> or <a href="http://handlebarsjs.com/">Handlebars</a>,
+it doesn&#8217;t try to constrain overmuch the kind of logic that the programmer can put in their templates.
+Most Python expressions, for example, are supported, as are variables and functions (or <em>macros</em> in ...</p>
+      <a class="btn" href="http://xion.io/post/code/jinja-custom-errors.html#jinja-custom-errors">Continue reading</a>
+  </div>
+</article>
+
+  <div class="pagination">
+  </div>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " Karol Kuczmarski's Blog ",
+  "url" : "http://xion.io",
+  "image": "http://xion.io/logo.jpeg",
+  "description": ""
+}
+</script><script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>
