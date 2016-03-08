@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
-  <meta name="author" content="Karol Kuczmarski" />
-  <meta name="description" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
 <meta property="og:type" content="blog"/>
 <meta property="og:title" content="Karol Kuczmarski's Blog"/>
@@ -20,6 +28,7 @@
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io"/>
 <meta property="og:image" content="http://xion.io/logo.jpeg">
+
   <title>Karol Kuczmarski's Blog &ndash; Tag: URL</title>
 </head>
 <body>
@@ -70,7 +79,62 @@
 <p>One of them is a standardized and convenient approach to <span class="caps">URL</span> manipulation, akin to the
 <a href="http://docs.oracle.com/javase/7/docs/api/java/net/URI.html"><code>URI</code> class</a> in Java.
 There are some functions in <a href="https://docs.python.org/2/library/urllib.html"><code>urllib</code></a>, of course
-(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their ...</p>
+(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their <span class="caps">HTTP</span>-related
+comrades, they prove rather verbose and somewhat&nbsp;clunky.</p>
+<p><span class="caps">HTTP</span>, however, is solved by the <a href="http://python-requests.org/">Requests</a> package, so you may wonder
+if there is some analogous package for <span class="caps">URL</span> operations. The answer is affirmative, and the library in question is,
+quite whimsically, called <a href="https://github.com/gruns/furl"><em>furl</em></a>.</p>
+<h4><span class="caps">URL</span> in a&nbsp;wrap</h4>
+<p>The sole interesting part of the <em>furl</em> interface is the <code>furl</code> class. It represents a single <span class="caps">URL</span>, broken down to
+its constituents, with properties and methods for both reading them out and replacing with new&nbsp;values.</p>
+<p>Thanks to this handy (and quite obvious) abstraction, common <span class="caps">URL</span> operations become quite simple and&nbsp;self-documenting:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">furl</span> <span class="kn">import</span> <span class="n">furl</span>
+
+
+<span class="k">def</span> <span class="nf">to_absolute</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;If given ``url`` is a relative path,</span>
+<span class="sd">    make it relative to the ``base``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">furled</span><span class="o">.</span><span class="n">scheme</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">furl</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+    <span class="k">return</span> <span class="n">url</span>
+
+
+<span class="k">def</span> <span class="nf">is_same_origin</span><span class="p">(</span><span class="o">*</span><span class="n">urls</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check whether URLs are from the same origin (host:port).&quot;&quot;&quot;</span>
+    <span class="n">origins</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">netloc</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">furl</span><span class="p">,</span> <span class="n">urls</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">get_facebook_username</span><span class="p">(</span><span class="n">profile_url</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get Facebook user ID from their profile URL.&quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">profile_url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">furled</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="s">&#39;facebook.com&#39;</span> <span class="ow">or</span>
+            <span class="n">furled</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.facebook.com&#39;</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;not a Facebook URL: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">profile_url</span><span class="p">,))</span>
+    <span class="k">return</span> <span class="n">furled</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="c"># etc.</span>
+</pre></div>
+
+
+<p>This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string&nbsp;interpolation:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">?</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BASE_URL</span><span class="p">,</span> <span class="n">urlencode</span><span class="p">(</span><span class="n">query_params</span><span class="p">))</span>
+</pre></div>
+
+
+<p>Besides looking unpythonically ugly, it&#8217;s also inflexible and error-prone. If <code>BASE_URL</code> gains some innate query string
+params (<code>'http://example.com/?a=b'</code>), this method will start producing completely invalid <code>url</code>s (with two question marks,
+e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
+<p>The equivalent in <em>furl</em> has none of these&nbsp;flaws:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">BASE_URL</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+</pre></div>
+
+
+<h4>The full&nbsp;package</h4>
+<p>To see the full power of <em>furl</em>, I recommend having a look at its
+<a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
       <a class="btn" href="http://xion.io/post/code/python-furl.html#python-furl">Continue reading</a>
   </div>
   <hr />
@@ -88,7 +152,83 @@ There are some functions in <a href="https://docs.python.org/2/library/urllib.ht
       <p>Though not as popular as back in the days, <code>mailto:</code> URLs are sometimes still the best way
 &#8212; and most certainly the easiest &#8212; to enable users to send emails from a web application. Typically, they are used
 in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
-<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto ...</span></pre></div>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com&quot;</span><span class="nt">&gt;</span>Send email<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>Depending on the operating system and browser settings, clicking on such a link could invoke a different mail client.
+In the past, this could cause much confusion if the user has never used its local email application (e.g. Outlook),
+but nowadays browsers are increasingly doing the right thing and presenting a choice of possible options.
+This includes the various web applications from popular email providers. User can thus choose &#8212; say &#8212; Gmail, and have
+all subsequent <code>mailto:</code> links take them to a <em>Compose Mail</em> view&nbsp;there.</p>
+<p>Given those developments, it&#8217;s possible that soon those URLs won&#8217;t be as quaint as they used to be ;)
+In any case, I think it&#8217;s worthwhile to have a few <code>mailto:</code> tricks up our sleeve for when they turn out to be
+an appropriate solution for the task at&nbsp;hand.</p>
+<h4>Triggering them in&nbsp;JavaScript</h4>
+<p>In the example above, I&#8217;ve used a <code>mailto:</code> <span class="caps">URL</span> directly in some <span class="caps">HTML</span> markup. For the most part, however, those URLs
+behave like any other and support a lot of the same functionality that <code>http://</code> URLs&nbsp;do:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">sendEmail</span><span class="p">(</span><span class="nx">address</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nx">address</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Predictably, calling this <code>sendEmail</code> function is equivalent to clicking on a <code>mailto:</code> link. This additional level
+of indirection, however, may be enough to fool some web crawlers that look for email addresses to spam. Its effectiveness
+depends largely on how radically we&#8217;re going to obfuscate the <code>address</code> argument in the actual&nbsp;invocation.</p>
+<p>More importantly, though, a function like that can be part of some more complicated logic. The only limitation is
+the same one that restricts where and when it&#8217;s possible to <code>window.open</code> another browser window. Namely, it has to be
+called in a direct response to a <span class="caps">UI</span> action triggered by the user (a button click would be a good&nbsp;example).</p>
+<h4>Customization</h4>
+<p>In their simplest form, <code>mailto:</code> URLs aren&#8217;t terribly interesting, since their only parameter is the address of a sole recipient. Fortunately, this isn&#8217;t where their capabilities end: it&#8217;s possible to customize other email fields as well,
+such as the subject or even body<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>Somewhat surprisingly, all this can be done in a manner that&#8217;s more typical for <code>http://</code> <span class="caps">URL</span>: with query string
+parameters. Right after the recipient&#8217;s address, we can drop a question mark and add some ampersand-separated
+key-value&nbsp;pairs:</p>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com?subject=Hi&amp;amp;body=Hello%20John!&quot;</span><span class="nt">&gt;</span>
+  Say hello to John!
+<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>A more programmatic approach is of course also possible. One thing we need to remember, though, is the proper escaping
+of input values in order to make them safe to put inside an <span class="caps">URL</span><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+The <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent"><code>encodeURIComponent</code> function</a> can be used for this&nbsp;purpose:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">getMailtoUrl</span><span class="p">(</span><span class="nx">to</span><span class="p">,</span> <span class="nx">subject</span><span class="p">,</span> <span class="nx">body</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="p">[];</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">subject</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;subject=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">subject</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">body</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;body=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">body</span><span class="p">))</span>
+    <span class="p">}</span>
+
+    <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">to</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">url</span> <span class="o">+=</span> <span class="s1">&#39;?&#39;</span> <span class="o">+</span> <span class="nx">args</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;&amp;&#39;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">url</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>In theory, almost any of the numerous <a href="https://en.wikipedia.org/wiki/Email#Header_fields">email headers</a> can be specified
+this way. However, support may vary across browsers, especially since some of the headers
+(like <a href="https://en.wikipedia.org/wiki/Blind_carbon_copy">the <code>Bcc:</code> one</a>) are subject to certain security
+or privacy considerations. Personally, I wouldn&#8217;t recommend relying on anything besides
+<code>subject=</code> and <code>body=</code>, with a possible addition of <code>cc=</code> for
+<a href="https://en.wikipedia.org/wiki/Carbon_copy">the <code>Cc:</code>header </a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>By <a href="http://www.ietf.org/rfc/rfc2368.txt"><span class="caps">RFC</span> 2368</a>, only <em>text/plain</em> email body can be specified this way.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Note that this is unrelated to the <em><span class="caps">HTML</span></em> escaping of <code>&amp;</code> character as <code>&amp;amp;</code> entity in the previous example.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">Continue reading</a>
   </div>
 </article>
@@ -113,6 +253,8 @@ in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -122,6 +264,10 @@ in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context" : "http://schema.org",

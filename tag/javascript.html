@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
-  <meta name="author" content="Karol Kuczmarski" />
-  <meta name="description" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
 <meta property="og:type" content="blog"/>
 <meta property="og:title" content="Karol Kuczmarski's Blog"/>
@@ -20,6 +28,7 @@
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io"/>
 <meta property="og:image" content="http://xion.io/logo.jpeg">
+
   <title>Karol Kuczmarski's Blog &ndash; Tag: JavaScript</title>
 </head>
 <body>
@@ -68,7 +77,79 @@
   <div>
       <p><a href="http://knockoutjs.com/">Knockout</a> is a JavaScript &#8220;framework&#8221; that has always lurked in the shadows of other,
 more flashy ones. Even in the days of its relative novelty, the likes of Backbone or Ember had seemed to garner more
-widespread interest among frontend developers. Today, this hasn&#8217;t changed much, the difference being ...</p>
+widespread interest among frontend developers. Today, this hasn&#8217;t changed much, the difference being mainly
+that the spotlight is now taken by new actors (<em>*cough*</em> <a href="https://facebook.github.io/react/">React</a> <em>*cough*</em>).</p>
+<p>But Knockout has a loyal following, and for good reasons. Possibly the most imporant one is why I&#8217;ve put the word
+&#8220;framework&#8221; in quotes. Knockout is, first and foremost, a <em>data binding</em> library: it doesn&#8217;t do much else besides
+tying <span class="caps">DOM</span> nodes to JavaScript&nbsp;objects.</p>
+<p>This quality makes it both easy to learn and simple to integrate. In fact, it can very well live in just some small
+compartments of your web application, mingling easily with any server-side templating mechanism you might be using.
+It also interplays effortlessly with other <span class="caps">JS</span> libraries, and sticks very well to
+<a href="http://stackoverflow.com/q/30766900/434799">whatever duct tape you use</a> to hold your frontend stack&nbsp;together.</p>
+<p>Lastly, it&#8217;s also quite extensible. We can, for example, create our own
+<a href="http://knockoutjs.com/documentation/binding-syntax.html">bindings</a> rather easily, extending the declarative language
+used to describe relationship between the data and <span class="caps">UI</span>.</p>
+<p>In this post, I&#8217;m going to demonstrate this by implementing a very simple <code>let:</code> binding &#8212;
+a kind of &#8220;assignment&#8221; of an expression to a&nbsp;name.</p>
+<h4>From Knockout <code>with:</code> bluff</h4>
+<p>Out of box, Knockout proffers the <a href="http://knockoutjs.com/documentation/with-binding.html"><code>with:</code> binding</a>,
+a quite similar mechanism. How it may be somewhat problematic is analogous to the
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/with">widely discouraged <code>with</code> statement</a>
+in JavaScript itself. Namely, it blends several namespaces together, making it harder to determine which object
+is being referred to. As a result, the code is more prone to&nbsp;errors.</p>
+<p>On the other hand, freeing the developer from repeating long and complicated expressions is obviously valuable.
+Perhaps reducing them to nil is not the right approach, though, so how about we just shorten them
+to a more manageable length? Well, that&#8217;s exactly what the <code>let:</code> binding is meant to&nbsp;do:</p>
+<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">data-bind=</span><span class="s">&quot;let: { addr: currentUser.personalInfo.address }&quot;</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line1&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- ko if: addr.line2 --&gt;</span>
+    <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line2&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- /ko --&gt;</span>
+  <span class="nt">&lt;p&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.city&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>,
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.region&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
+  <span class="nt">&lt;/p&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.country&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</pre></div>
+
+
+<p>Making it happen turns out to be pretty&nbsp;easy.</p>
+<h4>Binding&nbsp;contract</h4>
+<p>To define a Knockout binding, up to two things are needed. We have to specify what the library should&nbsp;do:</p>
+<ul>
+<li>when the binding is first applied to a <span class="caps">DOM</span> node (the <code>init</code> method)</li>
+<li>when any of the <a href="http://knockoutjs.com/documentation/observables.html">observed values</a> changes (the <code>update</code> method)</li>
+</ul>
+<p>Not every binding has to implement both methods. In our cases, only the <code>init</code> is necessary, because all we have to do
+is modify the <em>binding context</em>.</p>
+<p>What&#8217;s that? Shortly speaking, a <a href="http://knockoutjs.com/documentation/binding-context.html">binding context</a>,
+is an object holding all the data you can potentially bind to your <span class="caps">DOM</span> nodes. Think of it as a namespace, or local scope:
+whatever&#8217;s in there can be used directly inside <code>data-bind</code> attributes.</p>
+<h4><code>let:</code> it&nbsp;go</h4>
+<p>Therefore, all that the <code>let:</code> binding has to do is to extend the context with a mapping passed to it as an argument.
+Well, almost&nbsp;all:</p>
+<div class="highlight"><pre><span class="nx">ko</span><span class="p">.</span><span class="nx">bindingHandlers</span><span class="p">[</span><span class="s1">&#39;let&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nx">init</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">valueAccessor</span><span class="p">,</span> <span class="nx">allBindings</span><span class="p">,</span> <span class="nx">viewModel</span><span class="p">,</span> <span class="nx">bindingContext</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">innerContext</span> <span class="o">=</span> <span class="nx">bindingContext</span><span class="p">.</span><span class="nx">extend</span><span class="p">(</span><span class="nx">valueAccessor</span><span class="p">);</span>
+        <span class="nx">ko</span><span class="p">.</span><span class="nx">applyBindingsToDescendants</span><span class="p">(</span><span class="nx">innerContext</span><span class="p">,</span> <span class="nx">element</span><span class="p">);</span>
+        <span class="k">return</span> <span class="p">{</span> <span class="nx">controlsDescendantBindings</span><span class="o">:</span> <span class="kc">true</span> <span class="p">};</span>
+    <span class="p">}</span>
+<span class="p">};</span>
+</pre></div>
+
+
+<p>The resulting <code>innerContext</code> is a copy of the original <code>bindingContext</code>, augmented with additional properties from
+the argument of <code>let:</code> (those are available through <code>valueAccessor</code>). Once we have it, though, we need to handle it
+in a little special&nbsp;way.</p>
+<p>Normally, Knockout is processing all bindings recursively, pasing down the same <code>bindingContext</code> (which ultimately
+comes from the root <code>viewModel</code>). But since we want to locally alter the context, we also need to interrupt this regular
+way and take care of the lower-level <span class="caps">DOM</span> nodes&nbsp;ourselves.</p>
+<p>This is exactly what the overly-long <code>ko.applyBindingsToDescendants</code> function is doing. The only caveat is that Knockout
+has to be <a href="http://knockoutjs.com/documentation/custom-bindings-controlling-descendant-bindings.html">told explicitly</a>
+about our intentions through the <code>return</code> value from <code>init</code>. Otherwise, it would try to apply the <em>original</em>
+<code>bindingContext</code> recursively, which in our case would amount to applying it <strong>twice</strong>.
+<code>{ controlsDescendantBindings: true }</code> prevents Knockout from doing so&nbsp;erroneously.</p>
       <a class="btn" href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">Continue reading</a>
   </div>
   <hr />
@@ -87,7 +168,220 @@ widespread interest among frontend developers. Today, this hasn&#8217;t changed 
 <a href="http://browserify.org/">Browserify</a>, it tries to solve an important problem on the web front(end):
 dividing JavaScript code into modules for better maintainability while still loading them correctly and efficiently
 without manual curation of the <code>&lt;script&gt;</code> tags.</p>
-<p>Once it ...</p>
+<p>Once it&#8217;s configured correctly (which can be rather <a href="http://requirejs.org/docs/api.html#config">non-trivial</a>, though),
+modules in RequireJS are simply <code>define</code>d as functions that return arbitrary JavaScript&nbsp;objects:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;jquery&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;lodash&#39;</span><span class="p">,</span>
+
+    <span class="s1">&#39;myapp/dep1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;myapp/dep2&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">$</span><span class="p">,</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">dep1</span><span class="p">,</span> <span class="nx">dep2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... all of the module&#39;s code ...</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="nx">exportedSymbol1</span><span class="o">:</span> <span class="p">...,</span>
+        <span class="nx">exportedSymbol2</span><span class="o">:</span> <span class="p">...,</span>
+    <span class="p">};</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Before executing the function, RequireJS loads all the specified dependencies, repeating the process recursively
+and asynchronously. Return values from module functions are passed as parameters to the next module function,
+and thus the whole mechanism clicks, serving as a crafty workaround for the lack of proper <code>import</code> functionality<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>Relative&nbsp;failures</h4>
+<p>If, at some point in the chain, the desired module cannot be found or loaded, the entire process grinds to a halt
+with an error. Most of the time, this is perfectly acceptable (or even desirable) behavior, equivalent to an incorrect
+<code>import</code> statement, invalid <code>#include</code> directive, or similar mistake in other&nbsp;languages.</p>
+<p>But there are situations when we&#8217;d like to proceed with a missing module, because the dependent code is prepared
+to handle it. The canonical example are
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers">Web Workers</a>.
+Unlike traditional web application code, Web Worker scripts operate outside of a context of any single page,
+having no access to the <abbr title="Document Object Model"><span class="caps">DOM</span></abbr> tree (because <em>which</em> <span class="caps">DOM</span> tree would it be?).
+Correspondingly, they have no <code>document</code> nor <code>window</code> objects in their global&nbsp;scope.</p>
+<p>Unfortunately, some libraries (<em>*cough*</em> jQuery <em>*cough*</em>) require those objects as a hard (and usually implicit)
+dependency. This doesn&#8217;t exactly help if we&#8217;d like to use them in worker code for other features, not related to <span class="caps">DOM</span>.
+In case of jQuery, for example, it could be the <span class="caps">API</span> for making <span class="caps">AJAX</span> calls, which is still decidedly more pleasant
+than dealing with bare <code>XMLHTTPRequest</code> if we&#8217;re doing anything&nbsp;non-trivial.</p>
+<p>Due to this hard dependency on <span class="caps">DOM</span>, however, Web Workers cannot <code>require</code> jQuery. No biggie, you may think: browsers
+supporting workers also offer an excellent, promise-based
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API">Fetch <span class="caps">API</span></a> that largely replaces the old <span class="caps">AJAX</span>,
+so we may just use it in worker code. Good thinking indeed, but it doesn&#8217;t solve the issue of <em>sharing code</em> between
+main (&#8220;<span class="caps">UI</span>&#8221;) part of the app and Web&nbsp;Workers.</p>
+<p>Suppose you have the following dependency&nbsp;graph:</p>
+<p><div class="graphviz" style="text-align: center;"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAD7CAYAAAAvttudAAAy0klEQVR4Ae2dBbhVVRbHtzEWtoiOimJjIphYYHegjgp2d4/1GTjG2DHGOJigiIqtYIGK2DN2JyCYOHYyo+5ZvzXu63n3nXvejXPuPbHX95137juxY529dqz476mstcONJ88Bz4FQDkwlAmJD7/iLngOeA2ZqzwPPAc+ByhzwAlKZN/6O54AfQXwb8ByI4sC0UTeTvvfvf//bvPrqq3qMGzfOfPTRR3p8/PHH5rvvvjM//vij+emnn8x///tfM8MMM+gx44wzmtlnn93MN998esw///yme/fuZtlllzVLLbWUPpN0uYuQ/i+//GI++OADM378eMO3mTBhgvnss88M38wdX3/9tfnPf/5jpkyZUjrDm+mnn95MN910pfNss81mOnfuXDrmnntu061bN7PIIouYhRde2CywwAJmmmmmSSVbm7pIRxgeffRRPR5//HGDIEBzzjmnWXzxxQ2NnYb/xz/+0cwyyywlgfjDH/6ggoKwIDRffPFFSZj4iG+//bZ+JJiMkKy99tqmT58+eswzzzypZHyaCjV58mTzwgsvmBdffLF0vPfee9oxUc6ZZppJGzS8nGuuuUoNnY4KYQgKBM8HBYbfX331VUmoPv/8c/Ppp5+qwP3www88bvi+iy22mOnRo4dZYYUV9OjZs6fp0qWL3m/ln0QF5NdffzVPPPGEuf322/WYOHGioTdZc801zVprrWV69eqlPT8C0QjR273zzjs6Ej3zzDNm7Nix5vnnnzdcX2211cw222xjtt12W+2tGsknL+8yUo8ZM6bUWb311ltaNXpyGinHMsssU+rhk+pkEBQ3Qr322mvmpZdeUgH98MMPtTxLLrlkqaPr27evdp5N/waoeeOmTz75xJ5xxhl2oYUWQoVsl156aXvCCSfYf/3rX1YabdzZhab37bff2rvvvtvuvvvuVkYoLYcw2d50001WpgWh7+T5oowO9pRTTrHSMysvpNe2vXv3tscdd5y99957rUybUlN9ykKZKBtlpKy0I8pOHahLs8jEmZH04na33XbTCtEojzjiCCs9Q5xZ1JWWrGGU4VtttZWVaZiVHtGeffbZVtY5daWXlZdk3WAHDhxoZZ6vDUymr3b//fdXXnz//fdZqYalrAgMZacOCAt1om7UMUmKRUBk6qSCQeNbYokl7LXXXmtlrZBkuetOW9Ys9thjj7UzzzyzlcWiPe+886zMk+tOL20vMkLfcsstdv3117dTTTWVlXm8PfLII3X0lilv2opbc3moAzMR6kTdqCN1pc5JzE4aEhB65nPOOcd26tTJLrroonbo0KH2559/rrnSrXiBYfz444+3ohWzogWzDz/8cCuKEVueosCwgwYNsrLYtVNPPbXdcsst7V133WX5Rnkl6kYdt9hiC60zdYcH8CIuqltAXn/9dbv88strAzv11FNjLVRclasmHVkkamNi2N577711OK/mvbQ8Q6951VVXWVF0WNEm2X322cfKojstxWtaOagzdYcH8AKexDGi1CUg11xzjRXVn1111VWtqAObxoQkM7rtttt0MY9C4ZVXXkkyq9jSZtQTjZOddtpp7YEHHmhRjhSd4AG8gCfwptGZQU0CwvyPhTfzPjQMeRu+WUuJClrXJw888EBq2xoaOkY7Rj2mF2+88UZqy9qqgsETeONmBvCsHqpaQFCN9u/f34qF1A4bNqyevDLxDvXcZZddVBN3/fXXp67MYmBVDY5YpnVhmroCpqxALN7hFVoveFcrVSUgjBwDBgzQnrXRIavWArbq+WOOOUYXfjA4LXTllVeq4LIAFyNbWoqV+nLAK3iGPQUe1kJVCQjTKkaOUaNG1ZJ25p89+OCDddH3yCOPtLQudFBHH320Tm1POukky/+eauMAPIN3LA/gZbU87FBAbrzxRp3HcS4awcTttttO7SXiN9aS6lMGtDP0fkX8BnEzHR7CS3hajZBECghWSvGdUq1A3AXNSnrffPON2ng23HDDqhgad70wamKAHT58eNxJFzY9eAlPUTR1RJECghYAtWdareIdVS6u++IAqeuR6667Lq4kq0rnhhtu0NEbzwRP8XIAnqLhgsdRVFFAxC1dE7j//vuj3i/Mvb322ssuuOCCTTOIMnrjDnP44YcXhsfNrii8hcdR/lwV3d3XWWcd9dN/8MEHRdA84SJOzIL4bhkxRCXOEBm9NVAJt33iLTzFzwFiVQi5IHDrnnvuCc0gVEDeffddDWAaMWKE2WyzzUJfjOOiqIw1eCaYFtGBBMtARKyJF2fwtlljjTU0xqTNRfmHGJOuXbuWX471f3GdN2JlN88991ys6ZYn9thjj2nQl2gNjTjild/OzP8EXfH9iDPp169f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"></div></p>
+<p>The <code>common</code> module has some logic that we&#8217;d want reused between regular <code>&lt;script&gt;</code>-based code and a Web Worker,
+but its dependency on jQuery makes it impossible. It would work, however, if this dependency was a <em>soft</em> one.
+If <code>common</code> could <em>detect</em> that jQuery is not available and fall back to other solutions (like the Fetch <span class="caps">API</span>),
+we would be able to <code>require</code> it in both execution&nbsp;environments.</p>
+<h4>The <code>optional</code> plugin</h4>
+<p>What we need, it seems, is an ability to say that some dependencies (like <code>'jquery'</code>) are <em>optional</em>. They can be loaded
+if they&#8217;re available but otherwise, they shouldn&#8217;t cause the whole dependency structure to crumble. RequireJS does not
+support this functionality by default, but it&#8217;s easy enough to add it via a <em>plugin</em>.</p>
+<p>There are already <a href="https://github.com/jrburke/requirejs/wiki/Plugins">several useful plugins</a> available for RequireJS
+that offer some interesting features. As of this writing, however, optional module loading doesn&#8217;t seem to be among them.
+That&#8217;s not a big problem: rolling out our own<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> plugin turns out to be relatively&nbsp;easy.</p>
+<p><a href="http://requirejs.org/docs/plugins.html">RequireJS plugins</a> are themselves modules: you create them as separate JavaScript
+files having code wrapped in <code>define</code> call. They can also declare their own dependencies like any other module.
+The only requirement is that they export an object with <a href="http://requirejs.org/docs/plugins.html#api">certain <span class="caps">API</span></a>:
+at minimum, it has to include the <code>load</code> method. Since our <code>optional</code> plugin is very simple, <code>load</code> is in fact
+the only method we have to&nbsp;implement:</p>
+<div class="highlight"><pre><span class="cm">/* Skeleton of a simple RequireJS plugin module. */</span>
+
+<span class="nx">define</span><span class="p">([],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+
+<span class="kd">function</span> <span class="nx">load</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">,</span> <span class="nx">parentRequire</span><span class="p">,</span> <span class="nx">onload</span><span class="p">,</span> <span class="nx">config</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+
+<span class="k">return</span> <span class="p">{</span>
+    <span class="nx">load</span><span class="o">:</span> <span class="nx">load</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As its name would hint, <code>load</code> carries out the actual module loading which a plugin is allowed to influence, modify,
+or even replace with something altogether different. In our case, we don&#8217;t want to be too invasive, but we need to
+detect failure in the original loading procedure and step&nbsp;in.</p>
+<p>I mentioned previously that module loading is asynchronous, which JavaScript often translates to &#8220;callbacks&#8221;.
+Here, <code>load</code> receives the <code>onload</code> callback which we eventually need to invoke. It also get the mysterious
+<code>parentRequire</code> argument; this is simply a regular <code>require</code> function that&#8217;d normally be used if our plugin didn&#8217;t
+stand in the&nbsp;way.</p>
+<p>Those two are the most important pieces of the puzzle, which overall has a pretty succinct&nbsp;solution:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25</pre></div></td><td class="code"><div class="highlight"><pre><span class="cm">/**</span>
+<span class="cm"> * RequireJS plugin for optional module loading.</span>
+<span class="cm"> */</span>
+<span class="nx">define</span> <span class="p">([],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+
+
+<span class="cm">/** Default value to return when a module failed to load. */</span>
+<span class="kd">var</span> <span class="nx">DEFAULT</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">load</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">,</span> <span class="nx">parentRequire</span><span class="p">,</span> <span class="nx">onload</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">parentRequire</span><span class="p">([</span><span class="nx">moduleName</span><span class="p">],</span> <span class="nx">onload</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">failedModule</span> <span class="o">=</span> <span class="nx">err</span><span class="p">.</span><span class="nx">requireModules</span> <span class="o">&amp;&amp;</span> <span class="nx">requireModules</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">warn</span><span class="p">(</span><span class="s2">&quot;Could not load optional module: &quot;</span> <span class="o">+</span> <span class="nx">failedModule</span><span class="p">);</span>
+        <span class="nx">requirejs</span><span class="p">.</span><span class="nx">undef</span><span class="p">(</span><span class="nx">failedModule</span><span class="p">);</span>
+
+        <span class="nx">define</span><span class="p">(</span><span class="nx">failedModule</span><span class="p">,</span> <span class="p">[],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">DEFAULT</span><span class="p">;</span> <span class="p">});</span>
+        <span class="nx">parentRequire</span><span class="p">([</span><span class="nx">failedModule</span><span class="p">],</span> <span class="nx">onload</span><span class="p">);</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="k">return</span> <span class="p">{</span>
+    <span class="nx">load</span><span class="o">:</span> <span class="nx">load</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="p">});</span>
+</pre></div>
+</td></tr></table>
+
+<p>The logic here is as&nbsp;follows:</p>
+<ul>
+<li>First, try to load the module normally (via the outer <code>parentRequire</code> call).</li>
+<li>If it succeeds, <code>onload</code> is called and there is nothing for us to&nbsp;do.</li>
+<li>If it fails, we log the <code>failedModule</code> and cleanup some internal RequireJS state with <code>requirejs.undef</code>.</li>
+<li>Most importantly, we <code>define</code> the module as a trivial shim that returns some <code>DEFAULT</code> (here, <code>null</code>).</li>
+<li>As a result, when we require it again (through the inner <code>parentRequire</code> call), we <em>know</em> it&#8217;ll be loaded&nbsp;successfully.</li>
+</ul>
+<h4>Usage</h4>
+<p>Plugins in RequireJS are invoked on a per-module basis. You can specify that a certain dependency <code>'bar'</code> shall be loaded
+through a plugin <code>'foo'</code> by putting <code>'foo!bar'</code> on the dependency&nbsp;list:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span> <span class="s1">&#39;foo!bar&#39;</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">bar</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Both <code>'foo'</code> and <code>'bar'</code> represent module paths here: the first one is the path to the <em>plugin</em> module,
+while the second one is the actual dependency. In a more realistic example &#8212; like when our optional loader is involved &#8212;
+both of them would most likely be multi-segments&nbsp;paths:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;myapp/ext/require/optional!myapp/common/buttons/awesome-button&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As you can see, they can get pretty unreadable rather quickly. It would be better if the plugin prefix consisted
+of just one segment (i.e. <code>optional!</code>) instead. We can make that happen by adding
+<a href="http://requirejs.org/docs/api.html#config-map">a mapping</a> to the RequireJS&nbsp;config:</p>
+<div class="highlight"><pre><span class="nx">requirejs</span><span class="p">.</span><span class="nx">config</span><span class="p">({</span>
+    <span class="c1">// ...</span>
+    <span class="nx">map</span><span class="o">:</span> <span class="p">{</span>
+        <span class="s1">&#39;*&#39;</span><span class="o">:</span> <span class="p">{</span>
+            <span class="s1">&#39;optional&#39;</span><span class="o">:</span> <span class="s1">&#39;myapp/ext/require/optional&#39;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">})</span>
+</pre></div>
+
+
+<p>With this renaming in place, the loading of non-mandatory dependencies becomes quite a bit&nbsp;clearer:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;optional!myapp/common/buttons/awesome-button&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+
+<span class="c1">// ...</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... (some work around) ...</span>
+<span class="p">}</span>
+
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Of course, you still need to actually code around the potential lack of an optional dependency.
+The <code>if</code> statement above is just an illustrative example; you may find it more sensible to provide some shim&nbsp;instead:</p>
+<div class="highlight"><pre><span class="nx">AwesomeButtonController</span> <span class="o">=</span> <span class="nx">AwesomeButtonController</span> <span class="o">||</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">};</span>
+</pre></div>
+
+
+<p>Either way, I recommend trying to keep the size of such conditional logic to a minimum.
+Ideally, it should be confined to a single place, or &#8212; better yet &#8212; abstracted behind a&nbsp;function.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>An actual <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import"><code>import</code> statement</a>
+has made it into the <span class="caps">ES6</span> (ECMAScript 2015) standard but, as of this writing, no browser implements it.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Most of the code for the plugin presented here is based on
+<a href="http://stackoverflow.com/a/27422370/434799">this StackOverflow answer</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/requirejs-optional.html#requirejs-optional">Continue reading</a>
   </div>
   <hr />
@@ -105,7 +399,83 @@ without manual curation of the <code>&lt;script&gt;</code> tags.</p>
       <p>Though not as popular as back in the days, <code>mailto:</code> URLs are sometimes still the best way
 &#8212; and most certainly the easiest &#8212; to enable users to send emails from a web application. Typically, they are used
 in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
-<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto ...</span></pre></div>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com&quot;</span><span class="nt">&gt;</span>Send email<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>Depending on the operating system and browser settings, clicking on such a link could invoke a different mail client.
+In the past, this could cause much confusion if the user has never used its local email application (e.g. Outlook),
+but nowadays browsers are increasingly doing the right thing and presenting a choice of possible options.
+This includes the various web applications from popular email providers. User can thus choose &#8212; say &#8212; Gmail, and have
+all subsequent <code>mailto:</code> links take them to a <em>Compose Mail</em> view&nbsp;there.</p>
+<p>Given those developments, it&#8217;s possible that soon those URLs won&#8217;t be as quaint as they used to be ;)
+In any case, I think it&#8217;s worthwhile to have a few <code>mailto:</code> tricks up our sleeve for when they turn out to be
+an appropriate solution for the task at&nbsp;hand.</p>
+<h4>Triggering them in&nbsp;JavaScript</h4>
+<p>In the example above, I&#8217;ve used a <code>mailto:</code> <span class="caps">URL</span> directly in some <span class="caps">HTML</span> markup. For the most part, however, those URLs
+behave like any other and support a lot of the same functionality that <code>http://</code> URLs&nbsp;do:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">sendEmail</span><span class="p">(</span><span class="nx">address</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nx">address</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Predictably, calling this <code>sendEmail</code> function is equivalent to clicking on a <code>mailto:</code> link. This additional level
+of indirection, however, may be enough to fool some web crawlers that look for email addresses to spam. Its effectiveness
+depends largely on how radically we&#8217;re going to obfuscate the <code>address</code> argument in the actual&nbsp;invocation.</p>
+<p>More importantly, though, a function like that can be part of some more complicated logic. The only limitation is
+the same one that restricts where and when it&#8217;s possible to <code>window.open</code> another browser window. Namely, it has to be
+called in a direct response to a <span class="caps">UI</span> action triggered by the user (a button click would be a good&nbsp;example).</p>
+<h4>Customization</h4>
+<p>In their simplest form, <code>mailto:</code> URLs aren&#8217;t terribly interesting, since their only parameter is the address of a sole recipient. Fortunately, this isn&#8217;t where their capabilities end: it&#8217;s possible to customize other email fields as well,
+such as the subject or even body<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>Somewhat surprisingly, all this can be done in a manner that&#8217;s more typical for <code>http://</code> <span class="caps">URL</span>: with query string
+parameters. Right after the recipient&#8217;s address, we can drop a question mark and add some ampersand-separated
+key-value&nbsp;pairs:</p>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com?subject=Hi&amp;amp;body=Hello%20John!&quot;</span><span class="nt">&gt;</span>
+  Say hello to John!
+<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>A more programmatic approach is of course also possible. One thing we need to remember, though, is the proper escaping
+of input values in order to make them safe to put inside an <span class="caps">URL</span><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+The <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent"><code>encodeURIComponent</code> function</a> can be used for this&nbsp;purpose:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">getMailtoUrl</span><span class="p">(</span><span class="nx">to</span><span class="p">,</span> <span class="nx">subject</span><span class="p">,</span> <span class="nx">body</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="p">[];</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">subject</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;subject=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">subject</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">body</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;body=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">body</span><span class="p">))</span>
+    <span class="p">}</span>
+
+    <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">to</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">url</span> <span class="o">+=</span> <span class="s1">&#39;?&#39;</span> <span class="o">+</span> <span class="nx">args</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;&amp;&#39;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">url</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>In theory, almost any of the numerous <a href="https://en.wikipedia.org/wiki/Email#Header_fields">email headers</a> can be specified
+this way. However, support may vary across browsers, especially since some of the headers
+(like <a href="https://en.wikipedia.org/wiki/Blind_carbon_copy">the <code>Bcc:</code> one</a>) are subject to certain security
+or privacy considerations. Personally, I wouldn&#8217;t recommend relying on anything besides
+<code>subject=</code> and <code>body=</code>, with a possible addition of <code>cc=</code> for
+<a href="https://en.wikipedia.org/wiki/Carbon_copy">the <code>Cc:</code>header </a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>By <a href="http://www.ietf.org/rfc/rfc2368.txt"><span class="caps">RFC</span> 2368</a>, only <em>text/plain</em> email body can be specified this way.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Note that this is unrelated to the <em><span class="caps">HTML</span></em> escaping of <code>&amp;</code> character as <code>&amp;amp;</code> entity in the previous example.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">Continue reading</a>
   </div>
   <hr />
@@ -129,7 +499,175 @@ it slowly fades out to transparency over several&nbsp;seconds:</p>
     <img src="http://xion.io/images/paragon-222-faded.jpg" alt ='"Ding" after fading out'>
 </p>
 
-<p>If you hover your mouse over it ...</p>
+<p>If you hover your mouse over it, though, it turns opaque right away and stays like that
+until you move away with the cursor. It then tries to disappear again, lest you stop it once more
+and restore to full opacity &#8212; and so on. Leave it for a moment, though, and it eventually&nbsp;vanishes.</p>
+<p>Cool, eh? Wouldn&#8217;t it be nice to have a similar mechanism for, say, notifications displayed within a web app?
+Sure it would be! And it doesn&#8217;t even seem all that complicated, so let&#8217;s give it a&nbsp;try.</p>
+<h4>A promising <span class="caps">API</span></h4>
+<p>Before delving into implementation details, it&#8217;s a good practice think for a moment about an <span class="caps">API</span>
+that we&#8217;ll expose to the user. Since it looks like a relatively simple problem, we don&#8217;t need no classes or frameworks.
+All that&#8217;s necessary is a simple&nbsp;function:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Surely, however, whoever calls it would like to be able to tell when the animation finishes (e.g. to remove the <code>element</code>
+they&#8217;ve passed from the <span class="caps">DOM</span> tree). Simply waiting a predefined number of seconds is not sufficient, because
+&#8212; as described above &#8212; the effect could be restarted arbitrary many times through mouse&nbsp;interaction.</p>
+<p>We could pass a callback, of course, but the modern JavaScript way of dealing with asynchronicity and concurrency
+is through <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"><em>promises</em></a>.
+Following this pattern, our function shall return a promise that <em>resolves</em> when the effect ends.
+Disregarding the possible user interaction for now, a minimal implementation of the fade-out alone would simply use
+the <a href="http://api.jquery.com/fadeout/"><code>jQuery.fadeOut</code> method</a> and look something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">options</span> <span class="o">===</span> <span class="s1">&#39;number&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span><span class="nx">fadeOut</span><span class="o">:</span> <span class="nx">options</span><span class="p">};</span>
+    <span class="p">}</span>
+
+    <span class="nx">element</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="nx">element</span><span class="p">);</span>
+    <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nx">resolve</span><span class="p">();</span>
+        <span class="p">});</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>The constructor of <code>Promise</code> is admittedly a little weird, as it employs a level of abstraction and indirection
+that is indicative of (more) functional programming languages. You pass it a function that&#8217;s invoked <em>immediately</em>
+with an argument that itself is a function. (Actually two arguments, but we ignore the other one here).
+That input function, <code>resolve</code>, should be called whenever the new promise &#8220;completes&#8221;, in whatever sense
+it&#8217;s appropriate for the particular use&nbsp;case.</p>
+<p>Here, we&#8217;re resolving the promise when our animation ends. This enables callers to react to this
+in a very straightforward&nbsp;way:</p>
+<div class="highlight"><pre><span class="kd">var</span> <span class="nx">elem</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;#foo&#39;</span><span class="p">);</span>
+<span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">elem</span><span class="p">,</span> <span class="mi">400</span> <span class="cm">/* ms */</span><span class="p">).</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">elem</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As a small aside, the <code>Promise</code> class is a ECMAScript 6 feature, which means it may not be available in all the browsers.
+The open-source <a href="https://github.com/kriskowal/q"><em>Q</em> library</a> is often used as a compatibility shim,
+among many other libraries implementing the <a href="https://promisesaplus.com/">Promises/A+ recommendation</a>.</p>
+<h4>Interaction&nbsp;handling</h4>
+<p>There&#8217;s little value in just wrapping an existing jQuery method, so let&#8217;s make it more interesting through mouse events.
+We want hovering on the element to pause the animation, while moving the cursor away should resume&nbsp;it:</p>
+<div class="highlight"><pre><span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;mouseenter&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>  <span class="c1">// true == discard remaining animation stages</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">css</span><span class="p">(</span><span class="s1">&#39;opacity&#39;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+    <span class="p">});</span>
+    <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;mouseleave&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nx">resolve</span><span class="p">();</span>
+        <span class="p">});</span>
+    <span class="p">});</span>
+
+    <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">resolve</span><span class="p">();</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>That will <em>mostly</em> work even with the above code, but there are several problems that need to be addressed&nbsp;immediately:</p>
+<ul>
+<li>The <code>mouseenter</code> and <code>mouseleave</code> event handlers are should only fire while the fade-out effect is being played.
+  Currently, they &#8220;leak&#8221;, and remain bound even after it finishes, interfering with given <span class="caps">DOM</span> element
+  for as long as it&nbsp;exists.</li>
+<li>The whole concept of <em>hovering</em> is contingent upon the user having a pointing device. In today&#8217;s mobile world,
+  this excludes a significant fraction of clients. We need an alternative interaction pattern for touchscreen devices,
+  and one possible option is restart the effect on&nbsp;click/tap.</li>
+<li>There is a fair amount of repetition here, and it will only get worse once the previous problems are dealt&nbsp;with.</li>
+</ul>
+<h4>Cleaning&nbsp;up</h4>
+<p>A correct (and cleaner) version is quite a bit longer, but shouldn&#8217;t be too hard to&nbsp;follow:</p>
+<div class="highlight"><pre><span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Event handlers used by the effect.</span>
+    <span class="kd">var</span> <span class="nx">events</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="nx">mouseenter</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">interruptAnimation</span><span class="p">();</span> <span class="p">},</span>
+        <span class="nx">mouseleave</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">delayedFadeOut</span><span class="p">();</span> <span class="p">},</span>
+        <span class="nx">click</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nx">interruptAnimation</span><span class="p">();</span>
+            <span class="nx">delayedFadeOut</span><span class="p">();</span>
+        <span class="p">},</span>
+    <span class="p">};</span>
+    <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">events</span><span class="p">).</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">events</span><span class="p">[</span><span class="nx">name</span><span class="p">]);</span>
+    <span class="p">});</span>
+
+    <span class="c1">// Helper functions.</span>
+    <span class="kd">var</span> <span class="nx">interruptAnimation</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">css</span><span class="p">(</span><span class="s1">&#39;opacity&#39;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+    <span class="p">};</span>
+    <span class="kd">var</span> <span class="nx">delayedFadeOut</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">delay</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">element</span><span class="p">.</span><span class="nx">delay</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">delay</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">events</span><span class="p">).</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">element</span><span class="p">.</span><span class="nx">off</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">events</span><span class="p">[</span><span class="nx">name</span><span class="p">]);</span>
+            <span class="p">});</span>
+            <span class="nx">resolve</span><span class="p">();</span>
+        <span class="p">});</span>
+    <span class="p">};</span>
+
+    <span class="c1">// Start the animation.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="nx">delayedFadeOut</span><span class="p">();</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>The main part is of course the <code>delayedFadeOut</code> function. It is invoked right at the beginning, as well as whenever
+the animation has to be started&nbsp;again.</p>
+<p>We also put the event handlers in a &#8220;map&#8221; (JavaScript object). This makes it easy to initially bind them to the element, and &#8212; more importantly &#8212; unbind them when the effect&nbsp;ends.</p>
+<p>As a final touch, we also allow the caller to specify how long the element should remain at its full opacity
+before it starts to fade out (<code>delay</code>), and to optionally add a <code>fadeIn</code> stage at the very beginning to make everything
+look a little nicer. (I recommend no more than 300-400ms for that part,&nbsp;though).</p>
+<h4>Practical&nbsp;example</h4>
+<p>A complete code sample for the <code>interruptibleFadeOut</code> function can be seen in
+<a href="https://gist.github.com/Xion/0a9da59c44d5c9664a2c">this gist</a>. To use it in practice, you&#8217;d most likely need
+at least a little bit of <span class="caps">CSS</span> and additional JavaScript to position the element&nbsp;appropriately:</p>
+<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">&quot;toast&quot;</span><span class="nt">&gt;</span>Hello, world!<span class="nt">&lt;/div&gt;</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre><span class="nf">#toast</span> <span class="p">{</span>
+    <span class="k">position</span><span class="o">:</span> <span class="k">fixed</span><span class="p">;</span>
+    <span class="k">display</span><span class="o">:</span> <span class="k">none</span><span class="p">;</span>
+
+    <span class="c">/* These are arbitrary */</span>
+    <span class="k">top</span><span class="o">:</span> <span class="m">100px</span><span class="p">;</span>
+    <span class="k">width</span><span class="o">:</span> <span class="m">80%</span><span class="p">;</span>
+    <span class="k">height</span><span class="o">:</span> <span class="m">50px</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre><span class="kd">var</span> <span class="nx">toast</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;#toast&#39;</span><span class="p">);</span>
+<span class="nx">toast</span><span class="p">.</span><span class="nx">offset</span><span class="p">({</span>
+    <span class="nx">left</span><span class="o">:</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">round</span><span class="p">(</span><span class="nx">$</span><span class="p">(</span><span class="nb">window</span><span class="p">).</span><span class="nx">width</span><span class="p">()</span> <span class="o">-</span> <span class="nx">element</span><span class="p">.</span><span class="nx">outerWidth</span><span class="p">()</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span>
+<span class="p">});</span>
+<span class="nx">toast</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>
+<span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">toast</span><span class="p">,</span> <span class="p">{</span> <span class="nx">fadeIn</span><span class="o">:</span> <span class="mi">200</span><span class="p">,</span> <span class="nx">delay</span><span class="o">:</span> <span class="mi">1000</span><span class="p">,</span> <span class="nx">fadeOut</span><span class="o">:</span> <span class="mi">3000</span> <span class="p">})</span>
+    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">toast</span><span class="p">.</span><span class="nx">remove</span><span class="p">()</span> <span class="p">});</span>
+</pre></div>
+
+
+<p>Styling it to look like a level-up ding is left as an exercise for the reader&nbsp;:)</p>
       <a class="btn" href="http://xion.io/post/code/html-interruptive-fadeout.html#html-interruptive-fadeout">Continue reading</a>
   </div>
 </article>
@@ -154,6 +692,8 @@ it slowly fades out to transparency over several&nbsp;seconds:</p>
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -163,6 +703,10 @@ it slowly fades out to transparency over several&nbsp;seconds:</p>
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context" : "http://schema.org",

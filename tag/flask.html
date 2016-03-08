@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
-  <meta name="author" content="Karol Kuczmarski" />
-  <meta name="description" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
 <meta property="og:type" content="blog"/>
 <meta property="og:title" content="Karol Kuczmarski's Blog"/>
@@ -20,6 +28,7 @@
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io"/>
 <meta property="og:image" content="http://xion.io/logo.jpeg">
+
   <title>Karol Kuczmarski's Blog &ndash; Tag: Flask</title>
 </head>
 <body>
@@ -68,7 +77,223 @@
   <div>
       <p><a href="http://celeryproject.org">Celery</a> is an asynchronous task worker that&#8217;s frequently used for background processing
 in Python web apps. Rather than performing a time-consuming task within the request loop, we delegate it to a <em>queue</em>
-so that a <em>worker process</em> can pick it up when ready. The immediate benefit is much better ...</p>
+so that a <em>worker process</em> can pick it up when ready. The immediate benefit is much better latency for the end user.
+Pros also include easier scalability, since you can adjust the number of workers to your task&nbsp;load.</p>
+<p>Examples of tasks that are usually best done in the background vary from fetching data through a third-party <span class="caps">API</span>
+to sending emails, and from pushing mobile notifications to pruning the database of stale records. Anything that may
+take more than a couple hundred milliseconds to complete &#8212; and isn&#8217;t absolutely essential to the current <span class="caps">HTTP</span> request &#8212;
+is typically a good candidate for asynchronous&nbsp;processing.</p>
+<p>In Celery, workers are just regular Python processes, often running the exact same code that&#8217;s powering the app&#8217;s web
+frontend<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. But unlike most of that code, they aren&#8217;t servicing any <span class="caps">HTTP</span> requests &#8212; they simply run some function
+with given arguments, both specified by whomever sent a task for execution. Indeed, those functions don&#8217;t even <em>know</em>
+who or what asked for them to be&nbsp;executed.</p>
+<p>Neat, right? It is what we usually compliment as <em>decoupling</em>, or separation of concerns. They are valuable qualities even
+regardless of the <span class="caps">UI</span> and scaling benefits mentioned&nbsp;earlier.</p>
+<h4>Not quite&nbsp;web</h4>
+<p>But those qualities come with a trade-off. Task code is no longer a web frontend code: it doesn&#8217;t run within the
+comfy environment of our web framework of choice. Losing it may be quite unnerving, actually, because in a typical
+web application there will be many things tied directly to the <span class="caps">HTTP</span> request pipeline. After all, this is what web
+applications <em>do</em> &#8212; respond to <span class="caps">HTTP</span> requests &#8212; so it often makes perfect sense e.g. to marry the request flow
+with database transactions, committing or rolling those back according to <span class="caps">HTTP</span> status code that the app&nbsp;produced.</p>
+<p>Tasks may also require a database, though, if only to
+<a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#state">assert the expected state of the world</a>.
+Similar goes for memcache, a Redis instance, or basically any resource used by the frontend code.
+Alas, it&#8217;s quite possible <em>the very reason</em> we delegate work to a task is to shift lengthy interactions with those
+external systems away from the <span class="caps">UI</span>. Obviously, we&#8217;re going to need them for&nbsp;that!</p>
+<h4>Fake a&nbsp;request</h4>
+<p>So one way or another, our tasks will most likely need some initialization and/or cleanup code. And since it&#8217;s probably
+the same code that most <span class="caps">HTTP</span> request handlers require and use already, why not just <em>pretend we&#8217;re handling a request
+after all</em>?</p>
+<p>In <a href="http://flask.pocoo.org">Flask</a>, we can pull that off rather easily.
+The <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.test_request_context"><code>test_request_context</code> method</a>
+is conveniently provided to allow for faking the <em>request context</em> &#8212; that is, an execution environment for <span class="caps">HTTP</span> handlers.
+Like the name suggest, it is used mostly <a href="http://flask.pocoo.org/docs/0.10/testing/">for testing</a>, but there is nothing
+stopping us from using it in tasks run by&nbsp;Celery.</p>
+<p>We probably don&#8217;t want to call it directly, though. What would be better is to have Celery prepare the context first,
+and then run the task code as if it was an <span class="caps">HTTP</span> handler. For even better results, the context would preserve information
+extracted from the <em>actual <span class="caps">HTTP</span> request</em>, one that has sent the task for execution. Moving some work to the background
+would then be a trivial matter, for both the task and the original handler would operate within the same&nbsp;environment.</p>
+<p>Convenient? I believe so. And as I&#8217;ll demonstrate next, it isn&#8217;t very complicated to implement&nbsp;either.</p>
+<h4>Wrap the&nbsp;decorator?</h4>
+<p>At least one piece of the solution should stand out as pretty obvious. Since our intention is to wrap the task&#8217;s code
+in some additional packaging &#8212; the request context &#8212; it seems fairly natural to write our own <code>@task</code> decorator:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">functools</span>
+
+<span class="kn">from</span> <span class="nn">myapp</span> <span class="kn">import</span> <span class="n">app</span><span class="p">,</span> <span class="n">celery</span>
+
+
+<span class="k">def</span> <span class="nf">task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Decorator function to apply to Celery tasks.</span>
+<span class="sd">    Executes the actual task inside Flask&#39;s test request context.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Actual decorator.&quot;&quot;&quot;</span>
+        <span class="nd">@celery.task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nd">@functools.wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">wrapped</span>
+
+    <span class="k">return</span> <span class="n">decorator</span>
+</pre></div>
+
+
+<p>Here, <code>app</code> is the <a href="http://flask.pocoo.org/docs/0.10/api/#application-object"><code>Flask</code> application</a>, and <code>celery</code> is the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery-application-objects"><code>Celery</code> object</a>
+that&#8217;s often configured alongside&nbsp;it.</p>
+<h4>The <code>Task</code> class</h4>
+<p>While this technique will give us <em>a</em> request context inside the task code, it won&#8217;t be <em>the</em> request context
+from which the task has been sent for execution. To replicate that context correctly, we need additional support
+on the sender&nbsp;side.</p>
+<p>Internally, Celery is converting every function we annotate with <code>@task</code> decorator into a subclass of
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task"><code>Celery.app.task.Task</code></a>.
+This process can be customized, for example by providing an explicit <code>base=</code> parameter to <code>@task</code> which
+specifies a <a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#custom-task-classes">custom <code>Task</code> subclass</a>
+to use in place of the default one. Within that subclass, we&#8217;re free to override any functionality that we need&nbsp;to.</p>
+<p>In our case, we&#8217;ll scrape the current request context from Flask for all relevant information,
+and later use it to recreate the context in the task&nbsp;code.</p>
+<p>But before we get to that, let&#8217;s just create the <code>Task</code> subclass and move the above execution logic to it.
+This way, users won&#8217;t have to use a completely new <code>@task</code> decorator which would needlessly couple them to a specific
+<code>Celery</code> app&nbsp;instance:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">celery</span> <span class="kn">import</span> <span class="n">Task</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for tasks that run inside a Flask request context.&quot;&quot;&quot;</span>
+    <span class="n">abstract</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Instead, they can either set this class as <code>base=</code> for a specific&nbsp;task:</p>
+<div class="highlight"><pre><span class="nd">@celery.task</span><span class="p">(</span><span class="n">base</span><span class="o">=</span><span class="n">RequestContextTask</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sync_user_data</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or make it into new default for all their&nbsp;tasks:</p>
+<div class="highlight"><pre><span class="n">celery</span> <span class="o">=</span> <span class="n">Celery</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="n">celery</span><span class="o">.</span><span class="n">Task</span> <span class="o">=</span> <span class="n">RequestContextTask</span>
+</pre></div>
+
+
+<h4>Invocation&nbsp;patterns</h4>
+<p>When the frontend asks for a task to be executed, it most often uses the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.delay"><code>Task.delay</code> method</a>.
+It will package a payload contaning task arguments, and send it off through a <em>broker</em> &#8212;
+usually an <a href="https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol"><span class="caps">AMQP</span></a>-based queue,
+such as <a href="https://www.rabbitmq.com/">RabbitMQ</a> &#8212; so that a Celery worker can pick it up and actually&nbsp;execute.</p>
+<p>But there are other means of task invocation. We can even run it
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.apply">&#8220;in place&#8221;</a>,
+locally and synchronously, which is especially useful for various testing scenarios. Lastly, a task can also be
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.retry">retried</a> from within
+its own code, terminating its current run and scheduling another attempt for some future&nbsp;date.</p>
+<p>Obviously, for the <code>RequestContextTask</code> to be useful, it needs to behave correctly in every situation.
+Therefore we need to cover all the entry points I&#8217;ve mentioned &#8212;
+the asynchronous call, a synchronous invocation, and a task&nbsp;retry:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">apply_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply_async</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">retry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Note that <code>Task.apply_async</code> is being called internally by <code>Task.delay</code>,
+so it&#8217;s only that first method that we have to&nbsp;override.</p>
+<h4>Context in a&nbsp;box</h4>
+<p>As you can deduce right away, the Flask-related magic is meant to go in the <code>_include_context</code> method.
+The idea is to prepare arguments for the eventual invocation of <code>Flask.test_request_context</code>,
+and pass them through an extra task parameter.
+Those arguments are relatively uncomplicated: they are just a medley of various pieces of information
+that we can easily obtain from the Flask&#8217;s <code>request</code> object:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">has_request_context</span><span class="p">,</span> <span class="n">request</span>
+
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="n">CONTEXT_ARG_NAME</span> <span class="o">=</span> <span class="s">&#39;_flask_request_context&#39;</span>
+
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">_include_request_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Includes all the information about current HTTP request context</span>
+<span class="sd">        as an additional argument to the task.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;path&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
+            <span class="s">&#39;base_url&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">url_root</span><span class="p">,</span>
+            <span class="s">&#39;method&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
+            <span class="s">&#39;headers&#39;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="s">&#39;?&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="s">&#39;query_string&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">[(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s">&#39;?&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):]</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">]</span> <span class="o">=</span> <span class="n">context</span>
+</pre></div>
+
+
+<p>On the worker side, we simply unpack them and recreate the&nbsp;context:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">make_response</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">call</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">):</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">call</span><span class="p">()</span>
+            <span class="n">app</span><span class="o">.</span><span class="n">process_response</span><span class="p">(</span><span class="n">make_response</span><span class="p">(</span><span class="n">result</span> <span class="ow">or</span> <span class="s">&#39;&#39;</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+
+
+<p>The only tricky part is calling
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.process_response"><code>Flask.process_response</code></a> at the end.
+We need to do that for the <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.after_request"><code>@after_request</code> hooks</a>
+to execute correctly. This is quite crucial, because those hooks are where you&#8217;d normally put important cleanup code,
+like commit/rollback of the database&nbsp;transaction.</p>
+<h4>Complete&nbsp;solution</h4>
+<p>To see how all those code snippets fit together, see <a href="https://gist.github.com/Xion/46d739b980af14a0d3ea">this gist</a>.
+You may also want to have a look at
+<a href="http://flask.pocoo.org/docs/0.10/patterns/celery/">the article on Celery integration</a> in Flask docs for some tips on
+how to integrate it with your own&nbsp;project.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This isn&#8217;t strictly necessary, as Celery supports sending tasks for execution
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery.Celery.send_task">by explicit name</a>.
+For that request to reach the worker, however,
+the <a href="http://docs.celeryproject.org/en/latest/configuration.html#broker-url">task broker configuration</a>
+must be correctly shared between sender and the worker.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Continue reading</a>
   </div>
   <hr />
@@ -86,7 +311,185 @@ so that a <em>worker process</em> can pick it up when ready. The immediate benef
       <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
 in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
 <code>div.content</code>, and other presentational elements are still a common fact of life.
-Unless ...</p>
+Unless you&#8217;re one of the cool kids who use <a href="http://webcomponents.org/">Web Components</a> with
+<a href="https://www.polymer-project.org">Polymer</a>, your main option for abstracting this boilerplate away
+is defining some more general <a href="http://jinja.pocoo.org/docs/dev/templates/#macros">template macros</a>.</p>
+<p>As with any kind of abstraction, it&#8217;s crucial to balance broad applicability with a potential for finely-tuned
+customization. In the case of wrapping <span class="caps">HTML</span> snippets in Jinja macros, an easy way to maintain flexibility is to allow
+the caller to specify some crucial attributes of the root&nbsp;element:</p>
+<div class="highlight"><pre><span class="c">{#</span>
+<span class="c">  Renders the markup for a &lt;button&gt; from Twitter Bootstrap.</span>
+<span class="c">#}</span><span class="x"></span>
+<span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">        class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}{%</span> <span class="k">if</span> <span class="nv">class</span> <span class="cp">%}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">class</span> <span class="cp">}}{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x">&quot;</span>
+<span class="x">        </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+<span class="x">    </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
+<span class="x">  &lt;/button&gt;</span>
+<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>An element <code>id</code> would be a good example, and in the above macro it&#8217;s handled implicility
+thanks to the <code>{{ kwargs|xmlattr }}</code> stanza.</p>
+<p><code>class</code>, however, is not that simple, because a macro like that usually needs to supply some <span class="caps">CSS</span> classes of its own.
+The operation of combining them with additional ones, passed by the caller, is awfully textual and error-prone.
+It&#8217;s easy, for example, to forget about the crucial space and run two class names&nbsp;together.</p>
+<p>As if <span class="caps">CSS</span> wasn&#8217;t difficult enough to debug&nbsp;already!</p>
+<h4>Let them have&nbsp;list</h4>
+<p>The root cause for any of those problems is working at a level that&#8217;s too low for the task.
+The value for a <code>class</code> attribute may be <em>encoded</em> as string, but it&#8217;s fundamentally a <em>list of tokens</em>.
+In the modern <span class="caps">DOM</span> <span class="caps">API</span>, for example, it is represented
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/classList">as exactly that</a>: a <code>DOMTokenList</code>.</p>
+<p>I&#8217;ve found it helpful to replicate a similar mechanism in Jinja templates. The result is a <code>ClassList</code> wrapper
+whose code I quote here in&nbsp;full:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">MutableSet</span>
+
+
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Data structure for holding, and ultimately returning as a single string,</span>
+<span class="sd">    a set of identifiers that should be managed like CSS classes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Constructor.</span>
+<span class="sd">        :param arg: A single class name or an iterable thereof.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span>
+        <span class="k">elif</span> <span class="n">arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s">&quot;expected a string or string iterable, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">class_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span>
+
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">discard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__html__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&#39;class=&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
+</pre></div>
+</td></tr></table>
+
+<p>To make it work with <a href="http://flask.pocoo.org">Flask</a>, adorn the class with
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.template_global"><code>Flask.template_global</code> decorator</a>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">myflaskapp</span> <span class="kn">import</span> <span class="n">app</span>
+
+<span class="nd">@app.template_global</span><span class="p">(</span><span class="s">&#39;classlist&#39;</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Otherwise, if you&#8217;re working with a raw <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment">Jinja <code>Environment</code></a>,
+simply add <code>ClassList</code> to its <a href="http://jinja.pocoo.org/docs/dev/api/#global-namespace">global namespace</a>&nbsp;directly:</p>
+<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">globals</span><span class="p">[</span><span class="s">&#39;classlist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ClassList</span>
+</pre></div>
+
+
+<p>In either case, I recommend following the apparent Jinja convention of naming template symbols
+as <code>lowercasewithoutspaces</code>.</p>
+<h4>Becoming&nbsp;classy</h4>
+<p>Usage of this new <code>classlist</code> helper is relatively straightforward. Since it accepts both a space-separated string
+or an iterable of <span class="caps">CSS</span> class names, a macro can wrap anything the caller would pass it as a value for <code>class</code> attribute:</p>
+<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="cp">{%</span> <span class="k">set</span> <span class="nv">classes</span> <span class="o">=</span> <span class="nv">classlist</span><span class="o">(</span><span class="nv">class</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="c">{# ... #}</span><span class="x"></span>
+</pre></div>
+
+
+<p>The <code>classlist</code> is capable of producing the complete <code>class</code> attribute syntax (i.e. <code>class="..."</code>), or omit it entirely
+if it would be empty. All we need to do is evaluate it using the normal Jinja expression&nbsp;syntax:</p>
+<div class="highlight"><pre><span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot; </span><span class="cp">{{</span> <span class="nv">classes</span> <span class="cp">}}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+</pre></div>
+
+
+<p>Before that, though, we may want to include some additional classes that are specific to our macro.
+The <code>button</code> macro, for example, needs to add the <a href="http://getbootstrap.com/css/#buttons">Bootstrap-specific</a>
+<code>btn</code> and <code>btn-$STYLE</code> classes to the <code>&lt;button&gt;</code> element it produces<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">classes.add</span><span class="o">(</span><span class="s1">&#39;btn&#39;</span><span class="o">,</span> <span class="s1">&#39;btn-&#39;</span> <span class="o">+</span> <span class="nv">style</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>After executing this statement, the final <code>class</code> attribute contains both the caller-provided classes,
+as well those two that were added&nbsp;explicitly.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Believe it or not, we can finally
+<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content">center the content vertically</a>
+without much of an issue!&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>The <code>{% do %}</code> block in Jinja allows to execute statements (such as function calls) without evaluating values
+they return. It is not exposed by default,
+but <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment.add_extension">adding</a> a standard
+<a href="http://jinja.pocoo.org/docs/dev/extensions/#expression-statement"><code>jinja2.ext.do</code> extension</a> to the <code>Environment</code>
+makes it available.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist">Continue reading</a>
   </div>
   <hr />
@@ -104,7 +507,110 @@ Unless ...</p>
       <p>The integration between <a href="http://jinja.pocoo.org">Jinja templating engine</a> and the
 <a href="http://flask.pocoo.org">Flask microframework</a> for Python is quite seamless most of the time. It also facilitates
 rapid development: when we run our web application through Flask&#8217;s development server, any changes in Python code
-will get picked up immediately without restarting it. Similarly, Jinja ...</p>
+will get picked up immediately without restarting it. Similarly, Jinja&#8217;s default template loader will detect
+whether any template has been modified after its last compilation and recompile it if&nbsp;necessary.</p>
+<p>One instance when it <em>doesn&#8217;t</em> seem to work that well, though, is template files that only contain
+<a href="http://jinja.pocoo.org/docs/dev/templates/#macros">Jinja macros</a>. They apparently aren&#8217;t subject to the same caching
+rules that apply to regular templates. Modifications to those files alone may not be picked up by Jinja <code>Environment</code>,
+causing <a href="http://flask.pocoo.org/docs/0.10/api/#flask.render_template"><code>render_template</code> calls</a> in Flask
+to (indirectly) use their stale&nbsp;versions.</p>
+<h4>I&#8217;ll be watching&nbsp;you</h4>
+<p>This problem can be alleviated by making the server watch those macro files explicitly, not unlike the Python sources
+it already monitors. When running a Flask server through
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.run">the <code>Flask.run</code> method</a>, you can pass additional keyword arguments
+which aren&#8217;t handled by Flask itself, but by the underlying <a href="http://wsgi.readthedocs.org/en/latest/what.html"><span class="caps">WSGI</span></a>
+scaffolding called <a href="http://werkzeug.pocoo.org/">Werkzeug</a>. The automatic reloader is actually part of it and is quite
+configurable. Most importantly, it allows passing a list of <code>extra_files=</code> to&nbsp;watch:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&#39;0.0.0.0&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)),</span>
+        <span class="n">extra_files</span><span class="o">=</span><span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="s">&#39;macros.html&#39;</span><span class="p">)])</span>
+</pre></div>
+
+
+<p>But of course it&#8217;s tedious and error-prone to keep this list up to date manually, so let&#8217;s try to do&nbsp;better.</p>
+<h4>&#8230;all of&nbsp;you</h4>
+<p>I&#8217;m going to assume you&#8217;re keeping all your Jinja macro files inside a single directory. This makes sense,
+as macros are reusable pieces of template code that are imported by multiple regular templates,
+so they shouldn&#8217;t be scattered around the codebase without some order. The folder may be named <em>macros</em>, <em>util</em>,
+<em>common</em>, or similar; what&#8217;s important is that all the macros have a designated place in the project source&nbsp;tree.</p>
+<p>Under this assumption, it&#8217;s not difficult to programmatically compute their complete list<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>  <span class="c"># Flask application object</span>
+
+
+<span class="c">#: Directories under app&#39;s template folder that contain files</span>
+<span class="c">#: with only Jinja macros.</span>
+<span class="n">JINJA_MACRO_DIRS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;macros&#39;</span><span class="p">,)</span>
+
+
+<span class="k">def</span> <span class="nf">get_extra_files</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;Returns an iterable of the extra files that the Flask server</span>
+<span class="sd">    should monitor for changes and reload the app if any has been modified.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">app_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">dirname</span> <span class="ow">in</span> <span class="n">JINJA_MACRO_DIRS</span><span class="p">:</span>
+        <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">app_root</span> <span class="o">/</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
+        <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+
+
+<p>If you&#8217;re using Flask <a href="http://flask.pocoo.org/docs/0.10/blueprints/">blueprints</a>,
+in addition to the global application templates you&#8217;d also want to monitor any blueprint-specific macro&nbsp;files:</p>
+<div class="highlight"><pre>        <span class="k">for</span> <span class="n">bp</span> <span class="ow">in</span> <span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">blueprints</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">bp</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span> <span class="o">/</span> <span class="n">bp</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
+            <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+
+
+<h4>A new&nbsp;start</h4>
+<p>How you&#8217;re going to use the <code>get_extra_files</code> function from the snippet above depends on how exactly you&#8217;re running
+the Flask development server. In the simplest case, when <code>Flask.run</code> is invoked at the top-level scope of some module,
+it&#8217;s pretty&nbsp;obvious:</p>
+<div class="highlight"><pre><span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">extra_files</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">()))</span>
+</pre></div>
+
+
+<p>More realistically, though, you may be using the <a href="http://flask-script.readthedocs.org/">Flask-Script</a> extension
+for all management tasks, including starting the server. If so, calling <code>Flask.run</code> will be relegated to it,
+so you&#8217;ll need to override the <code>Server</code> command to inject additional parameters&nbsp;there:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">from</span> <span class="nn">flask.ext.script</span> <span class="kn">import</span> <span class="n">Manager</span><span class="p">,</span> <span class="n">Server</span> <span class="k">as</span> <span class="n">_Server</span>
+
+<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>
+
+
+<span class="k">class</span> <span class="nc">Server</span><span class="p">(</span><span class="n">_Server</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;use_reloader&#39;</span><span class="p">,</span> <span class="bp">True</span><span class="p">):</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s">&#39;extra_files&#39;</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">())</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Server</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="n">manager</span> <span class="o">=</span> <span class="n">Manager</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">with_default_commands</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+<span class="n">server</span> <span class="o">=</span> <span class="n">Server</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)))</span>
+<span class="n">manager</span><span class="o">.</span><span class="n">add_command</span><span class="p">(</span><span class="s">&#39;server&#39;</span><span class="p">,</span> <span class="n">server</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This new <code>server</code> command should work just like the default one provided by Flask-Script out of the box,
+except that all your Jinja macro files will now be monitored for&nbsp;changes.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Like <a href="http://xion.io/post/code/flask-auto-error-pages.html">before</a>, I&#8217;m using the
+<a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a>, for which there is a
+<a href="https://pypi.python.org/pypi/pathlib/">backport</a> if you&#8217;re using Python 3.3 or older.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Continue reading</a>
   </div>
   <hr />
@@ -127,7 +633,171 @@ for specific <span class="caps">HTTP</span> errors. All you have to do is to wri
 </pre></div>
 
 
-<p>Albeit simple ...</p>
+<p>Albeit simple, the above example is actually very realistic. There&#8217;s rarely anything else to do in response to serious
+request error than to send back some <span class="caps">HTML</span> with an appropriate message. If you have more handlers like that, though,
+you&#8217;ll notice they get pretty repetitive: for each erroneous <span class="caps">HTTP</span> status code (404, 403, 400, etc.),
+pick a corresponding template and simply render&nbsp;it.</p>
+<p>Which is, of course, why we&#8217;d want to deal with all in a little smarter way and with less&nbsp;boilerplate.</p>
+<h4>Just add a&nbsp;template</h4>
+<p>Ideally, we would like to avoid writing any Python code at all for each individual error handler. Since all we&#8217;re doing
+revolves around predefined templates, let&#8217;s just define the handlers automatically based on the <span class="caps">HTML</span> files&nbsp;themselves.</p>
+<p>Assuming we store them in the same template directory &#8212; say, <code>errors/</code> &#8212; and name their files after
+numeric status codes (e.g. <em>404.html</em>), getting all those codes is quite simple<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span><span class="p">,</span> <span class="n">PurePath</span>
+
+<span class="kn">from</span> <span class="nn">mywebapp</span> <span class="kn">import</span> <span class="n">app</span>
+
+
+<span class="c">#: Path to the directory where HTML templates for error pages are stored.</span>
+<span class="n">ERRORS_DIR</span> <span class="o">=</span> <span class="n">PurePath</span><span class="p">(</span><span class="s">&#39;errors&#39;</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">get_supported_error_codes</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;Returns an iterable of HTTP status codes for which we have</span>
+<span class="sd">    a custom error page templates defined.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">error_templates_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="n">ERRORS_DIR</span><span class="p">)</span>
+
+    <span class="n">potential_error_templates</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">entry</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">error_templates_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_file</span><span class="p">())</span>
+    <span class="k">for</span> <span class="n">template</span> <span class="ow">in</span> <span class="n">potential_error_templates</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">code</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">template</span><span class="o">.</span><span class="n">stem</span><span class="p">)</span>  <span class="c"># e.g. 404.html</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">pass</span>  <span class="c"># could be some base.html template, or similar</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">:</span>
+                <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s">&quot;Found error template for non-error HTTP status </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="k">yield</span> <span class="n">code</span>
+</pre></div>
+</td></tr></table>
+
+<p>Once we have them, we can try wiring up the handlers programmatically and making them do the right&nbsp;thing.</p>
+<h4>One function to handle them&nbsp;all</h4>
+<p>Although I&#8217;ve used a plural here, in reality we only need a single handler, as it&#8217;ll be perfectly capable of
+dealing with any <span class="caps">HTTP</span> error we bind it to. To help distinguishing between the different status codes,
+Flask by default invokes our error handlers with an
+<a href="http://werkzeug.pocoo.org/docs/0.10/exceptions/#werkzeug.exceptions.HTTPException"><code>HTTPException</code></a> argument
+that has the <code>code</code> as an&nbsp;attribute:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">render_template</span>
+<span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">TemplateNotFound</span>
+
+
+<span class="k">def</span> <span class="nf">error_handler</span><span class="p">(</span><span class="n">error</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Universal handler for all HTTP errors.</span>
+
+<span class="sd">    :param error: :class:`~werkzeug.exceptions.HTTPException`</span>
+<span class="sd">                  representing the HTTP error.</span>
+
+<span class="sd">    :return: HTTP response to be returned</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">code</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">error</span><span class="p">,</span> <span class="s">&#39;code&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">code</span><span class="p">:</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s">&quot;Got spurious argument to HTTP error handler: </span><span class="si">%r</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
+
+    <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s">&quot;HTTP error </span><span class="si">%s</span><span class="s">, rendering error page&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
+    <span class="n">template</span> <span class="o">=</span> <span class="n">ERRORS_DIR</span> <span class="o">/</span> <span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">.html&#39;</span> <span class="o">%</span> <span class="n">code</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">template</span><span class="p">)),</span> <span class="n">code</span>
+    <span class="k">except</span> <span class="n">TemplateNotFound</span><span class="p">:</span>
+        <span class="c"># shouldn&#39;t happen if the handler has been wired up properly</span>
+        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">fatal</span><span class="p">(</span><span class="s">&quot;Missing template for HTTP error page: </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">template</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
+
+<span class="c">#: Response emitted when an error occurs in the error handler itself.</span>
+<span class="n">FATAL_ERROR_RESPONSE</span> <span class="o">=</span> <span class="p">(</span><span class="s">&quot;Internal Server Error&quot;</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>
+</pre></div>
+</td></tr></table>
+
+<p>Catching <code>TemplateNotFound</code> exception is admittedly a little paranoid here, as it can occur pretty much exclusively
+due to a programming error elsewhere. Feel free to treat it as a failed assertion about application&#8217;s internal state
+and e.g. convert to <code>AssertionError</code> if&nbsp;desirable.</p>
+<h4>The&nbsp;setup</h4>
+<p>The final step is to actually set up the&nbsp;handler(s):</p>
+<div class="highlight"><pre><span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">get_supported_error_codes</span><span class="p">():</span>
+    <span class="n">app</span><span class="o">.</span><span class="n">errorhandler</span><span class="p">(</span><span class="n">code</span><span class="p">)(</span><span class="n">error_handler</span><span class="p">)</span>
+</pre></div>
+
+
+<p>It may look a bit wonky, but it&#8217;s just a simple desugaring of the standard Python decorator syntax from the first example.
+There exists a more direct approach of putting the handler inside <code>app.error_handler_spec</code> dictionary,
+but it is <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.errorhandler">discouraged by Flask documentation</a>.</p>
+<p>Where to put the above code, though? I posit it&#8217;s perfectly fine to place in the module&#8217;s global scope,
+because the error handlers (and other request handlers) are traditionally defined at import time&nbsp;anyway.</p>
+<p>Also notice that the default error handling we&#8217;ve defined here doesn&#8217;t preclude more specialized variants
+for select <span class="caps">HTTP</span> codes. All you have to do is ensure that your custom <code>@app.errorhandler</code> definition occurs
+<em>after</em> the above&nbsp;loop.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Note that I&#8217;m using the <a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a> here
+&#8212; and you should, too, since it&#8217;s all around awesome. However, it is only a part of the standard library
+since Python 3.4, so you will most likely need to get <a href="https://pypi.python.org/pypi/pathlib/">the backport</a> first.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/flask-auto-error-pages.html#flask-auto-error-pages">Continue reading</a>
   </div>
 </article>
@@ -152,6 +822,8 @@ for specific <span class="caps">HTTP</span> errors. All you have to do is to wri
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -161,6 +833,10 @@ for specific <span class="caps">HTTP</span> errors. All you have to do is to wri
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context" : "http://schema.org",

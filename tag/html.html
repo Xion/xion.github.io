@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
-  <meta name="author" content="Karol Kuczmarski" />
-  <meta name="description" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
 <meta property="og:type" content="blog"/>
 <meta property="og:title" content="Karol Kuczmarski's Blog"/>
@@ -20,6 +28,7 @@
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io"/>
 <meta property="og:image" content="http://xion.io/logo.jpeg">
+
   <title>Karol Kuczmarski's Blog &ndash; Tag: HTML</title>
 </head>
 <body>
@@ -75,7 +84,175 @@ it slowly fades out to transparency over several&nbsp;seconds:</p>
     <img src="http://xion.io/images/paragon-222-faded.jpg" alt ='"Ding" after fading out'>
 </p>
 
-<p>If you hover your mouse over it ...</p>
+<p>If you hover your mouse over it, though, it turns opaque right away and stays like that
+until you move away with the cursor. It then tries to disappear again, lest you stop it once more
+and restore to full opacity &#8212; and so on. Leave it for a moment, though, and it eventually&nbsp;vanishes.</p>
+<p>Cool, eh? Wouldn&#8217;t it be nice to have a similar mechanism for, say, notifications displayed within a web app?
+Sure it would be! And it doesn&#8217;t even seem all that complicated, so let&#8217;s give it a&nbsp;try.</p>
+<h4>A promising <span class="caps">API</span></h4>
+<p>Before delving into implementation details, it&#8217;s a good practice think for a moment about an <span class="caps">API</span>
+that we&#8217;ll expose to the user. Since it looks like a relatively simple problem, we don&#8217;t need no classes or frameworks.
+All that&#8217;s necessary is a simple&nbsp;function:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Surely, however, whoever calls it would like to be able to tell when the animation finishes (e.g. to remove the <code>element</code>
+they&#8217;ve passed from the <span class="caps">DOM</span> tree). Simply waiting a predefined number of seconds is not sufficient, because
+&#8212; as described above &#8212; the effect could be restarted arbitrary many times through mouse&nbsp;interaction.</p>
+<p>We could pass a callback, of course, but the modern JavaScript way of dealing with asynchronicity and concurrency
+is through <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"><em>promises</em></a>.
+Following this pattern, our function shall return a promise that <em>resolves</em> when the effect ends.
+Disregarding the possible user interaction for now, a minimal implementation of the fade-out alone would simply use
+the <a href="http://api.jquery.com/fadeout/"><code>jQuery.fadeOut</code> method</a> and look something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">options</span> <span class="o">===</span> <span class="s1">&#39;number&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span><span class="nx">fadeOut</span><span class="o">:</span> <span class="nx">options</span><span class="p">};</span>
+    <span class="p">}</span>
+
+    <span class="nx">element</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="nx">element</span><span class="p">);</span>
+    <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nx">resolve</span><span class="p">();</span>
+        <span class="p">});</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>The constructor of <code>Promise</code> is admittedly a little weird, as it employs a level of abstraction and indirection
+that is indicative of (more) functional programming languages. You pass it a function that&#8217;s invoked <em>immediately</em>
+with an argument that itself is a function. (Actually two arguments, but we ignore the other one here).
+That input function, <code>resolve</code>, should be called whenever the new promise &#8220;completes&#8221;, in whatever sense
+it&#8217;s appropriate for the particular use&nbsp;case.</p>
+<p>Here, we&#8217;re resolving the promise when our animation ends. This enables callers to react to this
+in a very straightforward&nbsp;way:</p>
+<div class="highlight"><pre><span class="kd">var</span> <span class="nx">elem</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;#foo&#39;</span><span class="p">);</span>
+<span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">elem</span><span class="p">,</span> <span class="mi">400</span> <span class="cm">/* ms */</span><span class="p">).</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">elem</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As a small aside, the <code>Promise</code> class is a ECMAScript 6 feature, which means it may not be available in all the browsers.
+The open-source <a href="https://github.com/kriskowal/q"><em>Q</em> library</a> is often used as a compatibility shim,
+among many other libraries implementing the <a href="https://promisesaplus.com/">Promises/A+ recommendation</a>.</p>
+<h4>Interaction&nbsp;handling</h4>
+<p>There&#8217;s little value in just wrapping an existing jQuery method, so let&#8217;s make it more interesting through mouse events.
+We want hovering on the element to pause the animation, while moving the cursor away should resume&nbsp;it:</p>
+<div class="highlight"><pre><span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;mouseenter&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>  <span class="c1">// true == discard remaining animation stages</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">css</span><span class="p">(</span><span class="s1">&#39;opacity&#39;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+    <span class="p">});</span>
+    <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;mouseleave&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nx">resolve</span><span class="p">();</span>
+        <span class="p">});</span>
+    <span class="p">});</span>
+
+    <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">resolve</span><span class="p">();</span>
+    <span class="p">});</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>That will <em>mostly</em> work even with the above code, but there are several problems that need to be addressed&nbsp;immediately:</p>
+<ul>
+<li>The <code>mouseenter</code> and <code>mouseleave</code> event handlers are should only fire while the fade-out effect is being played.
+  Currently, they &#8220;leak&#8221;, and remain bound even after it finishes, interfering with given <span class="caps">DOM</span> element
+  for as long as it&nbsp;exists.</li>
+<li>The whole concept of <em>hovering</em> is contingent upon the user having a pointing device. In today&#8217;s mobile world,
+  this excludes a significant fraction of clients. We need an alternative interaction pattern for touchscreen devices,
+  and one possible option is restart the effect on&nbsp;click/tap.</li>
+<li>There is a fair amount of repetition here, and it will only get worse once the previous problems are dealt&nbsp;with.</li>
+</ul>
+<h4>Cleaning&nbsp;up</h4>
+<p>A correct (and cleaner) version is quite a bit longer, but shouldn&#8217;t be too hard to&nbsp;follow:</p>
+<div class="highlight"><pre><span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// Event handlers used by the effect.</span>
+    <span class="kd">var</span> <span class="nx">events</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="nx">mouseenter</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">interruptAnimation</span><span class="p">();</span> <span class="p">},</span>
+        <span class="nx">mouseleave</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">delayedFadeOut</span><span class="p">();</span> <span class="p">},</span>
+        <span class="nx">click</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nx">interruptAnimation</span><span class="p">();</span>
+            <span class="nx">delayedFadeOut</span><span class="p">();</span>
+        <span class="p">},</span>
+    <span class="p">};</span>
+    <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">events</span><span class="p">).</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">events</span><span class="p">[</span><span class="nx">name</span><span class="p">]);</span>
+    <span class="p">});</span>
+
+    <span class="c1">// Helper functions.</span>
+    <span class="kd">var</span> <span class="nx">interruptAnimation</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">css</span><span class="p">(</span><span class="s1">&#39;opacity&#39;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+    <span class="p">};</span>
+    <span class="kd">var</span> <span class="nx">delayedFadeOut</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">delay</span><span class="p">)</span> <span class="p">{</span>
+            <span class="nx">element</span><span class="p">.</span><span class="nx">delay</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">delay</span><span class="p">);</span>
+        <span class="p">}</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">events</span><span class="p">).</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
+                <span class="nx">element</span><span class="p">.</span><span class="nx">off</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">events</span><span class="p">[</span><span class="nx">name</span><span class="p">]);</span>
+            <span class="p">});</span>
+            <span class="nx">resolve</span><span class="p">();</span>
+        <span class="p">});</span>
+    <span class="p">};</span>
+
+    <span class="c1">// Start the animation.</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="nx">delayedFadeOut</span><span class="p">();</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>The main part is of course the <code>delayedFadeOut</code> function. It is invoked right at the beginning, as well as whenever
+the animation has to be started&nbsp;again.</p>
+<p>We also put the event handlers in a &#8220;map&#8221; (JavaScript object). This makes it easy to initially bind them to the element, and &#8212; more importantly &#8212; unbind them when the effect&nbsp;ends.</p>
+<p>As a final touch, we also allow the caller to specify how long the element should remain at its full opacity
+before it starts to fade out (<code>delay</code>), and to optionally add a <code>fadeIn</code> stage at the very beginning to make everything
+look a little nicer. (I recommend no more than 300-400ms for that part,&nbsp;though).</p>
+<h4>Practical&nbsp;example</h4>
+<p>A complete code sample for the <code>interruptibleFadeOut</code> function can be seen in
+<a href="https://gist.github.com/Xion/0a9da59c44d5c9664a2c">this gist</a>. To use it in practice, you&#8217;d most likely need
+at least a little bit of <span class="caps">CSS</span> and additional JavaScript to position the element&nbsp;appropriately:</p>
+<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">&quot;toast&quot;</span><span class="nt">&gt;</span>Hello, world!<span class="nt">&lt;/div&gt;</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre><span class="nf">#toast</span> <span class="p">{</span>
+    <span class="k">position</span><span class="o">:</span> <span class="k">fixed</span><span class="p">;</span>
+    <span class="k">display</span><span class="o">:</span> <span class="k">none</span><span class="p">;</span>
+
+    <span class="c">/* These are arbitrary */</span>
+    <span class="k">top</span><span class="o">:</span> <span class="m">100px</span><span class="p">;</span>
+    <span class="k">width</span><span class="o">:</span> <span class="m">80%</span><span class="p">;</span>
+    <span class="k">height</span><span class="o">:</span> <span class="m">50px</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre><span class="kd">var</span> <span class="nx">toast</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;#toast&#39;</span><span class="p">);</span>
+<span class="nx">toast</span><span class="p">.</span><span class="nx">offset</span><span class="p">({</span>
+    <span class="nx">left</span><span class="o">:</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">round</span><span class="p">(</span><span class="nx">$</span><span class="p">(</span><span class="nb">window</span><span class="p">).</span><span class="nx">width</span><span class="p">()</span> <span class="o">-</span> <span class="nx">element</span><span class="p">.</span><span class="nx">outerWidth</span><span class="p">()</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span>
+<span class="p">});</span>
+<span class="nx">toast</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>
+<span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">toast</span><span class="p">,</span> <span class="p">{</span> <span class="nx">fadeIn</span><span class="o">:</span> <span class="mi">200</span><span class="p">,</span> <span class="nx">delay</span><span class="o">:</span> <span class="mi">1000</span><span class="p">,</span> <span class="nx">fadeOut</span><span class="o">:</span> <span class="mi">3000</span> <span class="p">})</span>
+    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">toast</span><span class="p">.</span><span class="nx">remove</span><span class="p">()</span> <span class="p">});</span>
+</pre></div>
+
+
+<p>Styling it to look like a level-up ding is left as an exercise for the reader&nbsp;:)</p>
       <a class="btn" href="http://xion.io/post/code/html-interruptive-fadeout.html#html-interruptive-fadeout">Continue reading</a>
   </div>
 </article>
@@ -100,6 +277,8 @@ it slowly fades out to transparency over several&nbsp;seconds:</p>
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -109,6 +288,10 @@ it slowly fades out to transparency over several&nbsp;seconds:</p>
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context" : "http://schema.org",

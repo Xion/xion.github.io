@@ -2,21 +2,29 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
+
 <meta name="author" content="Karol Kuczmarski" />
-<meta name="description" content="Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially ..." />
+<meta name="description" content="Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially in the popular opinion among developer crowds. By design, they’re intended to hide at least some details of the operations on a database, but those very details can be quite critical at times. There are situations when we simply want to know what exactly is going on, and how all those model classes and mappers and relationships translate to the actual SQL code. To make it a little more concrete, let’s focus on the SQLAlchemy Query class. Given such a query, we’d like to get the final SQL representation of it, the one that’s ultimately sent to the database, It could be useful for any number of things, from logging1 to profiling, or just displaying in the web page’s footer, or even solely for prototyping in the Python REPL. In other words, we want to turn this: db_session.query(User.id).filter(User.email == some_email) into something like this: SELECT users.id FROM users WHERE users.email = :1 regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related JOINs it involves. It’s a dialect There is one aspect we cannot really universalize, though. It’s the specific database backend that SQLAlchemy should compile our query for. Shrugging off syntactical and semantical differences between database engines is one thing that using an ORM can potentially buy us, but if we want to get down to the SQL level, we need to be specific about it. In SQLAlchemy’s parlance, any specific variant of the SQL language is called a dialect. Most of the time, you’ll be interested in the particular dialect your database of choice is using. This is easily obtainable from the database Session: dialect = db_session.bind.dialect The resulting Dialect object is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of the database backends it supports. For our purposes, though, it can be treated as a completely opaque token. Compile & unwrap With the Dialect in hand, we can invoke the query compiler to get the textual representatio of our Query. Or, to be more precise, the compiled version of the query’s Select statement >>> query = db_session.query(User.id).filter(User.email == 'foo@example.com') >>> print(query.statement.compile(dialect=db_session.bind.dialect)) SELECT user.id FROM users WHERE users.email = %(email_1)s Perhaps unsurprisingly, even after compilation the result is still just another object: the Compiled one. As you can see, however, the actual SQL text is just its __str__‘ing representation, which we can print directly or obtain with str() or unicode(). Query.to_sql But obviously, we don’t want to type the above incantations everytime we need to take a peek at the generated SQL for an ORM query. Probably the best solution is to extend the Query class so that it offers this additional functionality under a new method: from sqlalchemy.orm.query import Query as _Query class Query(_Query): """Custom, enhanced SQLALchemy Query class.""" def to_sql(self): """Return a literal SQL representation of the query.""" dialect = self.session.bind.dialect return str(self.statement.compile(dialect=dialect)) This new Query class needs then be passed as query_cls argument to the constructor of Session. Details may vary a little bit dependening on how exactly your application is set up, but in most cases, it should be easy enough to figure out. If you’re only interested in indiscriminate logging of all queries, setting the echo parameter in create_engine may be sufficient. Another alternative is to look directly at the logging configuration options for various parts of SQLAlchemy ↩" />
 <meta name="keywords" content="SQLAlchemy, SQL, databases">
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
-<meta property="og:title" content="Turn SQLAlchemy queries into literal <span class="caps">SQL</span>"/>
-<meta property="og:description" content="Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially ..."/>
+<meta property="og:title" content="Turn SQLAlchemy queries into literal SQL"/>
+<meta property="og:description" content="Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially in the popular opinion among developer crowds. By design, they’re intended to hide at least some details of the operations on a database, but those very details can be quite critical at times. There are situations when we simply want to know what exactly is going on, and how all those model classes and mappers and relationships translate to the actual SQL code. To make it a little more concrete, let’s focus on the SQLAlchemy Query class. Given such a query, we’d like to get the final SQL representation of it, the one that’s ultimately sent to the database, It could be useful for any number of things, from logging1 to profiling, or just displaying in the web page’s footer, or even solely for prototyping in the Python REPL. In other words, we want to turn this: db_session.query(User.id).filter(User.email == some_email) into something like this: SELECT users.id FROM users WHERE users.email = :1 regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related JOINs it involves. It’s a dialect There is one aspect we cannot really universalize, though. It’s the specific database backend that SQLAlchemy should compile our query for. Shrugging off syntactical and semantical differences between database engines is one thing that using an ORM can potentially buy us, but if we want to get down to the SQL level, we need to be specific about it. In SQLAlchemy’s parlance, any specific variant of the SQL language is called a dialect. Most of the time, you’ll be interested in the particular dialect your database of choice is using. This is easily obtainable from the database Session: dialect = db_session.bind.dialect The resulting Dialect object is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of the database backends it supports. For our purposes, though, it can be treated as a completely opaque token. Compile & unwrap With the Dialect in hand, we can invoke the query compiler to get the textual representatio of our Query. Or, to be more precise, the compiled version of the query’s Select statement >>> query = db_session.query(User.id).filter(User.email == 'foo@example.com') >>> print(query.statement.compile(dialect=db_session.bind.dialect)) SELECT user.id FROM users WHERE users.email = %(email_1)s Perhaps unsurprisingly, even after compilation the result is still just another object: the Compiled one. As you can see, however, the actual SQL text is just its __str__‘ing representation, which we can print directly or obtain with str() or unicode(). Query.to_sql But obviously, we don’t want to type the above incantations everytime we need to take a peek at the generated SQL for an ORM query. Probably the best solution is to extend the Query class so that it offers this additional functionality under a new method: from sqlalchemy.orm.query import Query as _Query class Query(_Query): """Custom, enhanced SQLALchemy Query class.""" def to_sql(self): """Return a literal SQL representation of the query.""" dialect = self.session.bind.dialect return str(self.statement.compile(dialect=dialect)) This new Query class needs then be passed as query_cls argument to the constructor of Session. Details may vary a little bit dependening on how exactly your application is set up, but in most cases, it should be easy enough to figure out. If you’re only interested in indiscriminate logging of all queries, setting the echo parameter in create_engine may be sufficient. Another alternative is to look directly at the logging configuration options for various parts of SQLAlchemy ↩"/>
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io/post/code/sqlalchemy-query-to-sql.html"/>
 <meta property="og:type" content="article"/>
@@ -27,7 +35,8 @@
 <meta property="article:tag" content="SQLAlchemy"/>
 <meta property="article:tag" content="SQL"/>
 <meta property="article:tag" content="databases"/>
-<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; Turn SQLAlchemy queries into literal <span class="caps">SQL</span></title>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Turn SQLAlchemy queries into literal SQL</title>
 </head>
 <body>
   <aside>
@@ -198,6 +207,8 @@ for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1"
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -207,12 +218,16 @@ for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1"
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context": "http://schema.org",
   "@type": "BlogPosting",
-  "name": "Turn SQLAlchemy queries into literal <span class="caps">SQL</span>",
-  "headline": "Turn SQLAlchemy queries into literal <span class="caps">SQL</span>",
+  "name": "Turn SQLAlchemy queries into literal SQL",
+  "headline": "Turn SQLAlchemy queries into literal SQL",
   "datePublished": "2015-11-12 22:56:00-08:00",
   "dateModified": "",
   "author": {
@@ -222,7 +237,7 @@ for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1"
   },
   "image": "http://xion.io/logo.jpeg",
   "url": "http://xion.io/post/code/sqlalchemy-query-to-sql.html",
-  "description": "Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially ..."
+  "description": "Like I mentioned in the post about adding regular expression support, the nice thing about SQLAlchemy is the clean, layered structure of various abstractions it utilizes. Regretably, though, we know that software abstractions tend to leak. Inn particular, any ORM seem to be a poster child of this rule, especially in the popular opinion among developer crowds. By design, they’re intended to hide at least some details of the operations on a database, but those very details can be quite critical at times. There are situations when we simply want to know what exactly is going on, and how all those model classes and mappers and relationships translate to the actual SQL code. To make it a little more concrete, let’s focus on the SQLAlchemy Query class. Given such a query, we’d like to get the final SQL representation of it, the one that’s ultimately sent to the database, It could be useful for any number of things, from logging1 to profiling, or just displaying in the web page’s footer, or even solely for prototyping in the Python REPL. In other words, we want to turn this: db_session.query(User.id).filter(User.email == some_email) into something like this: SELECT users.id FROM users WHERE users.email = :1 regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related JOINs it involves. It’s a dialect There is one aspect we cannot really universalize, though. It’s the specific database backend that SQLAlchemy should compile our query for. Shrugging off syntactical and semantical differences between database engines is one thing that using an ORM can potentially buy us, but if we want to get down to the SQL level, we need to be specific about it. In SQLAlchemy’s parlance, any specific variant of the SQL language is called a dialect. Most of the time, you’ll be interested in the particular dialect your database of choice is using. This is easily obtainable from the database Session: dialect = db_session.bind.dialect The resulting Dialect object is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of the database backends it supports. For our purposes, though, it can be treated as a completely opaque token. Compile & unwrap With the Dialect in hand, we can invoke the query compiler to get the textual representatio of our Query. Or, to be more precise, the compiled version of the query’s Select statement >>> query = db_session.query(User.id).filter(User.email == 'foo@example.com') >>> print(query.statement.compile(dialect=db_session.bind.dialect)) SELECT user.id FROM users WHERE users.email = %(email_1)s Perhaps unsurprisingly, even after compilation the result is still just another object: the Compiled one. As you can see, however, the actual SQL text is just its __str__‘ing representation, which we can print directly or obtain with str() or unicode(). Query.to_sql But obviously, we don’t want to type the above incantations everytime we need to take a peek at the generated SQL for an ORM query. Probably the best solution is to extend the Query class so that it offers this additional functionality under a new method: from sqlalchemy.orm.query import Query as _Query class Query(_Query): """Custom, enhanced SQLALchemy Query class.""" def to_sql(self): """Return a literal SQL representation of the query.""" dialect = self.session.bind.dialect return str(self.statement.compile(dialect=dialect)) This new Query class needs then be passed as query_cls argument to the constructor of Session. Details may vary a little bit dependening on how exactly your application is set up, but in most cases, it should be easy enough to figure out. If you’re only interested in indiscriminate logging of all queries, setting the echo parameter in create_engine may be sufficient. Another alternative is to look directly at the logging configuration options for various parts of SQLAlchemy ↩"
 }
 </script></body>
 </html>

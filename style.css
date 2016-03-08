@@ -1,0 +1,6 @@
+/* Custom style enhancements & overrides, independent of the theme. */
+
+p {
+  font-size: 1.03em;
+  line-height: 1.4em;
+}

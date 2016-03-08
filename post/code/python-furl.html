@@ -2,21 +2,29 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
+
 <meta name="author" content="Karol Kuczmarski" />
-<meta name="description" content="Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their ..." />
+<meta name="description" content="Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their HTTP-related comrades, they prove rather verbose and somewhat clunky. HTTP, however, is solved by the Requests package, so you may wonder if there is some analogous package for URL operations. The answer is affirmative, and the library in question is, quite whimsically, called furl. URL in a wrap The sole interesting part of the furl interface is the furl class. It represents a single URL, broken down to its constituents, with properties and methods for both reading them out and replacing with new values. Thanks to this handy (and quite obvious) abstraction, common URL operations become quite simple and self-documenting: from furl import furl def to_absolute(url, base): """If given ``url`` is a relative path, make it relative to the ``base``. """ furled = furl(url) if not furled.scheme: return furl(base).join(url).url return url def is_same_origin(*urls): """Check whether URLs are from the same origin (host:port).""" origins = set(url.netloc for url in map(furl, urls)) return len(origins) <= 1 def get_facebook_username(profile_url): """Get Facebook user ID from their profile URL.""" furled = furl(profile_url) if not (furled.host == 'facebook.com' or furled.host.endswith('.facebook.com')): raise ValueError("not a Facebook URL: %s" % (profile_url,)) return furled.path.segments[-1] # etc. This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string interpolation: url = '%s?%s' % (BASE_URL, urlencode(query_params)) Besides looking unpythonically ugly, it’s also inflexible and error-prone. If BASE_URL gains some innate query string params ('http://example.com/?a=b'), this method will start producing completely invalid urls (with two question marks, e.g. 'http://example.com/?a=b?foo=bar'). The equivalent in furl has none of these flaws: url = furl(BASE_URL).add(query_params).url The full package To see the full power of furl, I recommend having a look at its API documentation. It’s quite clear and should be very easy to use." />
 <meta name="keywords" content="Python, URL, furl">
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
-<meta property="og:title" content="<span class="caps">URL</span> library for&nbsp;Python"/>
-<meta property="og:description" content="Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their ..."/>
+<meta property="og:title" content="URL library for Python"/>
+<meta property="og:description" content="Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their HTTP-related comrades, they prove rather verbose and somewhat clunky. HTTP, however, is solved by the Requests package, so you may wonder if there is some analogous package for URL operations. The answer is affirmative, and the library in question is, quite whimsically, called furl. URL in a wrap The sole interesting part of the furl interface is the furl class. It represents a single URL, broken down to its constituents, with properties and methods for both reading them out and replacing with new values. Thanks to this handy (and quite obvious) abstraction, common URL operations become quite simple and self-documenting: from furl import furl def to_absolute(url, base): """If given ``url`` is a relative path, make it relative to the ``base``. """ furled = furl(url) if not furled.scheme: return furl(base).join(url).url return url def is_same_origin(*urls): """Check whether URLs are from the same origin (host:port).""" origins = set(url.netloc for url in map(furl, urls)) return len(origins) <= 1 def get_facebook_username(profile_url): """Get Facebook user ID from their profile URL.""" furled = furl(profile_url) if not (furled.host == 'facebook.com' or furled.host.endswith('.facebook.com')): raise ValueError("not a Facebook URL: %s" % (profile_url,)) return furled.path.segments[-1] # etc. This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string interpolation: url = '%s?%s' % (BASE_URL, urlencode(query_params)) Besides looking unpythonically ugly, it’s also inflexible and error-prone. If BASE_URL gains some innate query string params ('http://example.com/?a=b'), this method will start producing completely invalid urls (with two question marks, e.g. 'http://example.com/?a=b?foo=bar'). The equivalent in furl has none of these flaws: url = furl(BASE_URL).add(query_params).url The full package To see the full power of furl, I recommend having a look at its API documentation. It’s quite clear and should be very easy to use."/>
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io/post/code/python-furl.html"/>
 <meta property="og:type" content="article"/>
@@ -27,7 +35,8 @@
 <meta property="article:tag" content="Python"/>
 <meta property="article:tag" content="URL"/>
 <meta property="article:tag" content="furl"/>
-<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; <span class="caps">URL</span> library for&nbsp;Python</title>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; URL library for Python</title>
 </head>
 <body>
   <aside>
@@ -166,6 +175,8 @@ e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -175,12 +186,16 @@ e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context": "http://schema.org",
   "@type": "BlogPosting",
-  "name": "<span class="caps">URL</span> library for&nbsp;Python",
-  "headline": "<span class="caps">URL</span> library for&nbsp;Python",
+  "name": "URL library for Python",
+  "headline": "URL library for Python",
   "datePublished": "2015-11-27 19:37:00-08:00",
   "dateModified": "",
   "author": {
@@ -190,7 +205,7 @@ e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
   },
   "image": "http://xion.io/logo.jpeg",
   "url": "http://xion.io/post/code/python-furl.html",
-  "description": "Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their ..."
+  "description": "Python has many batteries included, but a few things are still conspicuously missing. One of them is a standardized and convenient approach to URL manipulation, akin to the URI class in Java. There are some functions in urllib, of course (or urllib.parse in Python 3), but much like their HTTP-related comrades, they prove rather verbose and somewhat clunky. HTTP, however, is solved by the Requests package, so you may wonder if there is some analogous package for URL operations. The answer is affirmative, and the library in question is, quite whimsically, called furl. URL in a wrap The sole interesting part of the furl interface is the furl class. It represents a single URL, broken down to its constituents, with properties and methods for both reading them out and replacing with new values. Thanks to this handy (and quite obvious) abstraction, common URL operations become quite simple and self-documenting: from furl import furl def to_absolute(url, base): """If given ``url`` is a relative path, make it relative to the ``base``. """ furled = furl(url) if not furled.scheme: return furl(base).join(url).url return url def is_same_origin(*urls): """Check whether URLs are from the same origin (host:port).""" origins = set(url.netloc for url in map(furl, urls)) return len(origins) <= 1 def get_facebook_username(profile_url): """Get Facebook user ID from their profile URL.""" furled = furl(profile_url) if not (furled.host == 'facebook.com' or furled.host.endswith('.facebook.com')): raise ValueError("not a Facebook URL: %s" % (profile_url,)) return furled.path.segments[-1] # etc. This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string interpolation: url = '%s?%s' % (BASE_URL, urlencode(query_params)) Besides looking unpythonically ugly, it’s also inflexible and error-prone. If BASE_URL gains some innate query string params ('http://example.com/?a=b'), this method will start producing completely invalid urls (with two question marks, e.g. 'http://example.com/?a=b?foo=bar'). The equivalent in furl has none of these flaws: url = furl(BASE_URL).add(query_params).url The full package To see the full power of furl, I recommend having a look at its API documentation. It’s quite clear and should be very easy to use."
 }
 </script></body>
 </html>

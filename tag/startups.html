@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
-  <meta name="author" content="Karol Kuczmarski" />
-  <meta name="description" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
 <meta property="og:type" content="blog"/>
 <meta property="og:title" content="Karol Kuczmarski's Blog"/>
@@ -20,6 +28,7 @@
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io"/>
 <meta property="og:image" content="http://xion.io/logo.jpeg">
+
   <title>Karol Kuczmarski's Blog &ndash; Tag: startups</title>
 </head>
 <body>
@@ -70,7 +79,84 @@
 like <a href="https://www.reddit.com/r/cscareerquestions/">/r/cscareequestions</a> or even just Hacker News &#8212;
 you&#8217;ll find lots of talk about the so called <em>Big Four</em>&nbsp;companies.</p>
 <p>This is mostly in the context of applying to them, or going through their interview process.
-Which ...</p>
+Which of the large software corporations are discussed here tends to fluctuate a little bit,
+but both Google and Microsoft are invariably included, with Facebook popping up more often than&nbsp;not.</p>
+<p>Because of their privileged positions as very desirable places to work, these companies tend to be taken as models
+for others to mimic<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Probably the most apparent and direct outcome is the increasing prevalence of
+&#8220;Google-style&#8221; interviews, which are now utilized by countless software shops around the&nbsp;world.</p>
+<p><em>Whiteboard coding</em> is how they are often called. It is a subject of an intense debate, whether or not they &#8220;work&#8221;,
+and adequately assess the engineering aptitude of candidates. If some
+<a href="https://twitter.com/mxcl/status/608682016205344768">high profile anecdotes</a> are of any indication, the most common complaint
+is that they fail to recognize competence by ignoring previous professional work, open source contributions,
+conference talks, and so&nbsp;on.</p>
+<p>Instead, the whiteboard interview requires demand showing a &#8220;pure&#8221; problem solving ability
+within a relatively short time window, all without some broader context or even the usual tools of the trade:
+laptop, editor, and a search&nbsp;engine.</p>
+<p>As a Googler who had gone through this process and has now conducted a few of those interviews himself,
+I find those complaints mostly valid albeit&nbsp;misdirected.</p>
+<p>The problem isn&#8217;t really that Google interviews like it&nbsp;does.</p>
+<p>What&#8217;s really the issue is <em>other companies</em> implementing the same process, and not realizing it cannot possibly work for&nbsp;them.</p>
+<h4>Somewhat&nbsp;special</h4>
+<p>It is important to understand that Google&#8217;s stance on interviewing is influenced by some unique&nbsp;circumstances:</p>
+<ul>
+<li>
+<p>very high and steady influx of potential&nbsp;candidates</p>
+</li>
+<li>
+<p>comparatively long tenure of the average engineer and the general focus on employee&nbsp;retention</p>
+</li>
+<li>
+<p>huge and mostly proprietary software stack working at a scale that almost no others&nbsp;do</p>
+</li>
+</ul>
+<p>From this perspective, it makes sense to utilize cautious hiring strategies that may result in a high ratio
+of <em>false negatives</em><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. When rejections are cheap but the new hires are supposed to be here for the long run &#8212;
+partially because of the long ramp-up time necessary to become productive &#8212; it can be costly to give candidates
+the benefit of the&nbsp;doubt.</p>
+<p>The last point also explains why proficiency with specific technologies is less useful than
+general flexibility grounded in strong fundamentals. To put it shortly, Google prefers you know
+<a href="https://en.wikipedia.org/wiki/Computer_science"><span class="caps">CS</span></a> rather than <a href="https://en.wikipedia.org/wiki/Cascading_Style_Sheets"><span class="caps">CSS</span></a>.</p>
+<p>Finally, whiteboard coding is just one input to the evaluation process, but it tends to be the most trustworthy one.
+Besides programming aptitude, the ideal candidate would show a proven track record of technical leadership while
+tackling complex problems that span a broad scope.<br>
+Unfortunately, those qualities are difficult to convey <em>efficiently</em> and <em>reliably</em> through the usual industry channels:
+a resume, references from previous jobs, GitHub profile,&nbsp;etc.</p>
+<h4>Different&nbsp;conditions</h4>
+<p>Given the above reasoning as to why &#8220;Google-style&#8221; interviews seem to work well for Google, I hope it&#8217;s evident why
+they are likely a poor choice for companies that don&#8217;t share the same characteristics as the Big&nbsp;4.</p>
+<p>For one, it is highly unusual for a software shop in today&#8217;s market to command a sizeable pool for qualified candidates.
+Software engineering vacancies often go unfilled for weeks and months, even if the company isn&#8217;t exactly looking
+for &#8220;rockstars&#8221;, &#8220;ninjas&#8221;, &#8220;gunslingers&#8221;, or whatever the silly term <em>du jour</em> is. Those who meet the requirements
+usually have their pick at many different offers,&nbsp;too.</p>
+<p>The reality for many companies (especially startups) is also one where they are unable or unwilling to invest much
+in the retention of their employees. Because the employment relationship in this industry tends to be quite volatile
+(which isn&#8217;t necessarily a bad thing), it often makes sense for companies to look for a near-immediate payoff
+when&nbsp;hiring.</p>
+<p>We owe it to the prevalent open source technologies that this isn&#8217;t entirely unreasonable. If your software stack
+is composed entirely of components that are available in the open, you can probably find engineers who are familiar
+with most of them. They can be productive members of your team almost literally from day&nbsp;one!</p>
+<h4>Right tool for the&nbsp;job</h4>
+<p>The most important observation is that every company is <em>different</em>, and following the One True Best Practice™ will likely
+prevent you from utilizing the best qualities of your work place. Smaller shops, for example, could take a more personalized
+approach to hiring: let candidates actually sit with engineers, solve real-life problems, and have deep technical&nbsp;conversations.</p>
+<p>Of course, you may still find whiteboard coding valuable in its own right. Indeed, a simple test for at least
+the basic programming skill appears to be a <a href="http://blog.codinghorror.com/why-cant-programmers-program/">necessary sanity check</a>.</p>
+<p>But a full suite of difficult technical interviews with tough algorithmic problems that last a better part of the day?
+Most likely&nbsp;not.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Some seem to have succeeded to such an extent that you may occasionally hear about &#8220;Big N&#8221;.
+This often includes some currently large and/or successful but still &#8220;hip&#8221; startups.
+<span class="caps">IT</span> is such a fashion industry sometimes&#8230;&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Though on the flip side, it exacerbates the <a href="https://en.wikipedia.org/wiki/Impostor_syndrome">impostor syndrome</a>
+among people who <em>do</em> get hired, as their success could easily be construed as mostly luck.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/programming/dont-interview-like-google.html#dont-interview-like-google">Continue reading</a>
   </div>
 </article>
@@ -95,6 +181,8 @@ Which ...</p>
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -104,6 +192,10 @@ Which ...</p>
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context" : "http://schema.org",

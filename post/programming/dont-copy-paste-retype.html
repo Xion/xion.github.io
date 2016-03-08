@@ -2,21 +2,29 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
+
 <meta name="author" content="Karol Kuczmarski" />
-<meta name="description" content="In this day and age, Google and Stack Overflow are quite essential tools for any developer. Lately, though, the latter seems to be getting some bad rap. On one side, it’s because of seemingly peculiar and sometimes alienating moderation policies. But more pertinently, it’s the apparent rise of ..." />
+<meta name="description" content="In this day and age, Google and Stack Overflow are quite essential tools for any developer. Lately, though, the latter seems to be getting some bad rap. On one side, it’s because of seemingly peculiar and sometimes alienating moderation policies. But more pertinently, it’s the apparent rise of a phenomenon that’s wittily dubbed “the full Stack Overflow developer“. In a nutshell, individuals deserving to be called that are code slingers who throw software artifacts together mostly by copying and pasting code samples found in Stack Overflow answers. They may be getting something working pretty quickly, but they also lack understanding of problems they’re facing and solutions they’re using so cheerily. Of course, not every instance of code Copy Pasta is to be scorned. I’m pretty sure most people reading this post (and certainly the person writing it!) are guilty of replicating at least a few snippets from Stack Overflow, verbatim, in their own codebase. Heck, we may have even done so with nigh zero interest as to why it has been written this way. Not every technology is intrinsically fascinating, after all, and deadlines are sometimes too close for comfort. But if so, does it mean we are gradually turning into full Stack Overflow developers?… Yikes! Surely we don’t want that to happen! Mitigation tactic Before you shut off your Internet connection altogether while coding, consider employing the following technique whenever you feel like scraping a piece of code from Stack Overflow, and dumping it in your project source. Don’t use the clipboard. Don’t copy and paste. Retype the code you’ve found instead. It’s going to take more time, yes. It’s definitely more cumbersome than just hitting Ctrl+C/Ctrl+V. It may also make little sense: if the end result is the same, why does it matter whether the code was transfered through the clipboard or not? Rationale I’d argue, however, that it makes perfect sense. From the least to the most important, the reasons why I think so are the following: The fact that retyping is slower than copy-pasting is what actually makes it better. If you vow not to use the clipboard, you’re much less likely to just pick whatever’s the first Stack Overflow result Google has given. You’ll weigh different solutions, and you’ll be rightfully biased towards shorter and simpler ones. When you type something, you cannot do it completely thoughtlessly. Whether you want it or not, you’ll absorb some of the knowledge through sheer osmosis, because the code will flow through your eyes and fingers as it’s transfered from the browser to your editor or IDE. Your subconscious brain will latch onto the bits and pieces of information, and it will sort them out for you to use later. Even if you didn’t intend to, you will most likely learn something. But most importantly, what you type almost certainly won’t be a perfect copy of the original snippet. As you progress through the code, you’ll inevitably deviate from it, if only to conform to a particular style guide your project is following. It’s quite likely, though, that you’ll make larger changes as well. You will replace familiar patterns with calls to utility functions. You’ll rearrange the code visually for better readability. You will add comments, or extract functions to make it more self-documenting. You might even enhance and customize it, so that you can abstract and reuse it multiple times. Afterwards, what you’ve just typed won’t be just some code you have found on the Internet. It’ll be your code." />
 <meta name="keywords" content="problem solving, Stack Overflow, typing">
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
-<meta property="og:title" content="Don&#8217;t Copy <span class="amp">&amp;</span> Paste.&nbsp;Retype."/>
-<meta property="og:description" content="In this day and age, Google and Stack Overflow are quite essential tools for any developer. Lately, though, the latter seems to be getting some bad rap. On one side, it’s because of seemingly peculiar and sometimes alienating moderation policies. But more pertinently, it’s the apparent rise of ..."/>
+<meta property="og:title" content="Don’t Copy & Paste. Retype."/>
+<meta property="og:description" content="In this day and age, Google and Stack Overflow are quite essential tools for any developer. Lately, though, the latter seems to be getting some bad rap. On one side, it’s because of seemingly peculiar and sometimes alienating moderation policies. But more pertinently, it’s the apparent rise of a phenomenon that’s wittily dubbed “the full Stack Overflow developer“. In a nutshell, individuals deserving to be called that are code slingers who throw software artifacts together mostly by copying and pasting code samples found in Stack Overflow answers. They may be getting something working pretty quickly, but they also lack understanding of problems they’re facing and solutions they’re using so cheerily. Of course, not every instance of code Copy Pasta is to be scorned. I’m pretty sure most people reading this post (and certainly the person writing it!) are guilty of replicating at least a few snippets from Stack Overflow, verbatim, in their own codebase. Heck, we may have even done so with nigh zero interest as to why it has been written this way. Not every technology is intrinsically fascinating, after all, and deadlines are sometimes too close for comfort. But if so, does it mean we are gradually turning into full Stack Overflow developers?… Yikes! Surely we don’t want that to happen! Mitigation tactic Before you shut off your Internet connection altogether while coding, consider employing the following technique whenever you feel like scraping a piece of code from Stack Overflow, and dumping it in your project source. Don’t use the clipboard. Don’t copy and paste. Retype the code you’ve found instead. It’s going to take more time, yes. It’s definitely more cumbersome than just hitting Ctrl+C/Ctrl+V. It may also make little sense: if the end result is the same, why does it matter whether the code was transfered through the clipboard or not? Rationale I’d argue, however, that it makes perfect sense. From the least to the most important, the reasons why I think so are the following: The fact that retyping is slower than copy-pasting is what actually makes it better. If you vow not to use the clipboard, you’re much less likely to just pick whatever’s the first Stack Overflow result Google has given. You’ll weigh different solutions, and you’ll be rightfully biased towards shorter and simpler ones. When you type something, you cannot do it completely thoughtlessly. Whether you want it or not, you’ll absorb some of the knowledge through sheer osmosis, because the code will flow through your eyes and fingers as it’s transfered from the browser to your editor or IDE. Your subconscious brain will latch onto the bits and pieces of information, and it will sort them out for you to use later. Even if you didn’t intend to, you will most likely learn something. But most importantly, what you type almost certainly won’t be a perfect copy of the original snippet. As you progress through the code, you’ll inevitably deviate from it, if only to conform to a particular style guide your project is following. It’s quite likely, though, that you’ll make larger changes as well. You will replace familiar patterns with calls to utility functions. You’ll rearrange the code visually for better readability. You will add comments, or extract functions to make it more self-documenting. You might even enhance and customize it, so that you can abstract and reuse it multiple times. Afterwards, what you’ve just typed won’t be just some code you have found on the Internet. It’ll be your code."/>
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io/post/programming/dont-copy-paste-retype.html"/>
 <meta property="og:type" content="article"/>
@@ -27,7 +35,8 @@
 <meta property="article:tag" content="problem solving"/>
 <meta property="article:tag" content="Stack Overflow"/>
 <meta property="article:tag" content="typing"/>
-<meta property="og:image" content="http://xion.io/logo.jpeg">  <title>Karol Kuczmarski's Blog &ndash; Don&#8217;t Copy <span class="amp">&amp;</span> Paste.&nbsp;Retype.</title>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Don’t Copy & Paste. Retype.</title>
 </head>
 <body>
   <aside>
@@ -154,6 +163,8 @@ You might even enhance and customize it, so that you can abstract and reuse it m
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -163,12 +174,16 @@ You might even enhance and customize it, so that you can abstract and reuse it m
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context": "http://schema.org",
   "@type": "BlogPosting",
-  "name": "Don&#8217;t Copy <span class="amp">&amp;</span> Paste.&nbsp;Retype.",
-  "headline": "Don&#8217;t Copy <span class="amp">&amp;</span> Paste.&nbsp;Retype.",
+  "name": "Don’t Copy & Paste. Retype.",
+  "headline": "Don’t Copy & Paste. Retype.",
   "datePublished": "2015-10-03 14:40:00-07:00",
   "dateModified": "",
   "author": {
@@ -178,7 +193,7 @@ You might even enhance and customize it, so that you can abstract and reuse it m
   },
   "image": "http://xion.io/logo.jpeg",
   "url": "http://xion.io/post/programming/dont-copy-paste-retype.html",
-  "description": "In this day and age, Google and Stack Overflow are quite essential tools for any developer. Lately, though, the latter seems to be getting some bad rap. On one side, it’s because of seemingly peculiar and sometimes alienating moderation policies. But more pertinently, it’s the apparent rise of ..."
+  "description": "In this day and age, Google and Stack Overflow are quite essential tools for any developer. Lately, though, the latter seems to be getting some bad rap. On one side, it’s because of seemingly peculiar and sometimes alienating moderation policies. But more pertinently, it’s the apparent rise of a phenomenon that’s wittily dubbed “the full Stack Overflow developer“. In a nutshell, individuals deserving to be called that are code slingers who throw software artifacts together mostly by copying and pasting code samples found in Stack Overflow answers. They may be getting something working pretty quickly, but they also lack understanding of problems they’re facing and solutions they’re using so cheerily. Of course, not every instance of code Copy Pasta is to be scorned. I’m pretty sure most people reading this post (and certainly the person writing it!) are guilty of replicating at least a few snippets from Stack Overflow, verbatim, in their own codebase. Heck, we may have even done so with nigh zero interest as to why it has been written this way. Not every technology is intrinsically fascinating, after all, and deadlines are sometimes too close for comfort. But if so, does it mean we are gradually turning into full Stack Overflow developers?… Yikes! Surely we don’t want that to happen! Mitigation tactic Before you shut off your Internet connection altogether while coding, consider employing the following technique whenever you feel like scraping a piece of code from Stack Overflow, and dumping it in your project source. Don’t use the clipboard. Don’t copy and paste. Retype the code you’ve found instead. It’s going to take more time, yes. It’s definitely more cumbersome than just hitting Ctrl+C/Ctrl+V. It may also make little sense: if the end result is the same, why does it matter whether the code was transfered through the clipboard or not? Rationale I’d argue, however, that it makes perfect sense. From the least to the most important, the reasons why I think so are the following: The fact that retyping is slower than copy-pasting is what actually makes it better. If you vow not to use the clipboard, you’re much less likely to just pick whatever’s the first Stack Overflow result Google has given. You’ll weigh different solutions, and you’ll be rightfully biased towards shorter and simpler ones. When you type something, you cannot do it completely thoughtlessly. Whether you want it or not, you’ll absorb some of the knowledge through sheer osmosis, because the code will flow through your eyes and fingers as it’s transfered from the browser to your editor or IDE. Your subconscious brain will latch onto the bits and pieces of information, and it will sort them out for you to use later. Even if you didn’t intend to, you will most likely learn something. But most importantly, what you type almost certainly won’t be a perfect copy of the original snippet. As you progress through the code, you’ll inevitably deviate from it, if only to conform to a particular style guide your project is following. It’s quite likely, though, that you’ll make larger changes as well. You will replace familiar patterns with calls to utility functions. You’ll rearrange the code visually for better readability. You will add comments, or extract functions to make it more self-documenting. You might even enhance and customize it, so that you can abstract and reuse it multiple times. Afterwards, what you’ve just typed won’t be just some code you have found on the Internet. It’ll be your code."
 }
 </script></body>
 </html>

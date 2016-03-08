@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
   <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/style.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/pygments.min.css">
-  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/css/font-awesome.min.css">
-  <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
-  <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
+
+    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
+
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="" />
-  <meta name="author" content="Karol Kuczmarski" />
-  <meta name="description" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
 <meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
 <meta property="og:type" content="blog"/>
 <meta property="og:title" content="Karol Kuczmarski's Blog"/>
@@ -20,6 +28,7 @@
 <meta property="og:locale" content="en_US"/>
 <meta property="og:url" content="http://xion.io"/>
 <meta property="og:image" content="http://xion.io/logo.jpeg">
+
   <title>Karol Kuczmarski's Blog &ndash; Category: Code</title>
 </head>
 <body>
@@ -58,6 +67,533 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Tricks with ownership in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Mon 07 March 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/reference-counting.html">reference counting</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-borrowchk-tricks.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>&#8230;or how I learned to stop worrying and love the borrow&nbsp;checker.</em></p>
+<p>Having no equivalents in other languages, the <a href="https://doc.rust-lang.org/book/ownership.html">borrow checker</a>
+is arguably the most difficult thing to come to terms with when learning Rust. It&#8217;s easy to understand why it&#8217;s immensely
+useful, especially if you recall
+<a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html">the various vulnerabities</a>
+stemming from memory mismanagement. But that knowledge doesn&#8217;t exactly help when the compiler is whining about what
+seems like a perfectly correct&nbsp;code.</p>
+<p>Let&#8217;s face it: it will take some time to become productive writing efficient and safe code. It&#8217;s not entirely unlike
+adjusting to a different paradigm such as functional programming when you&#8217;ve been writing mostly imperative code.
+Before that happens, though, you can use some tricks to make the transition a little&nbsp;easier.</p>
+<h4>Just <code>clone</code> it</h4>
+<p>Ideally, we&#8217;d want our code to be both correct <em>and</em> fast. But if we cannot quite get to the &#8220;correctness&#8221; part yet &#8212;
+because our program doesn&#8217;t, you know, <em>compile</em> &#8212; then how about paying for it with a small (and refundable)
+performance&nbsp;hit?</p>
+<p>This is where the <code>clone</code> methods comes in handy. Many problems with the borrow checker stem from trying to spread
+object ownership too thin. It is a precious resource and it&#8217;s not very cheap to &#8220;produce&#8221;, which is why good Rust code
+often deals with just immutable or mutable&nbsp;references.</p>
+<p>But if that proves difficult, then &#8220;making more objects&#8221; is a great intermediate solution. Incidentally, this is what
+higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
+those languages, we can start off by replicating their&nbsp;behavior.</p>
+<p>As an example, consider a function that tries to convert some value to <code>String</code>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">maybe_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// omitted</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>If we attempt to build upon it and create a <code>Vec</code>tor&nbsp;version:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_all_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">results</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="n">maybe_to_string</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">find</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">is_err</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>then we&#8217;ll be unpleasantly surprised by a borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>error: cannot move out of borrowed content [E0507]
+    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
+                              ^
+</pre></div>
+
+
+<p>Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
+However, a simple stepping stone in the shape of additional <code>clone()</code> call can help move things forward just
+a little&nbsp;quicker:</p>
+<div class="highlight"><pre><span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="c1">// ...</span>
+<span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">clone</span><span class="p">().</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+</pre></div>
+
+
+<p>The performance tradeoff is explicit, and easy to find later on with a simple <code>grep clone\(\)</code> or similar.
+When you learn to do things the Rusty way, it won&#8217;t be hard to go back to your &#8220;hack&#8221; and fix it&nbsp;properly.</p>
+<h4>Refcounting to the&nbsp;rescue</h4>
+<p>Adding <code>clone()</code> willy-nilly to make the code compile is a valid workaround when we&#8217;re just learning. Sometimes, however,
+even some gratuitous cloning doesn&#8217;t <em>quite</em> solve the problem, because the <code>clone()</code> itself can become an&nbsp;issue.</p>
+<p>For one, it requires our objects to implement the <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"><code>Clone</code> trait</a>.
+This was apparent even in our previous example, since we had to add a <code>#[derive(Clone)]</code> attribute to the <code>struct Error</code>
+in order to make it <code>clone</code>-able.</p>
+<p>Fortunately, in the vast majority of cases this will be all that&#8217;s necessary, as most built-in types in Rust implement
+<code>Clone</code> already. One notable exception are <em>function traits</em> (<code>FnOnce</code>, <code>Fn</code>, and <code>FnMut</code>) which are used to store
+and refer to <em>closures</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Structures and other custom types that contain them (or those which <em>may</em> contain them)
+cannot therefore implement <code>Clone</code> through a simple <code>#[derive]</code> annotation:</p>
+<div class="highlight"><pre><span class="c-Doc">/// A value that&#39;s either there already</span>
+<span class="c-Doc">/// or can be obtained by calling a function.</span>
+<span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&gt; T + &#39;static` [E0277]
+    #[derive(Clone)]
+             ^~~~~
+</pre></div>
+
+
+<p>What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
+and this one will likely sound familiar if you&#8217;ve ever worked with a higher level language before. Instead of actually
+cloning an object, you can merely increment its <em>reference counter</em>. As the most rudimentary kind of garbage collection,
+this allows to safely share the object between multiple &#8220;owners&#8221;, where each can behave as if it had
+its own copy of&nbsp;it.</p>
+<p>Rust&#8217;s pointer type that provides reference counting capabilities is called <code>std::rc::Rc</code>. Conceptually, it is analogous
+to <code>std::shared_ptr</code> from C++, and it similarly keeps the refcount updated when the pointer is &#8220;acquired&#8221; (<code>clone</code>-ed)
+and &#8220;released&#8221; (<code>drop</code>-ed). Because no data is moved around during either of those two operations, <code>Rc</code> can refer even
+to types whose size isn&#8217;t known at compilation time, like abstract&nbsp;closures:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">rc</span><span class="o">::</span><span class="n">Rc</span><span class="p">;</span><span class="w"></span>
+
+<span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Rc</span><span class="o">&lt;</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Wrapping them in <code>Rc</code> therefore makes them &#8220;cloneable&#8221;. They aren&#8217;t actually cloned, of course, but because of
+the inherent immutability of Rust types they will appear so to any outside observer<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4>Move&nbsp;it!</h4>
+<p>Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
+There is <em>ownership</em>, which is passed around by moving the values; and there is <em>borrowing</em>, which means operating
+on them through&nbsp;references.</p>
+<p>When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
+has to be copiously sprinkled with <code>&amp;</code> and <code>&amp;mut</code>, and may sometimes require explicit lifetime annotations. All these
+have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
+of the program&#8217;s&nbsp;logic.</p>
+<p>Therefore it is generally preferable, if at all possible, to expose <span class="caps">API</span> that deals with data directly
+and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
+stages of our algorithms. It turns out it&#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
+of producing a moved&nbsp;value.</p>
+<p>Take our first example. The intuitively named <code>Vec::iter</code> method produces an iterator that we can <code>map</code> over, but does
+it really go over the actual <em>items</em> in the vector? Nope! It gives use a <em>reference</em> to each one &#8212; a borrow, if you will
+&#8212; which exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
+<p>Instead, why not just get the elements themselves, by moving them out of the vector? <code>Vec::into_iter</code> allows to do exactly&nbsp;this:</p>
+<div class="highlight"><pre><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+</pre></div>
+
+
+<p>and enables us to remove the <code>clone()</code> call. The family of <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
+on to work like that at least in the standard library. They are also part of a more-or-less official
+<a href="https://aturon.github.io/style/naming.html#conversions">naming convention</a> that you should also follow in your own&nbsp;code.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Note how this is different from function <em>types</em>, i.e. <code>fn(A, B, C, ...) -&gt; Ret</code>. It is because plain functions
+do not carry their closure environments along with them. This makes them little more than just pointers to some code,
+and those can be freely <code>Clone</code>-d (or even <code>Copy</code>-ed).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>If you want both shared ownership (&#8220;fake cloneability&#8221;) <em>and</em> the ability to mutate the shared value,
+take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code> type</a> and how it can be
+<a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition">wrapped in <code>Rc</code></a> to achieve both.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Requirements for Python&#8217;s&nbsp;pip</a></h2>
+    <p>
+      Posted on Sun 21 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/pip.html">pip</a>,      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/dependencies.html">dependencies</a>      &#8226; <a href="http://xion.io/post/code/python-pip-requirements.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In this post I&#8217;ll describe all (hopefully all!) the various ways you can specify a single dependency for a Python&nbsp;package.</p>
+<p>This assumes <em>pip</em> is used for installation. The list of dependencies then goes either in <code>install_requires=</code>
+parameter of the <code>setup</code> function within <em>setup.py</em>, or as a separate <em>requirements.txt</em> file. Commonly, it will actually
+go in both places, with the latter being the canonical source of&nbsp;truth:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">setuptools</span> <span class="kn">import</span> <span class="n">setup</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;requirements.txt&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">rf</span><span class="p">:</span>
+    <span class="n">setup</span><span class="p">(</span>
+        <span class="c"># ...</span>
+        <span class="n">install_requires</span><span class="o">=</span><span class="n">rf</span><span class="o">.</span><span class="n">readlines</span><span class="p">(),</span>
+    <span class="p">)</span>
+</pre></div>
+
+
+<p>More details about this approach can be found in
+<a href="http://xion.org.pl/2014/01/27/anathomy-of-a-python-package/">one of my previous posts</a>.</p>
+<p>Here, I will concentrate on the format of a single line in <em>requirements.txt</em> that defines a dependency.
+There are numerous variants that <em>pip</em> supports, and they are all described in excruciating detail in
+<a href="https://www.python.org/dev/peps/pep-0440/"><span class="caps">PEP</span> 440</a>. This post shall serve as a short reference on the most useful&nbsp;ones.</p>
+<h4>Package name (and&nbsp;version)</h4>
+<p>The simplest and most common option is to identify a dependency by its package&nbsp;name:</p>
+<div class="highlight"><pre>SQLAlchemy
+</pre></div>
+
+
+<p>This will locate it in a global index of packages, which is sometimes called a &#8220;cheese shop&#8221;. Currently,
+by far the most popular package registry for Python is <a href="https://pypi.python.org">PyPI</a>, and <em>pip</em> uses it by default<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>Without any further modifiers, <em>pip</em> will download and install the &#8220;current&#8221; version of the package &#8212; either the newest,
+or the one designated explicitly by a maintainer. This obviously makes the dependency somewhat unpredictable,
+for it can mean unintended upgrades that introduce breaking changes to your&nbsp;code.</p>
+<p>To prevent this, you&#8217;d normally <em>pin</em> the dependency to an exact version<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre>SQLAlchemy==0.9.10
+</pre></div>
+
+
+<p>Other comparison operators are also&nbsp;available:</p>
+<div class="highlight"><pre>SQLAlchemy&gt;=0.9.10
+SQLAlchemy&lt;1.0.0
+</pre></div>
+
+
+<p>and can even be&nbsp;combined:</p>
+<div class="highlight"><pre>SQLAlchemy&gt;=0.9,&lt;1.0.0
+</pre></div>
+
+
+<p>Specs like that will make <em>pip</em> find the newest version that&#8217;s within given range. Assuming your dependency follows
+the <a href="http://semver.org/">semantic versioning</a> scheme, this will allow you to stay on top of any minor bugfixes
+and improvements to an older release (0.9.x here), without the risk of accidentally upgrading to a new one (1.x)
+that your code is not compatible with&nbsp;yet.</p>
+<h4>Repository <span class="caps">URL</span></h4>
+<p>Sometimes you want to live on the bleeding edge, though, and depend not just on the latest <em>release</em>,
+but the head <em>commit</em> to the package&#8217;s repository. This makes sense especially in large systems
+that are distributed among multiple repos, and where development happens in&nbsp;lockstep.</p>
+<p>For those occasions, and a few others, <em>pip</em> can recognize direct repository URLs. They are in the&nbsp;format:</p>
+<div class="highlight"><pre>$VCS+$PROTOCOL://$URL@$LABEL#egg=$PACKAGE
+</pre></div>
+
+
+<p>where the <code>$PROTOCOL</code> part can be optional if the version control system has a default there. That&#8217;s for example
+the case for <code>git</code>, which is of course the most important <span class="caps">VCS</span> you&#8217;d be interested in<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>:</p>
+<div class="highlight"><pre>git://git.example.com/somepackage#egg=somepackage
+</pre></div>
+
+
+<p>Note that the <code>#egg=$PACKAGE</code> part is not a part of the <code>$URL</code>, and it&#8217;s only there to give a local name for the package
+distribution. This is what makes it possible to refer to it later via <em>pip</em>, if only to remove it with
+<code>pip uninstall $PACKAGE</code>.
+Of course, the sanest practice is to use the PyPI moniker if&nbsp;possible.</p>
+<p>When no <code>$LABEL</code> is given, <em>pip</em> will use the <span class="caps">HEAD</span>, trunk, tip, or the equivalent default/current revision from the repo.
+Often though (at least in case of Git), you would also pick a branch, tag, or even a particular <em>commit hash</em>:</p>
+<div class="highlight"><pre>git+https://github.com/Xion/unmatcher.git@0.1.3.1#egg=unmatcher
+git+ssh://github.com/You/yourpackage.git@master#egg=yourpackage
+git+https://github.com/mitsuhiko/jinja2.git@5b498453b5898257b2287f14ef6c363799f1405a#egg=Jinja2
+</pre></div>
+
+
+<p>The last two options could be a good choice even with third party packages, when you don&#8217;t want to wait for a new PyPI
+release to get a necessary feature or an urgent bug&nbsp;fix.</p>
+<h4>Local&nbsp;filesystem</h4>
+<p>Lastly, you can ask <em>pip</em> to install a package from a local directory or archive. The former option is often used
+with the <code>-e</code> (<code>--editable</code>) flag for <code>pip install</code>. This installs the package in the so-called <em>development mode</em>,
+allowing you to edit its source code&nbsp;in-place:</p>
+<div class="highlight"><pre>$ pip install -e /home/me/Code/myotherpackage
+</pre></div>
+
+
+<p>You almost certainly don&#8217;t want to put this line in <em>requirements.txt</em>: you should still be pulling the other package
+from PyPI. But if it&#8217;s your own one  &#8212; maybe a self-contained utility library used by your main program &#8212;
+this setup will be very helpful for making changes to it, informed by your own usage of the&nbsp;package.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This can be changed with <code>--index_url</code> flag to <code>pip install</code>. Running local indexes is a good practice
+for Python shops, especially those that rely on <code>pip install</code> as part of their deployment process.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>If the package uses <a href="http://semver.org/">semantic versioning</a>, a possible alternative to <code>==</code> is <code>~=</code>,
+which means &#8220;compatible&#8221; version. The precise meaning of this is
+<a href="https://www.python.org/dev/peps/pep-0440/#compatible-release">somewhat complicated</a>, but it roughly means that upgrades
+are permitted as long as nothing in the public interface changes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p><a href="https://pip.pypa.io/en/latest/reference/pip_install/#vcs-support">Other options</a> include <code>hg</code> (Mercurial),
+<code>svn</code>, and <code>bzr</code> (Bazaar).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Moving out of a container in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Fri 05 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/vector.html">vector</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/references.html">references</a>      &#8226; <a href="http://xion.io/post/code/rust-move-out-of-container.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>To prevent the kind of memory errors that plagues many C programs,
+the <a href="https://doc.rust-lang.org/book/ownership.html"><em>borrow checker</em> in Rust</a> tracks how data is moved between variables,
+or accessed via references. This is all done at compile time, with zero runtime overhead, and is a sizeable part
+of Rust&#8217;s value&nbsp;offering.</p>
+<p>Like all rigid and automated systems, however, it is necessarily constrained and cannot handle all situations perfectly.
+One of its limitations is treating all objects as <em>atomic</em>. It&#8217;s impossible for a variable to own a part of some bigger
+structure, neither is it possible to maintain mutable references to two or more elements of a&nbsp;collection.</p>
+<p>If we nonetheless <a href="http://is.gd/yWCYmJ">try</a>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="o">&amp;</span><span class="n">b</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>we&#8217;ll be served with a classic borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>&lt;anon&gt;:3:25: 3:33 error: cannot move out of indexed content [E0507]
+&lt;anon&gt;:3     let fullname = join(names[0], names[1]);
+                                 ^~~~~~~~
+</pre></div>
+
+
+<p>Behind its rather cryptic verbiage, it informs us that we tried to move a <em>part</em> of the <code>names</code> vector &#8212; its first
+element &#8212; to a new variable (here, a function parameter). This isn&#8217;t allowed, because in principle it would
+render the vector invalid from the standpoint of strict memory safety. Rust would no longer guarantee <code>names[0]</code> to be
+a legal <code>String</code>: its internal pointer could&#8217;ve been invalidated by the code which the element moved to
+(the <code>join</code> function)<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
+there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
+it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
+the program is inarguably correct: Rust&#8217;s borrow checker is just incapable of ascertaining&nbsp;it.</p>
+<h4>Pointers to the&nbsp;rescue?</h4>
+<p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
+As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
+(structs, hashmaps, etc.), it&#8217;s been recognized and countermeasures are&nbsp;available.</p>
+<p>However, the <a href="http://is.gd/o3GRnw">idiomatic practice</a> is to actually leave the elements be and access them
+solely through&nbsp;references:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
+pointers instead of actual objects<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
+the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
+In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
+the call stacks and abstraction&nbsp;layers.</p>
+<h4>Vector&nbsp;solution</h4>
+<p>If we still insist on moving the elements out, at least in case of vector we aren&#8217;t <em>completely</em> out of luck.
+The <code>Vec</code> type offers several specialized methods that can slice, dice, and splice the collection in various ways.
+Those&nbsp;include:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_first"><code>split_first</code></a> (and <code>split_first_mut</code>)
+for cutting right after the first&nbsp;element</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_last"><code>split_last</code></a> (and <code>split_last_mut</code>)
+for a similar cut right before the last&nbsp;element</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_at"><code>split_at</code></a> (and <code>split_at_mut</code>),
+generalized versions of the above&nbsp;methods</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_off"><code>split_off</code></a>, a partially-in-place version
+of <code>split_at_mut</code></li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain"><code>drain</code></a> for moving all elements from a specified&nbsp;range</li>
+</ul>
+<p>Other types may offer different methods, depending on their particular data layout, though <code>drain</code> should be available
+on any data structure that can be iterated&nbsp;over.</p>
+<h4>Structural&nbsp;advantage</h4>
+<p>What about user-defined types, such as <code>struct</code>s?</p>
+<p>Fortunately, these are covered by the compiler itself. Since accessing <code>struct</code> fields is a fully compile-time
+operation, it is possible to track the ownership of each individual object that makes up the structure.
+Thus there are no obstacles to simply <a href="http://is.gd/ZUI2Mn">moving all the fields</a>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="p">{</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"></span>
+<span class="w">                   </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()};</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first_name</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">last_name</span><span class="p">)</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>If all else&nbsp;fails&#8230;</h4>
+<p>This leaves us with some rare cases when the container&#8217;s interface doesn&#8217;t <em>quite</em> support the exact subset of elements
+we want to move out. If we don&#8217;t want to <code>drain</code> them all and inspect every item for potential preservation,
+it may be time to skirt around the more dangerous areas of the&nbsp;language.</p>
+<p>But I don&#8217;t necessarily mean going all out with <code>unsafe</code> blocks, pointers, and (let&#8217;s be honest) segfaults.
+Instead, we can look at the gray zone between them and the regular, borrow-checked Rust&nbsp;code.</p>
+<p>Some of the functions inside the <a href="https://doc.rust-lang.org/std/mem/index.html"><code>std::mem</code> module</a> can be said
+to fall into this category. Most notably, <a href="https://doc.rust-lang.org/std/mem/fn.swap.html"><code>mem::swap</code></a> and
+<a href="https://doc.rust-lang.org/std/mem/fn.replace.html"><code>mem::replace</code></a> allow us to operate directly on the memory blocks
+that back every Rust object, albeit without the dangerous ability to freely modify&nbsp;them.</p>
+<p>What those functions enable is a small sleight of hand &#8212; a quick exchange of two variables or objects
+while the borrow checker &#8220;isn&#8217;t looking&#8221;. Possessing such an ability, we can smuggle any item out of a container
+as long as we&#8217;re able to provide a suitable&nbsp;replacement:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="p">;</span><span class="w"></span>
+
+<span class="c-Doc">/// Pick only the items under indices that are powers of two.</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">pick_powers_of_2</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Default</span><span class="o">&gt;</span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Vec</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">elem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mem</span><span class="o">::</span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">T</span><span class="o">::</span><span class="n">default</span><span class="p">());</span><span class="w"></span>
+<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">elem</span><span class="p">);</span><span class="w"></span>
+<span class="w">        </span><span class="n">i</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="n">result</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p style="text-align: center">
+    <img src="http://xion.io/images/indyswap.jpg" alt="Swap!"></br>
+    <small>Pictured: implementation of <code>mem::replace</code>.</small>
+</p>
+
+<p><a href="https://doc.rust-lang.org/std/default/trait.Default.html#tymethod.default">The <code>Default</code> value</a>,
+if available, is usually a great choice here. Alternately, a <code>Copy</code> or <code>Clone</code> of some other element can also work
+if it&#8217;s cheap to&nbsp;obtain.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
+instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Retry idiom for&nbsp;Python</a></h2>
+    <p>
+      Posted on Wed 27 January 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/exceptions.html">exceptions</a>,      <a href="http://xion.io/tag/else.html">else</a>      &#8226; <a href="http://xion.io/post/code/python-retry-idiom.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>A relatively little known feature of Python is the <code>else</code> block for control flow statements other than <code>if</code>.</p>
+<p>If you haven&#8217;t heard about it before, you can provide such a block for both <code>while</code> and <code>for</code> loops,
+as well as any variant of the <code>try</code> statement, Its functionality is roughly analogous in both&nbsp;cases:</p>
+<ul>
+<li>in loops, the <code>else</code> block is executed if the loop didn&#8217;t exit abnormally (i.e. with <code>break</code>)</li>
+<li>in <code>try</code> constructs, the <code>else</code> block runs if <em>no</em> exception&nbsp;happened</li>
+</ul>
+<p>Likely because of the unique semantics that don&#8217;t exist in other languages, neither of those constructs has been seen much
+in real world code. Recently, however, I&#8217;ve found they can be combined into a very pythonic pattern
+that&#8217;s also quite&nbsp;useful.</p>
+<h4>The&nbsp;trick</h4>
+<p>Say you have a task that won&#8217;t always succeed. Perhaps it&#8217;s a request made to a janky server, or other network operartion
+that&#8217;s prone to timeouts. Since failures are likely to be transient, you&#8217;d like to retry it several more times before
+giving up&nbsp;permanently.</p>
+<p>With <code>try</code>/<code>except</code> block, you can detect those half-expected failures. With a simple loop, you can repeat the attempt
+for as many times as you deem feasible. Combined, they can solve the problem rather&nbsp;neatly:</p>
+<div class="highlight"><pre><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">MAX_RETRIES</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># ... do stuff ...</span>
+    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
+        <span class="c"># ... log it, sleep, etc. ...</span>
+        <span class="k">continue</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
+</pre></div>
+
+
+<h4>But&nbsp;why?</h4>
+<p>What&#8217;s the deal with the <code>else</code>s here, though? Are they both&nbsp;necessary?</p>
+<p>The simple answer is of course no. <code>else</code> after either a loop or  <code>try</code>/<code>except</code> block is always a <em>syntactic sugar</em>.
+Any code that contains it can be transformed into an equivalent snippet that utilizes different techniques to achieve
+the same&nbsp;effect.</p>
+<p>But this view isn&#8217;t very useful, for many of the essential features in any programming languages can be dismissed
+as superfluous using this reasoning. The real question is whether the above idiom is more readable and understandable
+than the&nbsp;alternatives.</p>
+<p>To that, I posit, the answer is: <em>absolutely</em>.</p>
+<h4>Desugaring</h4>
+<p>Without the double <code>else</code>, this example would have to be written in a considerably more convoluted&nbsp;way:</p>
+<div class="highlight"><pre><span class="n">retries</span> <span class="o">=</span> <span class="n">MAX_RETRIES</span>
+<span class="k">while</span> <span class="n">retries</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># ... do stuff ...</span>
+        <span class="k">break</span>
+    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
+        <span class="c"># ... log it, sleep, etc. ...</span>
+        <span class="n">retries</span> <span class="o">-=</span> <span class="mi">1</span>
+<span class="k">if</span> <span class="n">retries</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Although at first glance the difference may be minuscule, this version adds significant extra busywork the programmer
+has to pay careful attention&nbsp;to:</p>
+<ul>
+<li>The <code>retries</code> variable now has to be explicit, because the final conditional statement must look at its&nbsp;value.</li>
+<li>We can&#8217;t use a <code>for</code> loop anymore (e.g. <code>for retries in range(MAX_RETRIES)</code>), because we wouldn&#8217;t distinguish the
+&#8220;success at last try&#8221; and &#8220;retry limit exceeded&#8221; cases: they&#8217;d both result in <code>retries</code> equal to <code>MAX_RETRIES - 1</code>
+after the loop<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</li>
+<li>As a result, we have to remember to decrement the counter ourselves upon an&nbsp;error.</li>
+</ul>
+<p>Additionally, the <code>break</code> is easy to miss amidst the actual logic within the <code>try</code> block, both for developer
+who writes the code and for any subsequent readers. An alternative is to move it outside of the <code>try</code>/<code>except</code> clause,
+but that in turn reintroduces <code>continue</code> into the <code>except</code> branch and further complicates the whole&nbsp;flow.</p>
+<p>In short, the desugared version is more error-prone (all those off-by-ones!) and also quite&nbsp;inscrutable.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Or to <code>1</code>, if we count from <code>MAX_RETRIES</code> down to zero.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-first-impressions.html#rust-first-impressions">Rust: first&nbsp;impressions</a></h2>
     <p>
       Posted on Thu 10 December 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -68,7 +604,200 @@
   <div>
       <p>Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this
 cumbersome language evokes on regular basis. When I was working in it less sporadically, I was shrugging it off
-and telling myself it&#8217;s all because of the low level ...</p>
+and telling myself it&#8217;s all because of the low level it operates on. Superior performance was the other side of the deal,
+and it was supposed to make all the trade-offs&nbsp;worthwhile.</p>
+<p>Now, however, I realized that running close to the metal by no means excuses the sort of clunkiness that C++ permits.
+For example, there really is no reason why the archaically asinine separation of header <span class="amp">&amp;</span> source files &#8212;
+with its inevitable redundancy of declarations and definitions, worked around with Java-esque contraptions such as
+<a href="http://c2.com/cgi/wiki?PimplIdiom">pimpl</a> &#8212; is still the bread and butter of C++ programs.<br/>
+Same goes for the lack of sane dependency management, or a universal, portable build system. None of those would be
+at odds with native compilation to machine code, or runtime speeds that are adequate for real-time&nbsp;programs.</p>
+<p>Rather than dwelling on those gripes, I thought it&#8217;d be more productive to look around and see what&#8217;s
+the modern offerring in the domain of lower level, <em>really</em> fast languages. The search wasn&#8217;t long at all, because
+right now it seems there is just one viable contender: Rust<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>Rusty&nbsp;systems</h4>
+<p><a href="https://www.rust-lang.org">Rust</a> introduces itself as a
+<a href="https://en.wikipedia.org/wiki/System_programming_language">&#8220;systems programming language&#8221;</a>, which is quite a bold claim.
+What followed the last time this phrase has been applied to an emerging language &#8212; Go &#8212; was a kind of
+<a href="https://www.quora.com/Of-the-emerging-systems-languages-Rust-D-Go-and-Nim-which-is-the-strongest-language-and-why">word twisting</a>
+that&#8217;s more indicative of politics, not computer&nbsp;science.</p>
+<p>But Rust&#8217;s pretense to the system level is well justified. It clearly provides the requisite toolkit for working
+directly with the hardware, be it <a href="https://github.com/miselin/rustic">embedded controllers</a> or
+<a href="http://www.redox-os.org/">fully featured computers</a>. It offers compilation to native machine code;
+direct memory access; running time guarantees thanks to the lack of <span class="caps">GC</span>-incuded stops;
+and great interoperability through static and dynamic&nbsp;linkage.</p>
+<p>In short, with Rust you can wreak havoc against the <span class="caps">RAM</span> and twiddle bits to your heart&#8217;s&nbsp;content.</p>
+<h4>Safe and&nbsp;sound</h4>
+<p>To be fair, though, the &#8220;havoc&#8221; part is not entirely accurate. Despite its focus on the low level, efficient computing,
+Rust aims to be a very safe language. Unlike C, it actively tries to prevent the programmer from shooting themselves
+in the foot &#8212; though it will hand you the gun if you but ask for&nbsp;it.</p>
+<p>The safety guarantees provided by Rust apply to resource management, with the specific emphasis on memory
+and pointers to it. The way that most contemporary languages deal with memory is by introducing a <em>garbage collector</em>
+which mostly (though not wholly) relieves the programmer from thinking about allocations and deallocations.
+However, the kind of global, stop-the-world garbage collections
+(e.g. <a href="https://en.wikipedia.org/wiki/Tracing_garbage_collection#Na.C3.AFve_mark-and-sweep">mark-and-sweep</a>)
+is costly and unpredictable, ruling it out as a mechanism for real-time&nbsp;systems.</p>
+<p>For this reason, Rust doesn&#8217;t mandate a <span class="caps">GC</span> of this kind<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And although it offers mechanisms that are similar to
+smart pointers from C++ (e.g. <code>std::shared_ptr</code>), it is actually preferrable and <em>safer</em> to use regular, &#8220;naked&#8221; pointers:
+<code>&amp;Foo</code> versus <code>Cell&lt;Foo&gt;</code> or <code>RefCell&lt;Foo&gt;</code> (which are some of the Rust&#8217;s &#8220;smart pointer&#8221;&nbsp;types).</p>
+<p>The trick is in the clever compiler. As long as we use regular pointers, it is capable of detecting potential memory
+bugs at <em>compilation time</em>. They are referred to as &#8220;data races&#8221; in Rust&#8217;s terminology, and include
+<a href="https://doc.rust-lang.org/stable/book/references-and-borrowing.html#issues-borrowing-prevents">perennial problems</a>
+that will segfault any C code which wasn&#8217;t written with utmost&nbsp;care.</p>
+<p>Part of those safety guarantees is also the <em>default immutability</em> of references (pointers). The simplest reference
+of type <code>&amp;Foo</code> in Rust translates to something like <code>const Foo * const</code> in C<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. You have to explicitly request
+mutability with the <code>mut</code> keyword, and Rust ensures there is always at most one mutable reference to any value,
+thus preventing problems caused by <a href="https://en.wikipedia.org/wiki/Pointer_aliasing">pointer aliasing</a>.</p>
+<p>But what if you really must sling raw pointers, and access arbitrary memory locations? Maybe you are programming
+a microcontroller where I/O is done through a special memory region. For those occassions, Rust has got you covered
+with the <code>unsafe</code> keyword:</p>
+<div class="highlight"><pre><span class="c1">// Read the state of a diode in some imaginary uC.</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">get_led_state</span><span class="p">(</span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="n">isize</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">assert</span><span class="o">!</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;There are FOUR lights!&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x1234</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">;</span><span class="w">  </span><span class="c1">// known memory location</span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="p">.</span><span class="n">offset</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Its usage, like in the above example, can be <em>very</em> localized, limited only to those places where it&#8217;s truly necessary
+and guarded by appropriate checks. As a result, the interface exposed by a function like the one above
+can be considered safe. The unrestricted memory access can be contained to where it&#8217;s really&nbsp;inevitable.</p>
+<h4>Typing&nbsp;counts</h4>
+<p>Ensuring memory safety is not the only way in which Rust differentiates itself from C.
+What separates those two languages is also a few decades of practice and research into programming semantics.
+It&#8217;s only natural to expect Rust to take advantage of this&nbsp;progress.</p>
+<p>And advantage it takes. Although Rust&#8217;s type system isn&#8217;t nearly as advanced and complex like &#8212; say &#8212; Scala&#8217;s,
+it exhibits several interesting properties that are indicative of its relatively modern&nbsp;origin.</p>
+<p>First, it mixes the two most popular programming paradigms &#8212; functional and object-oriented &#8212; in roughly equal
+concentrations, as opposed to being biased towards the latter. Rust doesn&#8217;t have interfaces or classes: it has <em>traits</em>
+and their <em>implementations</em>. Even though they often fulfill similar purposes of abstraction and encapsulation,
+these constructs are closer to the concepts of <a href="https://en.wikipedia.org/wiki/Type_class">type classes</a>
+and their instances, which are found for example in&nbsp;Haskell.</p>
+<p>Still, the more familiar notions of <span class="caps">OOP</span> aren&#8217;t too far off. Most of the key functionality of classes, for example,
+can be simulated by implementing &#8220;default&#8221; traits for user-defined&nbsp;types:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">impl</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">new</span><span class="p">(</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">first_name</span><span class="p">.</span><span class="n">to_string</span><span class="p">(),</span><span class="w"></span>
+<span class="w">            </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">last_name</span><span class="p">.</span><span class="n">to_string</span><span class="p">(),</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">greet</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">first_name</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="c1">// usage</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="s">&quot;John&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Doe&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="n">p</span><span class="p">.</span><span class="n">greet</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>The second aspect of Rust&#8217;s type system that we would come to expect from a new language is its expressive power.
+<em>Type inference</em> is nowadays a staple, and above we can observe the simplest form of it. But it extends further,
+to generic parameters, closure arguments, and closure return&nbsp;values.</p>
+<p>Generics, by the way, are quite nice as well. Besides their applicability to structs, type aliases, functions,
+traits, trait implementations, etc., they allow for constraining their arguments with traits. This is similar to
+the abandoned-and-not-quite-revived-yet idea of <a href="https://en.wikipedia.org/wiki/Concepts_%28C%2B%2B%29">concepts in C++</a>,
+or to an analogous mechanism from&nbsp;C#.</p>
+<p>The third common trend in contemporary language design is to use the type system to solve common tasks.
+Rust doesn&#8217;t go full Haskell and opt for monads for everything, but its <code>Option</code> and <code>Result</code> types are evidently
+the functional approach to error handling<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>. To facilitate their use, a powerful
+<a href="https://doc.rust-lang.org/stable/book/patterns.html"><em>pattern matching</em> facility</a> is also present in&nbsp;Rust.</p>
+<h4>Unexpectedly&nbsp;pythonic</h4>
+<p>If your general go-to language is Python, you will find Rust a very nice complement and possibly a valuable weapon
+in your coding arsenal. Interoperability between Python and Rust is
+<a href="https://doc.rust-lang.org/stable/book/rust-inside-other-languages.html#python">stupidly easy</a>,
+thanks to both the <a href="https://docs.python.org/3.5/library/ctypes.html"><code>ctypes</code> module</a> and the extreme simplicity
+of creating portable,
+<a href="https://doc.rust-lang.org/stable/book/rust-inside-other-languages.html#a-rust-library">shared libraries</a> in Rust.
+Offloading some expensive, <a href="https://wiki.python.org/moin/GlobalInterpreterLock"><span class="caps">GIL</span></a>-bypassing computation to a fast,
+native code written in Rust can thus be a relatively painless way of speeding up crucial parts of a Python&nbsp;program.</p>
+<p>But somewhat more surprisingly, Rust has quite a few bits that seem to be directly inspired by Python semantics.
+Granted, those two languages are conceptually pretty far apart in general, but the analogies are&nbsp;there:</p>
+<ul>
+<li>
+<p>The concept of <a href="https://doc.rust-lang.org/stable/book/iterators.html">iterators</a> in Rust is very similar to
+<a href="https://docs.python.org/2/glossary.html#term-iterable">iterables</a> in Python. Even the <code>for</code> loop is basically identical:
+rather than manually increment a counter, both in <a href="https://doc.rust-lang.org/stable/book/loops.html#for">Rust</a>
+and <a href="https://wiki.python.org/moin/ForLoop">Python</a> you iterate over a <em>range of numbers</em>.<br/>
+Oh, and both languages have an <code>enumerate</code> <a href="https://doc.rust-lang.org/stable/book/loops.html#enumerate">method</a>/
+<a href="https://docs.python.org/2/library/functions.html#enumerate">function</a> that yields pairs of <code>(index, element)</code>.</p>
+</li>
+<li>
+<p>Syntax for <a href="https://doc.rust-lang.org/stable/book/method-syntax.html#method-calls">method definition</a>
+in Rust uses the <code>self</code> keyword as first argument to distinguish between instance methods and &#8220;class&#8221;/&#8221;static&#8221; methods
+(or <em>associated functions</em> in Rust&#8217;s parlance).
+This is even more pythonic than in actual Python, where <code>self</code> is technically just a convention,
+albeit an extremely strong&nbsp;one.</p>
+</li>
+<li>
+<p>In either language, overloading operators doesn&#8217;t use any new keywords or special syntax,
+like it does in C++, C#, and others. Python accomplishes it through <code>__magic__</code> methods, whereas Rust
+has very similarly named <a href="https://doc.rust-lang.org/stable/book/operators-and-overloading.html">operator traits</a>.</p>
+</li>
+<li>
+<p>Rust basically <a href="https://doc.rust-lang.org/stable/book/documentation.html#documentation-as-tests">has <code>doctest</code></a>.
+If you don&#8217;t know, the <a href="https://docs.python.org/2/library/doctest.html"><code>doctest</code> module</a> is a standard Python testing
+utility that can run usage examples found in documentation comments and verify their correctness. Rust version (<code>rustdoc</code>)
+is even more powerful and flexible, allowing for example to mark additional boilerplate lines that should be run
+when testing examples, but <em>not</em> included in the generated&nbsp;documentation.</p>
+</li>
+</ul>
+<p>I&#8217;m sure the list doesn&#8217;t end here and will grow over time. As of this writing, for example, nightly builds of Rust
+already offer <a href="https://doc.rust-lang.org/stable/book/slice-patterns.html">advanced slice pattern matching</a> which are
+very similar to the <a href="https://www.python.org/dev/peps/pep-3132/">extended iterable unpacking</a> from Python&nbsp;3.</p>
+<h4>Is it worth&nbsp;it?</h4>
+<p>Depending on your background and the programming domain you are working in, you may be wondering if Rust
+is a language that&#8217;s worth looking into now, or in the near&nbsp;future.</p>
+<p>Firstly, let me emphasize that it&#8217;s still in its early stages. Although the stable version 1.0 has been released
+<a href="http://blog.rust-lang.org/2015/05/15/Rust-1.0.html">a good couple of months ago</a>, the ecosystem isn&#8217;t nearly as diverse
+and abundant as in some of the other new&nbsp;languages.</p>
+<p>If you are specifically looking to deploying Rust-written <span class="caps">API</span> servers, backends, and other &#8212; shall I use the word
+&#8212; microservices, then right now you&#8217;ll probably be better served by more established solutions, like node.js,
+Go, Java with <a href="http://docs.paralleluniverse.co/quasar/">fibers</a>, asynchronous Python on PyPy, Erlang, or similar.
+I predict Rust catching up here in the coming months, though, because the prospect of writing native speed <span class="caps">JSON</span> slingers
+with relative ease is just too compelling to&nbsp;pass.</p>
+<p>The other interesting area for Rust is <em>game programming</em>, because it&#8217;s one of the few languages capable of supporting
+even the most demanding <span class="caps">AAA</span>+ productions. The good news is that portable, open source
+<a href="http://www.piston.rs/">game engines</a> are already there. The bad news is that most of the existing knowledge
+about designing and coding high performance games is geared towards writing (stripped down) C++. The community
+is also rather <del>stubborn</del> reluctant to adopt anything that may carry even a <em>hint</em> of potentially unknown
+performance implications. Although some inroads have been made (here&#8217;s, for example,
+an <a href="https://github.com/HeroesGrave/ecs-rs">entity component system</a> written in Rust), and I wouldn&#8217;t be surprised
+to see indie games written in Rust, it probably won&#8217;t take over the industry anytime&nbsp;soon.</p>
+<p>When it comes to hardware, though, Rust may already have an upper hand. It is obviously much easier language to program in
+than pure C. Along with its toolchain&#8217;s ability to produce
+<a href="https://doc.rust-lang.org/stable/book/no-stdlib.html">minimal executables</a>, it makes for a compelling language for
+programming microcontrollers and other embedded&nbsp;devices.</p>
+<p>So in short, Rust is pretty nice. And if you have read that far, I think you should just go ahead
+and <a href="https://www.rust-lang.org/">have a look</a> for yourself&nbsp;:)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Because as much as we&#8217;d like for <a href="http://dlang.org/">D</a> to finally get <em>somewhere</em>, at this point
+we may have better luck waiting for the Year of Linux on Desktop to dawn&#8230;&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Of course, nobody has stopped the community from <a href="https://github.com/Manishearth/rust-gc">implementing it</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Strictly speaking, it&#8217;s the binding such as <code>let x = &amp;foo;</code> that translates to it. Unadorned C pointer type
+<code>Foo*</code> would correspond to mutable binding to a mutable reference in Rust, i.e. <code>let mut x = &amp;mut foo;</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Their Haskell equivalents are <code>Maybe</code> and <code>Either</code> type classes, respectively.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/rust-first-impressions.html#rust-first-impressions">Continue reading</a>
   </div>
   <hr />
@@ -87,7 +816,62 @@ and telling myself it&#8217;s all because of the low level ...</p>
 <p>One of them is a standardized and convenient approach to <span class="caps">URL</span> manipulation, akin to the
 <a href="http://docs.oracle.com/javase/7/docs/api/java/net/URI.html"><code>URI</code> class</a> in Java.
 There are some functions in <a href="https://docs.python.org/2/library/urllib.html"><code>urllib</code></a>, of course
-(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their ...</p>
+(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their <span class="caps">HTTP</span>-related
+comrades, they prove rather verbose and somewhat&nbsp;clunky.</p>
+<p><span class="caps">HTTP</span>, however, is solved by the <a href="http://python-requests.org/">Requests</a> package, so you may wonder
+if there is some analogous package for <span class="caps">URL</span> operations. The answer is affirmative, and the library in question is,
+quite whimsically, called <a href="https://github.com/gruns/furl"><em>furl</em></a>.</p>
+<h4><span class="caps">URL</span> in a&nbsp;wrap</h4>
+<p>The sole interesting part of the <em>furl</em> interface is the <code>furl</code> class. It represents a single <span class="caps">URL</span>, broken down to
+its constituents, with properties and methods for both reading them out and replacing with new&nbsp;values.</p>
+<p>Thanks to this handy (and quite obvious) abstraction, common <span class="caps">URL</span> operations become quite simple and&nbsp;self-documenting:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">furl</span> <span class="kn">import</span> <span class="n">furl</span>
+
+
+<span class="k">def</span> <span class="nf">to_absolute</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;If given ``url`` is a relative path,</span>
+<span class="sd">    make it relative to the ``base``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">furled</span><span class="o">.</span><span class="n">scheme</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">furl</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+    <span class="k">return</span> <span class="n">url</span>
+
+
+<span class="k">def</span> <span class="nf">is_same_origin</span><span class="p">(</span><span class="o">*</span><span class="n">urls</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check whether URLs are from the same origin (host:port).&quot;&quot;&quot;</span>
+    <span class="n">origins</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">netloc</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">furl</span><span class="p">,</span> <span class="n">urls</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">get_facebook_username</span><span class="p">(</span><span class="n">profile_url</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get Facebook user ID from their profile URL.&quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">profile_url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">furled</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="s">&#39;facebook.com&#39;</span> <span class="ow">or</span>
+            <span class="n">furled</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.facebook.com&#39;</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;not a Facebook URL: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">profile_url</span><span class="p">,))</span>
+    <span class="k">return</span> <span class="n">furled</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="c"># etc.</span>
+</pre></div>
+
+
+<p>This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string&nbsp;interpolation:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">?</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BASE_URL</span><span class="p">,</span> <span class="n">urlencode</span><span class="p">(</span><span class="n">query_params</span><span class="p">))</span>
+</pre></div>
+
+
+<p>Besides looking unpythonically ugly, it&#8217;s also inflexible and error-prone. If <code>BASE_URL</code> gains some innate query string
+params (<code>'http://example.com/?a=b'</code>), this method will start producing completely invalid <code>url</code>s (with two question marks,
+e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
+<p>The equivalent in <em>furl</em> has none of these&nbsp;flaws:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">BASE_URL</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+</pre></div>
+
+
+<h4>The full&nbsp;package</h4>
+<p>To see the full power of <em>furl</em>, I recommend having a look at its
+<a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
       <a class="btn" href="http://xion.io/post/code/python-furl.html#python-furl">Continue reading</a>
   </div>
   <hr />
@@ -104,7 +888,79 @@ There are some functions in <a href="https://docs.python.org/2/library/urllib.ht
   <div>
       <p><a href="http://knockoutjs.com/">Knockout</a> is a JavaScript &#8220;framework&#8221; that has always lurked in the shadows of other,
 more flashy ones. Even in the days of its relative novelty, the likes of Backbone or Ember had seemed to garner more
-widespread interest among frontend developers. Today, this hasn&#8217;t changed much, the difference being ...</p>
+widespread interest among frontend developers. Today, this hasn&#8217;t changed much, the difference being mainly
+that the spotlight is now taken by new actors (<em>*cough*</em> <a href="https://facebook.github.io/react/">React</a> <em>*cough*</em>).</p>
+<p>But Knockout has a loyal following, and for good reasons. Possibly the most imporant one is why I&#8217;ve put the word
+&#8220;framework&#8221; in quotes. Knockout is, first and foremost, a <em>data binding</em> library: it doesn&#8217;t do much else besides
+tying <span class="caps">DOM</span> nodes to JavaScript&nbsp;objects.</p>
+<p>This quality makes it both easy to learn and simple to integrate. In fact, it can very well live in just some small
+compartments of your web application, mingling easily with any server-side templating mechanism you might be using.
+It also interplays effortlessly with other <span class="caps">JS</span> libraries, and sticks very well to
+<a href="http://stackoverflow.com/q/30766900/434799">whatever duct tape you use</a> to hold your frontend stack&nbsp;together.</p>
+<p>Lastly, it&#8217;s also quite extensible. We can, for example, create our own
+<a href="http://knockoutjs.com/documentation/binding-syntax.html">bindings</a> rather easily, extending the declarative language
+used to describe relationship between the data and <span class="caps">UI</span>.</p>
+<p>In this post, I&#8217;m going to demonstrate this by implementing a very simple <code>let:</code> binding &#8212;
+a kind of &#8220;assignment&#8221; of an expression to a&nbsp;name.</p>
+<h4>From Knockout <code>with:</code> bluff</h4>
+<p>Out of box, Knockout proffers the <a href="http://knockoutjs.com/documentation/with-binding.html"><code>with:</code> binding</a>,
+a quite similar mechanism. How it may be somewhat problematic is analogous to the
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/with">widely discouraged <code>with</code> statement</a>
+in JavaScript itself. Namely, it blends several namespaces together, making it harder to determine which object
+is being referred to. As a result, the code is more prone to&nbsp;errors.</p>
+<p>On the other hand, freeing the developer from repeating long and complicated expressions is obviously valuable.
+Perhaps reducing them to nil is not the right approach, though, so how about we just shorten them
+to a more manageable length? Well, that&#8217;s exactly what the <code>let:</code> binding is meant to&nbsp;do:</p>
+<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">data-bind=</span><span class="s">&quot;let: { addr: currentUser.personalInfo.address }&quot;</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line1&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- ko if: addr.line2 --&gt;</span>
+    <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line2&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- /ko --&gt;</span>
+  <span class="nt">&lt;p&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.city&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>,
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.region&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
+  <span class="nt">&lt;/p&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.country&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</pre></div>
+
+
+<p>Making it happen turns out to be pretty&nbsp;easy.</p>
+<h4>Binding&nbsp;contract</h4>
+<p>To define a Knockout binding, up to two things are needed. We have to specify what the library should&nbsp;do:</p>
+<ul>
+<li>when the binding is first applied to a <span class="caps">DOM</span> node (the <code>init</code> method)</li>
+<li>when any of the <a href="http://knockoutjs.com/documentation/observables.html">observed values</a> changes (the <code>update</code> method)</li>
+</ul>
+<p>Not every binding has to implement both methods. In our cases, only the <code>init</code> is necessary, because all we have to do
+is modify the <em>binding context</em>.</p>
+<p>What&#8217;s that? Shortly speaking, a <a href="http://knockoutjs.com/documentation/binding-context.html">binding context</a>,
+is an object holding all the data you can potentially bind to your <span class="caps">DOM</span> nodes. Think of it as a namespace, or local scope:
+whatever&#8217;s in there can be used directly inside <code>data-bind</code> attributes.</p>
+<h4><code>let:</code> it&nbsp;go</h4>
+<p>Therefore, all that the <code>let:</code> binding has to do is to extend the context with a mapping passed to it as an argument.
+Well, almost&nbsp;all:</p>
+<div class="highlight"><pre><span class="nx">ko</span><span class="p">.</span><span class="nx">bindingHandlers</span><span class="p">[</span><span class="s1">&#39;let&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nx">init</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">valueAccessor</span><span class="p">,</span> <span class="nx">allBindings</span><span class="p">,</span> <span class="nx">viewModel</span><span class="p">,</span> <span class="nx">bindingContext</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">innerContext</span> <span class="o">=</span> <span class="nx">bindingContext</span><span class="p">.</span><span class="nx">extend</span><span class="p">(</span><span class="nx">valueAccessor</span><span class="p">);</span>
+        <span class="nx">ko</span><span class="p">.</span><span class="nx">applyBindingsToDescendants</span><span class="p">(</span><span class="nx">innerContext</span><span class="p">,</span> <span class="nx">element</span><span class="p">);</span>
+        <span class="k">return</span> <span class="p">{</span> <span class="nx">controlsDescendantBindings</span><span class="o">:</span> <span class="kc">true</span> <span class="p">};</span>
+    <span class="p">}</span>
+<span class="p">};</span>
+</pre></div>
+
+
+<p>The resulting <code>innerContext</code> is a copy of the original <code>bindingContext</code>, augmented with additional properties from
+the argument of <code>let:</code> (those are available through <code>valueAccessor</code>). Once we have it, though, we need to handle it
+in a little special&nbsp;way.</p>
+<p>Normally, Knockout is processing all bindings recursively, pasing down the same <code>bindingContext</code> (which ultimately
+comes from the root <code>viewModel</code>). But since we want to locally alter the context, we also need to interrupt this regular
+way and take care of the lower-level <span class="caps">DOM</span> nodes&nbsp;ourselves.</p>
+<p>This is exactly what the overly-long <code>ko.applyBindingsToDescendants</code> function is doing. The only caveat is that Knockout
+has to be <a href="http://knockoutjs.com/documentation/custom-bindings-controlling-descendant-bindings.html">told explicitly</a>
+about our intentions through the <code>return</code> value from <code>init</code>. Otherwise, it would try to apply the <em>original</em>
+<code>bindingContext</code> recursively, which in our case would amount to applying it <strong>twice</strong>.
+<code>{ controlsDescendantBindings: true }</code> prevents Knockout from doing so&nbsp;erroneously.</p>
       <a class="btn" href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">Continue reading</a>
   </div>
   <hr />
@@ -123,80 +979,95 @@ widespread interest among frontend developers. Today, this hasn&#8217;t changed 
 the nice thing about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a> is the clean, layered structure of various abstractions
 it&nbsp;utilizes.</p>
 <p>Regretably, though, we know that <a href="https://en.wikipedia.org/wiki/Leaky_abstraction">software abstractions tend to leak</a>.
-Inn particular, any <span class="caps">ORM</span> seem to be a poster child of this rule, especially ...</p>
+Inn particular, any <span class="caps">ORM</span> seem to be a poster child of this rule, especially in the popular opinion among
+<a href="https://www.reddit.com/r/programming/search?q=ORM&amp;restrict_sr=on">developer crowds</a>.
+By design, they&#8217;re intended to hide at least <em>some</em> details of the operations on a database,
+but those very details can be quite critical at times. There are situations when we simply want to know
+what <em>exactly</em> is going on, and how all those model classes and mappers and relationships translate
+to the actual <span class="caps">SQL</span>&nbsp;code.</p>
+<p>To make it a little more concrete, let&#8217;s focus on the SQLAlchemy <code>Query</code> class. Given such a query, we&#8217;d like to get
+the final <span class="caps">SQL</span> representation of it, the one that&#8217;s ultimately sent to the database, It could be useful
+for any number of things, from logging<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> to profiling, or just displaying in the web page&#8217;s footer,
+or even solely for prototyping in the Python <span class="caps">REPL</span>.</p>
+<p>In other words, we want to turn&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">some_email</span><span class="p">)</span>
+</pre></div>
+
+
+<p>into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">SELECT</span> <span class="n">users</span><span class="p">.</span><span class="n">id</span> <span class="k">FROM</span> <span class="n">users</span> <span class="k">WHERE</span> <span class="n">users</span><span class="p">.</span><span class="n">email</span> <span class="o">=</span> <span class="p">:</span><span class="mi">1</span>
+</pre></div>
+
+
+<p>regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related
+<code>JOIN</code>s it&nbsp;involves.</p>
+<h4>It&#8217;s a&nbsp;dialect</h4>
+<p>There is one aspect we cannot really universalize, though. It&#8217;s the specific <em>database backend</em> that SQLAlchemy
+should compile our query for. Shrugging off syntactical and semantical differences between database engines
+is one thing that using an <span class="caps">ORM</span> can potentially buy us, but if we want to get down to the <span class="caps">SQL</span> level,
+we need to be specific about&nbsp;it.</p>
+<p>In SQLAlchemy&#8217;s parlance, any specific variant of the <span class="caps">SQL</span> language is called a <em>dialect</em>. Most of the time,
+you&#8217;ll be interested in the particular dialect your database of choice is using. This is easily obtainable from
+the <a href="docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session">database <code>Session</code></a>:</p>
+<div class="highlight"><pre><span class="n">dialect</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
+</pre></div>
+
+
+<p>The resulting
+<a href="http://docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Dialect"><code>Dialect</code> object</a>
+is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of
+the database backends it supports. For our purposes, though, it can be treated as a completely opaque&nbsp;token.</p>
+<h4>Compile <span class="amp">&amp;</span>&nbsp;unwrap</h4>
+<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representatio of our <code>Query</code>.
+Or, to be more precise, the compiled version of the query&#8217;s
+<a href="docs.sqlalchemy.org/en/latest/core/selectable.html#sqlalchemy.sql.expression.Select"><code>Select</code> statement</a></p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="s">&#39;foo@example.com&#39;</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">print</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span><span class="p">))</span>
+<span class="n">SELECT</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span>
+<span class="n">FROM</span> <span class="n">users</span>
+<span class="n">WHERE</span> <span class="n">users</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="o">%</span><span class="p">(</span><span class="n">email_1</span><span class="p">)</span><span class="n">s</span>
+</pre></div>
+
+
+<p>Perhaps unsurprisingly, even after compilation the result is still just <em>another object</em>:
+the <a href="docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Compiled"><code>Compiled</code> one</a>.
+As you can see, however, the actual <span class="caps">SQL</span> text is just its <code>__str__</code><span class="quo">&#8216;</span>ing representation, which we can <code>print</code> directly
+or obtain with <code>str()</code> or <code>unicode()</code>.</p>
+<h4><code>Query.to_sql</code></h4>
+<p>But obviously, we don&#8217;t want to type the above incantations everytime we need to take a peek at the generated <span class="caps">SQL</span>
+for an <span class="caps">ORM</span> query. Probably the best solution is to extend the <code>Query</code> class so that it offers this additional
+functionality under a new&nbsp;method:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
+
+
+<span class="k">class</span> <span class="nc">Query</span><span class="p">(</span><span class="n">_Query</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Custom, enhanced SQLALchemy Query class.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">to_sql</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return a literal SQL representation of the query.&quot;&quot;&quot;</span>
+        <span class="n">dialect</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">dialect</span><span class="p">))</span>
+</pre></div>
+
+
+<p>This new <code>Query</code> class needs then be passed as
+<a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.params.query_cls"><code>query_cls</code> argument</a>
+to the constructor of <code>Session</code>. Details may vary a little bit dependening on how exactly your application is set up,
+but in most cases, it should be <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">easy enough to figure out</a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>If you&#8217;re only interested in indiscriminate logging of all queries, setting the
+<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine.params.echo"><code>echo</code> parameter</a>
+in <a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine"><code>create_engine</code></a> may be sufficient.
+Another alternative is to look directly at the
+<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#configuring-logging">logging configuration options</a>
+for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
       <a class="btn" href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Celery task in a Flask request&nbsp;context</a></h2>
-    <p>
-      Posted on Tue 03 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/celery.html">Celery</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/queue.html">queue</a>,      <a href="http://xion.io/tag/request-context.html">request context</a>      &#8226; <a href="http://xion.io/post/code/celery-include-flask-request-context.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://celeryproject.org">Celery</a> is an asynchronous task worker that&#8217;s frequently used for background processing
-in Python web apps. Rather than performing a time-consuming task within the request loop, we delegate it to a <em>queue</em>
-so that a <em>worker process</em> can pick it up when ready. The immediate benefit is much better ...</p>
-      <a class="btn" href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></a></h2>
-    <p>
-      Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/enums.html">enums</a>,      <a href="http://xion.io/tag/serialization.html">serialization</a>      &#8226; <a href="http://xion.io/post/code/python-enums-are-ok.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Little over two years ago, I was writing about
-<a href="http://xion.org.pl/2013/05/13/we-dont-need-no-enums-in-python/">my skepticism</a> towards the
-<a href="https://www.python.org/dev/peps/pep-0435/">addition of enum types to Python</a>. My stance has changed somewhat since then,
-and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent
-in the circumstances involving ...</p>
-      <a class="btn" href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
-    <p>
-      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
-in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
-<code>div.content</code>, and other presentational elements are still a common fact of life.
-Unless ...</p>
-      <a class="btn" href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/sqlalchemy-regex-filters.html#sqlalchemy-regex-filters">Regular expression filters in&nbsp;SQLAlchemy</a></h2>
-    <p>
-      Posted on Wed 14 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/regular-expressions.html">regular expressions</a>,      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>,      <a href="http://xion.io/tag/sql.html">SQL</a>,      <a href="http://xion.io/tag/postgres.html">Postgres</a>,      <a href="http://xion.io/tag/sqlite.html">SQLite</a>,      <a href="http://xion.io/tag/ast.html">AST</a>      &#8226; <a href="http://xion.io/post/code/sqlalchemy-regex-filters.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>The nice part about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a>
-&#8212; an <a href="https://en.wikipedia.org/wiki/Object-relational_mapping"><span class="caps">ORM</span></a> library/framework for Python &#8212;
-is that it offers much more than just mapping of <span class="caps">SQL</span> relations to model classes. At its lower level, for example,
-there exists an additional layer between those classes and raw <span class="caps">SQL</span> queries: an abstraction for the <em><span class="caps">SQL</span> language ...</em></p>
-      <a class="btn" href="http://xion.io/post/code/sqlalchemy-regex-filters.html#sqlalchemy-regex-filters">Continue reading</a>
   </div>
 </article>
 
@@ -223,6 +1094,8 @@ there exists an additional layer between those classes and raw <span class="caps
   </a>
 </p>    </footer>
   </main>
+
+<!-- Google Analytics -->
 <script type="text/javascript">
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -232,6 +1105,10 @@ there exists an additional layer between those classes and raw <span class="caps
   ga('create', 'UA-27379564-1', 'auto');
   ga('send', 'pageview');
 </script>
+<!-- End Google Analytics -->
+
+
+
 <script type="application/ld+json">
 {
   "@context" : "http://schema.org",

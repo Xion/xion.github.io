@@ -1,5 +1,472 @@
 <?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Karol Kuczmarski's Blog</title><link>http://xion.io/</link><description>def code(tea):&lt;br&gt;return 42</description><atom:link href="http://xion.io/feeds/rss.xml" rel="self"></atom:link><lastBuildDate>Mon, 28 Dec 2015 21:26:00 +0100</lastBuildDate><item><title>You Don’t Have to Interview like Google</title><link>http://xion.io/post/programming/dont-interview-like-google.html</link><description>&lt;p&gt;If you look at discussion forums for people in the &lt;span class="caps"&gt;CS&lt;/span&gt; industry &amp;#8212;
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Karol Kuczmarski's Blog</title><link>http://xion.io/</link><description>def code(tea):&lt;br&gt;return 42</description><atom:link href="http://xion.io/feeds/rss.xml" rel="self"></atom:link><lastBuildDate>Mon, 07 Mar 2016 20:36:00 -0800</lastBuildDate><item><title>Tricks with ownership in Rust</title><link>http://xion.io/post/code/rust-borrowchk-tricks.html</link><description>&lt;p&gt;&lt;em&gt;&amp;#8230;or how I learned to stop worrying and love the borrow&amp;nbsp;checker.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Having no equivalents in other languages, the &lt;a href="https://doc.rust-lang.org/book/ownership.html"&gt;borrow checker&lt;/a&gt;
+is arguably the most difficult thing to come to terms with when learning Rust. It&amp;#8217;s easy to understand why it&amp;#8217;s immensely
+useful, especially if you recall
+&lt;a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html"&gt;the various vulnerabities&lt;/a&gt;
+stemming from memory mismanagement. But that knowledge doesn&amp;#8217;t exactly help when the compiler is whining about what
+seems like a perfectly correct&amp;nbsp;code.&lt;/p&gt;
+&lt;p&gt;Let&amp;#8217;s face it: it will take some time to become productive writing efficient and safe code. It&amp;#8217;s not entirely unlike
+adjusting to a different paradigm such as functional programming when you&amp;#8217;ve been writing mostly imperative code.
+Before that happens, though, you can use some tricks to make the transition a little&amp;nbsp;easier.&lt;/p&gt;
+&lt;h4&gt;Just &lt;code&gt;clone&lt;/code&gt; it&lt;/h4&gt;
+&lt;p&gt;Ideally, we&amp;#8217;d want our code to be both correct &lt;em&gt;and&lt;/em&gt; fast. But if we cannot quite get to the &amp;#8220;correctness&amp;#8221; part yet &amp;#8212;
+because our program doesn&amp;#8217;t, you know, &lt;em&gt;compile&lt;/em&gt; &amp;#8212; then how about paying for it with a small (and refundable)
+performance&amp;nbsp;hit?&lt;/p&gt;
+&lt;p&gt;This is where the &lt;code&gt;clone&lt;/code&gt; methods comes in handy. Many problems with the borrow checker stem from trying to spread
+object ownership too thin. It is a precious resource and it&amp;#8217;s not very cheap to &amp;#8220;produce&amp;#8221;, which is why good Rust code
+often deals with just immutable or mutable&amp;nbsp;references.&lt;/p&gt;
+&lt;p&gt;But if that proves difficult, then &amp;#8220;making more objects&amp;#8221; is a great intermediate solution. Incidentally, this is what
+higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
+those languages, we can start off by replicating their&amp;nbsp;behavior.&lt;/p&gt;
+&lt;p&gt;As an example, consider a function that tries to convert some value to &lt;code&gt;String&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_to_string&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// omitted&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;If we attempt to build upon it and create a &lt;code&gt;Vec&lt;/code&gt;tor&amp;nbsp;version:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_all_to_string&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;maybe_to_string&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;res&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;find&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_err&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;then we&amp;#8217;ll be unpleasantly surprised by a borrow checker&amp;nbsp;error:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;error: cannot move out of borrowed content [E0507]
+    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
+                              ^
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
+However, a simple stepping stone in the shape of additional &lt;code&gt;clone()&lt;/code&gt; call can help move things forward just
+a little&amp;nbsp;quicker:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#[derive(Clone)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="c1"&gt;// ...&lt;/span&gt;
+&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;clone&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The performance tradeoff is explicit, and easy to find later on with a simple &lt;code&gt;grep clone\(\)&lt;/code&gt; or similar.
+When you learn to do things the Rusty way, it won&amp;#8217;t be hard to go back to your &amp;#8220;hack&amp;#8221; and fix it&amp;nbsp;properly.&lt;/p&gt;
+&lt;h4&gt;Refcounting to the&amp;nbsp;rescue&lt;/h4&gt;
+&lt;p&gt;Adding &lt;code&gt;clone()&lt;/code&gt; willy-nilly to make the code compile is a valid workaround when we&amp;#8217;re just learning. Sometimes, however,
+even some gratuitous cloning doesn&amp;#8217;t &lt;em&gt;quite&lt;/em&gt; solve the problem, because the &lt;code&gt;clone()&lt;/code&gt; itself can become an&amp;nbsp;issue.&lt;/p&gt;
+&lt;p&gt;For one, it requires our objects to implement the &lt;a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"&gt;&lt;code&gt;Clone&lt;/code&gt; trait&lt;/a&gt;.
+This was apparent even in our previous example, since we had to add a &lt;code&gt;#[derive(Clone)]&lt;/code&gt; attribute to the &lt;code&gt;struct Error&lt;/code&gt;
+in order to make it &lt;code&gt;clone&lt;/code&gt;-able.&lt;/p&gt;
+&lt;p&gt;Fortunately, in the vast majority of cases this will be all that&amp;#8217;s necessary, as most built-in types in Rust implement
+&lt;code&gt;Clone&lt;/code&gt; already. One notable exception are &lt;em&gt;function traits&lt;/em&gt; (&lt;code&gt;FnOnce&lt;/code&gt;, &lt;code&gt;Fn&lt;/code&gt;, and &lt;code&gt;FnMut&lt;/code&gt;) which are used to store
+and refer to &lt;em&gt;closures&lt;/em&gt;&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;. Structures and other custom types that contain them (or those which &lt;em&gt;may&lt;/em&gt; contain them)
+cannot therefore implement &lt;code&gt;Clone&lt;/code&gt; through a simple &lt;code&gt;#[derive]&lt;/code&gt; annotation:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c-Doc"&gt;/// A value that&amp;#39;s either there already&lt;/span&gt;
+&lt;span class="c-Doc"&gt;/// or can be obtained by calling a function.&lt;/span&gt;
+&lt;span class="cp"&gt;#[derive(Clone)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;LazyValue&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Clone&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Immediate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Deferred&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Fn&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;!-- --&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&amp;gt; T + &amp;#39;static` [E0277]
+    #[derive(Clone)]
+             ^~~~~
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
+and this one will likely sound familiar if you&amp;#8217;ve ever worked with a higher level language before. Instead of actually
+cloning an object, you can merely increment its &lt;em&gt;reference counter&lt;/em&gt;. As the most rudimentary kind of garbage collection,
+this allows to safely share the object between multiple &amp;#8220;owners&amp;#8221;, where each can behave as if it had
+its own copy of&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;Rust&amp;#8217;s pointer type that provides reference counting capabilities is called &lt;code&gt;std::rc::Rc&lt;/code&gt;. Conceptually, it is analogous
+to &lt;code&gt;std::shared_ptr&lt;/code&gt; from C++, and it similarly keeps the refcount updated when the pointer is &amp;#8220;acquired&amp;#8221; (&lt;code&gt;clone&lt;/code&gt;-ed)
+and &amp;#8220;released&amp;#8221; (&lt;code&gt;drop&lt;/code&gt;-ed). Because no data is moved around during either of those two operations, &lt;code&gt;Rc&lt;/code&gt; can refer even
+to types whose size isn&amp;#8217;t known at compilation time, like abstract&amp;nbsp;closures:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;rc&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Rc&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="cp"&gt;#[derive(Clone)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;LazyValue&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Clone&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Immediate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Deferred&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Rc&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Fn&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Wrapping them in &lt;code&gt;Rc&lt;/code&gt; therefore makes them &amp;#8220;cloneable&amp;#8221;. They aren&amp;#8217;t actually cloned, of course, but because of
+the inherent immutability of Rust types they will appear so to any outside observer&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;h4&gt;Move&amp;nbsp;it!&lt;/h4&gt;
+&lt;p&gt;Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
+There is &lt;em&gt;ownership&lt;/em&gt;, which is passed around by moving the values; and there is &lt;em&gt;borrowing&lt;/em&gt;, which means operating
+on them through&amp;nbsp;references.&lt;/p&gt;
+&lt;p&gt;When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
+has to be copiously sprinkled with &lt;code&gt;&amp;amp;&lt;/code&gt; and &lt;code&gt;&amp;amp;mut&lt;/code&gt;, and may sometimes require explicit lifetime annotations. All these
+have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
+of the program&amp;#8217;s&amp;nbsp;logic.&lt;/p&gt;
+&lt;p&gt;Therefore it is generally preferable, if at all possible, to expose &lt;span class="caps"&gt;API&lt;/span&gt; that deals with data directly
+and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
+stages of our algorithms. It turns out it&amp;#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
+of producing a moved&amp;nbsp;value.&lt;/p&gt;
+&lt;p&gt;Take our first example. The intuitively named &lt;code&gt;Vec::iter&lt;/code&gt; method produces an iterator that we can &lt;code&gt;map&lt;/code&gt; over, but does
+it really go over the actual &lt;em&gt;items&lt;/em&gt; in the vector? Nope! It gives use a &lt;em&gt;reference&lt;/em&gt; to each one &amp;#8212; a borrow, if you will
+&amp;#8212; which exactly why we originally had to use &lt;code&gt;clone&lt;/code&gt; to get out of this&amp;nbsp;bind.&lt;/p&gt;
+&lt;p&gt;Instead, why not just get the elements themselves, by moving them out of the vector? &lt;code&gt;Vec::into_iter&lt;/code&gt; allows to do exactly&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and enables us to remove the &lt;code&gt;clone()&lt;/code&gt; call. The family of &lt;code&gt;into_X&lt;/code&gt; (or even just &lt;code&gt;into&lt;/code&gt;) methods can be reliably counted
+on to work like that at least in the standard library. They are also part of a more-or-less official
+&lt;a href="https://aturon.github.io/style/naming.html#conversions"&gt;naming convention&lt;/a&gt; that you should also follow in your own&amp;nbsp;code.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Note how this is different from function &lt;em&gt;types&lt;/em&gt;, i.e. &lt;code&gt;fn(A, B, C, ...) -&amp;gt; Ret&lt;/code&gt;. It is because plain functions
+do not carry their closure environments along with them. This makes them little more than just pointers to some code,
+and those can be freely &lt;code&gt;Clone&lt;/code&gt;-d (or even &lt;code&gt;Copy&lt;/code&gt;-ed).&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;If you want both shared ownership (&amp;#8220;fake cloneability&amp;#8221;) &lt;em&gt;and&lt;/em&gt; the ability to mutate the shared value,
+take a look at the &lt;a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"&gt;&lt;code&gt;RefCell&lt;/code&gt; type&lt;/a&gt; and how it can be
+&lt;a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition"&gt;wrapped in &lt;code&gt;Rc&lt;/code&gt;&lt;/a&gt; to achieve both.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Karol Kuczmarski</dc:creator><pubDate>Mon, 07 Mar 2016 20:36:00 -0800</pubDate><guid>tag:xion.io,2016-03-07:post/code/rust-borrowchk-tricks.html</guid><category>Rust</category><category>borrow checker</category><category>reference counting</category><category>traits</category></item><item><title>Requirements for Python’s pip</title><link>http://xion.io/post/code/python-pip-requirements.html</link><description>&lt;p&gt;In this post I&amp;#8217;ll describe all (hopefully all!) the various ways you can specify a single dependency for a Python&amp;nbsp;package.&lt;/p&gt;
+&lt;p&gt;This assumes &lt;em&gt;pip&lt;/em&gt; is used for installation. The list of dependencies then goes either in &lt;code&gt;install_requires=&lt;/code&gt;
+parameter of the &lt;code&gt;setup&lt;/code&gt; function within &lt;em&gt;setup.py&lt;/em&gt;, or as a separate &lt;em&gt;requirements.txt&lt;/em&gt; file. Commonly, it will actually
+go in both places, with the latter being the canonical source of&amp;nbsp;truth:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;setuptools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;setup&lt;/span&gt;
+
+&lt;span class="k"&gt;with&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;requirements.txt&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;rf&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;setup&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
+        &lt;span class="c"&gt;# ...&lt;/span&gt;
+        &lt;span class="n"&gt;install_requires&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;rf&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readlines&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;
+    &lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;More details about this approach can be found in
+&lt;a href="http://xion.org.pl/2014/01/27/anathomy-of-a-python-package/"&gt;one of my previous posts&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Here, I will concentrate on the format of a single line in &lt;em&gt;requirements.txt&lt;/em&gt; that defines a dependency.
+There are numerous variants that &lt;em&gt;pip&lt;/em&gt; supports, and they are all described in excruciating detail in
+&lt;a href="https://www.python.org/dev/peps/pep-0440/"&gt;&lt;span class="caps"&gt;PEP&lt;/span&gt; 440&lt;/a&gt;. This post shall serve as a short reference on the most useful&amp;nbsp;ones.&lt;/p&gt;
+&lt;h4&gt;Package name (and&amp;nbsp;version)&lt;/h4&gt;
+&lt;p&gt;The simplest and most common option is to identify a dependency by its package&amp;nbsp;name:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This will locate it in a global index of packages, which is sometimes called a &amp;#8220;cheese shop&amp;#8221;. Currently,
+by far the most popular package registry for Python is &lt;a href="https://pypi.python.org"&gt;PyPI&lt;/a&gt;, and &lt;em&gt;pip&lt;/em&gt; uses it by default&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Without any further modifiers, &lt;em&gt;pip&lt;/em&gt; will download and install the &amp;#8220;current&amp;#8221; version of the package &amp;#8212; either the newest,
+or the one designated explicitly by a maintainer. This obviously makes the dependency somewhat unpredictable,
+for it can mean unintended upgrades that introduce breaking changes to your&amp;nbsp;code.&lt;/p&gt;
+&lt;p&gt;To prevent this, you&amp;#8217;d normally &lt;em&gt;pin&lt;/em&gt; the dependency to an exact version&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy==0.9.10
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Other comparison operators are also&amp;nbsp;available:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy&amp;gt;=0.9.10
+SQLAlchemy&amp;lt;1.0.0
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and can even be&amp;nbsp;combined:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy&amp;gt;=0.9,&amp;lt;1.0.0
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Specs like that will make &lt;em&gt;pip&lt;/em&gt; find the newest version that&amp;#8217;s within given range. Assuming your dependency follows
+the &lt;a href="http://semver.org/"&gt;semantic versioning&lt;/a&gt; scheme, this will allow you to stay on top of any minor bugfixes
+and improvements to an older release (0.9.x here), without the risk of accidentally upgrading to a new one (1.x)
+that your code is not compatible with&amp;nbsp;yet.&lt;/p&gt;
+&lt;h4&gt;Repository &lt;span class="caps"&gt;URL&lt;/span&gt;&lt;/h4&gt;
+&lt;p&gt;Sometimes you want to live on the bleeding edge, though, and depend not just on the latest &lt;em&gt;release&lt;/em&gt;,
+but the head &lt;em&gt;commit&lt;/em&gt; to the package&amp;#8217;s repository. This makes sense especially in large systems
+that are distributed among multiple repos, and where development happens in&amp;nbsp;lockstep.&lt;/p&gt;
+&lt;p&gt;For those occasions, and a few others, &lt;em&gt;pip&lt;/em&gt; can recognize direct repository URLs. They are in the&amp;nbsp;format:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;$VCS+$PROTOCOL://$URL@$LABEL#egg=$PACKAGE
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;where the &lt;code&gt;$PROTOCOL&lt;/code&gt; part can be optional if the version control system has a default there. That&amp;#8217;s for example
+the case for &lt;code&gt;git&lt;/code&gt;, which is of course the most important &lt;span class="caps"&gt;VCS&lt;/span&gt; you&amp;#8217;d be interested in&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;git://git.example.com/somepackage#egg=somepackage
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Note that the &lt;code&gt;#egg=$PACKAGE&lt;/code&gt; part is not a part of the &lt;code&gt;$URL&lt;/code&gt;, and it&amp;#8217;s only there to give a local name for the package
+distribution. This is what makes it possible to refer to it later via &lt;em&gt;pip&lt;/em&gt;, if only to remove it with
+&lt;code&gt;pip uninstall $PACKAGE&lt;/code&gt;.
+Of course, the sanest practice is to use the PyPI moniker if&amp;nbsp;possible.&lt;/p&gt;
+&lt;p&gt;When no &lt;code&gt;$LABEL&lt;/code&gt; is given, &lt;em&gt;pip&lt;/em&gt; will use the &lt;span class="caps"&gt;HEAD&lt;/span&gt;, trunk, tip, or the equivalent default/current revision from the repo.
+Often though (at least in case of Git), you would also pick a branch, tag, or even a particular &lt;em&gt;commit hash&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;git+https://github.com/Xion/unmatcher.git@0.1.3.1#egg=unmatcher
+git+ssh://github.com/You/yourpackage.git@master#egg=yourpackage
+git+https://github.com/mitsuhiko/jinja2.git@5b498453b5898257b2287f14ef6c363799f1405a#egg=Jinja2
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The last two options could be a good choice even with third party packages, when you don&amp;#8217;t want to wait for a new PyPI
+release to get a necessary feature or an urgent bug&amp;nbsp;fix.&lt;/p&gt;
+&lt;h4&gt;Local&amp;nbsp;filesystem&lt;/h4&gt;
+&lt;p&gt;Lastly, you can ask &lt;em&gt;pip&lt;/em&gt; to install a package from a local directory or archive. The former option is often used
+with the &lt;code&gt;-e&lt;/code&gt; (&lt;code&gt;--editable&lt;/code&gt;) flag for &lt;code&gt;pip install&lt;/code&gt;. This installs the package in the so-called &lt;em&gt;development mode&lt;/em&gt;,
+allowing you to edit its source code&amp;nbsp;in-place:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;$ pip install -e /home/me/Code/myotherpackage
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;You almost certainly don&amp;#8217;t want to put this line in &lt;em&gt;requirements.txt&lt;/em&gt;: you should still be pulling the other package
+from PyPI. But if it&amp;#8217;s your own one  &amp;#8212; maybe a self-contained utility library used by your main program &amp;#8212;
+this setup will be very helpful for making changes to it, informed by your own usage of the&amp;nbsp;package.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;This can be changed with &lt;code&gt;--index_url&lt;/code&gt; flag to &lt;code&gt;pip install&lt;/code&gt;. Running local indexes is a good practice
+for Python shops, especially those that rely on &lt;code&gt;pip install&lt;/code&gt; as part of their deployment process.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;If the package uses &lt;a href="http://semver.org/"&gt;semantic versioning&lt;/a&gt;, a possible alternative to &lt;code&gt;==&lt;/code&gt; is &lt;code&gt;~=&lt;/code&gt;,
+which means &amp;#8220;compatible&amp;#8221; version. The precise meaning of this is
+&lt;a href="https://www.python.org/dev/peps/pep-0440/#compatible-release"&gt;somewhat complicated&lt;/a&gt;, but it roughly means that upgrades
+are permitted as long as nothing in the public interface changes.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;&lt;a href="https://pip.pypa.io/en/latest/reference/pip_install/#vcs-support"&gt;Other options&lt;/a&gt; include &lt;code&gt;hg&lt;/code&gt; (Mercurial),
+&lt;code&gt;svn&lt;/code&gt;, and &lt;code&gt;bzr&lt;/code&gt; (Bazaar).&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Karol Kuczmarski</dc:creator><pubDate>Sun, 21 Feb 2016 09:01:00 -0800</pubDate><guid>tag:xion.io,2016-02-21:post/code/python-pip-requirements.html</guid><category>Python</category><category>pip</category><category>packages</category><category>dependencies</category></item><item><title>Moving out of a container in Rust</title><link>http://xion.io/post/code/rust-move-out-of-container.html</link><description>&lt;p&gt;To prevent the kind of memory errors that plagues many C programs,
+the &lt;a href="https://doc.rust-lang.org/book/ownership.html"&gt;&lt;em&gt;borrow checker&lt;/em&gt; in Rust&lt;/a&gt; tracks how data is moved between variables,
+or accessed via references. This is all done at compile time, with zero runtime overhead, and is a sizeable part
+of Rust&amp;#8217;s value&amp;nbsp;offering.&lt;/p&gt;
+&lt;p&gt;Like all rigid and automated systems, however, it is necessarily constrained and cannot handle all situations perfectly.
+One of its limitations is treating all objects as &lt;em&gt;atomic&lt;/em&gt;. It&amp;#8217;s impossible for a variable to own a part of some bigger
+structure, neither is it possible to maintain mutable references to two or more elements of a&amp;nbsp;collection.&lt;/p&gt;
+&lt;p&gt;If we nonetheless &lt;a href="http://is.gd/yWCYmJ"&gt;try&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;get_name&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;John&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Smith&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;()];&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot; &amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;we&amp;#8217;ll be served with a classic borrow checker&amp;nbsp;error:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&amp;lt;anon&amp;gt;:3:25: 3:33 error: cannot move out of indexed content [E0507]
+&amp;lt;anon&amp;gt;:3     let fullname = join(names[0], names[1]);
+                                 ^~~~~~~~
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Behind its rather cryptic verbiage, it informs us that we tried to move a &lt;em&gt;part&lt;/em&gt; of the &lt;code&gt;names&lt;/code&gt; vector &amp;#8212; its first
+element &amp;#8212; to a new variable (here, a function parameter). This isn&amp;#8217;t allowed, because in principle it would
+render the vector invalid from the standpoint of strict memory safety. Rust would no longer guarantee &lt;code&gt;names[0]&lt;/code&gt; to be
+a legal &lt;code&gt;String&lt;/code&gt;: its internal pointer could&amp;#8217;ve been invalidated by the code which the element moved to
+(the &lt;code&gt;join&lt;/code&gt; function)&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;But while commendable, this guarantee isn&amp;#8217;t exactly &lt;em&gt;useful&lt;/em&gt; here. Even though &lt;code&gt;names[0]&lt;/code&gt; would technically be invalid,
+there isn&amp;#8217;t anyone to actually notice this fact. The &lt;code&gt;names&lt;/code&gt; vector is inaccessible outside of the function
+it&amp;#8217;s defined in, and even the function itself doesn&amp;#8217;t look at it after the move. In its present form,
+the program is inarguably correct: Rust&amp;#8217;s borrow checker is just incapable of ascertaining&amp;nbsp;it.&lt;/p&gt;
+&lt;h4&gt;Pointers to the&amp;nbsp;rescue?&lt;/h4&gt;
+&lt;p&gt;Vectors wouldn&amp;#8217;t be very useful or efficient, though, if we could only obtain &lt;a href="https://doc.rust-lang.org/std/marker/trait.Copy.html"&gt;copies&lt;/a&gt; or &lt;a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"&gt;clones&lt;/a&gt; of their elements.
+As this is an inherent limitation of Rust&amp;#8217;s memory model, and applies to &lt;em&gt;all&lt;/em&gt; compound types
+(structs, hashmaps, etc.), it&amp;#8217;s been recognized and countermeasures are&amp;nbsp;available.&lt;/p&gt;
+&lt;p&gt;However, the &lt;a href="http://is.gd/o3GRnw"&gt;idiomatic practice&lt;/a&gt; is to actually leave the elements be and access them
+solely through&amp;nbsp;references:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;get_name&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;John&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Smith&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;()];&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;clone&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot; &amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The obvious downside of this approach is that it requires an interface change to &lt;code&gt;join&lt;/code&gt;: it now has to accept
+pointers instead of actual objects&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;. And since the result is a completely new &lt;code&gt;String&lt;/code&gt;, we have to either bite
+the bullet and &lt;code&gt;clone&lt;/code&gt;, or write a more awkward &lt;code&gt;join_into(a: &amp;amp;mut String, b: &amp;amp;String)&lt;/code&gt; function.&lt;br/&gt;
+In general, making an &lt;span class="caps"&gt;API&lt;/span&gt; switch from actual objects to references has an annoying tendency to percolate up
+the call stacks and abstraction&amp;nbsp;layers.&lt;/p&gt;
+&lt;h4&gt;Vector&amp;nbsp;solution&lt;/h4&gt;
+&lt;p&gt;If we still insist on moving the elements out, at least in case of vector we aren&amp;#8217;t &lt;em&gt;completely&lt;/em&gt; out of luck.
+The &lt;code&gt;Vec&lt;/code&gt; type offers several specialized methods that can slice, dice, and splice the collection in various ways.
+Those&amp;nbsp;include:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_first"&gt;&lt;code&gt;split_first&lt;/code&gt;&lt;/a&gt; (and &lt;code&gt;split_first_mut&lt;/code&gt;)
+for cutting right after the first&amp;nbsp;element&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_last"&gt;&lt;code&gt;split_last&lt;/code&gt;&lt;/a&gt; (and &lt;code&gt;split_last_mut&lt;/code&gt;)
+for a similar cut right before the last&amp;nbsp;element&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_at"&gt;&lt;code&gt;split_at&lt;/code&gt;&lt;/a&gt; (and &lt;code&gt;split_at_mut&lt;/code&gt;),
+generalized versions of the above&amp;nbsp;methods&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_off"&gt;&lt;code&gt;split_off&lt;/code&gt;&lt;/a&gt;, a partially-in-place version
+of &lt;code&gt;split_at_mut&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain"&gt;&lt;code&gt;drain&lt;/code&gt;&lt;/a&gt; for moving all elements from a specified&amp;nbsp;range&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Other types may offer different methods, depending on their particular data layout, though &lt;code&gt;drain&lt;/code&gt; should be available
+on any data structure that can be iterated&amp;nbsp;over.&lt;/p&gt;
+&lt;h4&gt;Structural&amp;nbsp;advantage&lt;/h4&gt;
+&lt;p&gt;What about user-defined types, such as &lt;code&gt;struct&lt;/code&gt;s?&lt;/p&gt;
+&lt;p&gt;Fortunately, these are covered by the compiler itself. Since accessing &lt;code&gt;struct&lt;/code&gt; fields is a fully compile-time
+operation, it is possible to track the ownership of each individual object that makes up the structure.
+Thus there are no obstacles to simply &lt;a href="http://is.gd/ZUI2Mn"&gt;moving all the fields&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Person&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;first_name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;last_name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;get_name&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Person&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;first_name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;John&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                   &lt;/span&gt;&lt;span class="n"&gt;last_name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Smith&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;()};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;first_name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;last_name&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;h4&gt;If all else&amp;nbsp;fails&amp;#8230;&lt;/h4&gt;
+&lt;p&gt;This leaves us with some rare cases when the container&amp;#8217;s interface doesn&amp;#8217;t &lt;em&gt;quite&lt;/em&gt; support the exact subset of elements
+we want to move out. If we don&amp;#8217;t want to &lt;code&gt;drain&lt;/code&gt; them all and inspect every item for potential preservation,
+it may be time to skirt around the more dangerous areas of the&amp;nbsp;language.&lt;/p&gt;
+&lt;p&gt;But I don&amp;#8217;t necessarily mean going all out with &lt;code&gt;unsafe&lt;/code&gt; blocks, pointers, and (let&amp;#8217;s be honest) segfaults.
+Instead, we can look at the gray zone between them and the regular, borrow-checked Rust&amp;nbsp;code.&lt;/p&gt;
+&lt;p&gt;Some of the functions inside the &lt;a href="https://doc.rust-lang.org/std/mem/index.html"&gt;&lt;code&gt;std::mem&lt;/code&gt; module&lt;/a&gt; can be said
+to fall into this category. Most notably, &lt;a href="https://doc.rust-lang.org/std/mem/fn.swap.html"&gt;&lt;code&gt;mem::swap&lt;/code&gt;&lt;/a&gt; and
+&lt;a href="https://doc.rust-lang.org/std/mem/fn.replace.html"&gt;&lt;code&gt;mem::replace&lt;/code&gt;&lt;/a&gt; allow us to operate directly on the memory blocks
+that back every Rust object, albeit without the dangerous ability to freely modify&amp;nbsp;them.&lt;/p&gt;
+&lt;p&gt;What those functions enable is a small sleight of hand &amp;#8212; a quick exchange of two variables or objects
+while the borrow checker &amp;#8220;isn&amp;#8217;t looking&amp;#8221;. Possessing such an ability, we can smuggle any item out of a container
+as long as we&amp;#8217;re able to provide a suitable&amp;nbsp;replacement:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;mem&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="c-Doc"&gt;/// Pick only the items under indices that are powers of two.&lt;/span&gt;
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;pick_powers_of_2&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Default&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;while&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;len&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;elem&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mem&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;replace&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;],&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;default&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;elem&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p style="text-align: center"&gt;
+    &lt;img src="http://xion.io/images/indyswap.jpg" alt="Swap!"&gt;&lt;/br&gt;
+    &lt;small&gt;Pictured: implementation of &lt;code&gt;mem::replace&lt;/code&gt;.&lt;/small&gt;
+&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://doc.rust-lang.org/std/default/trait.Default.html#tymethod.default"&gt;The &lt;code&gt;Default&lt;/code&gt; value&lt;/a&gt;,
+if available, is usually a great choice here. Alternately, a &lt;code&gt;Copy&lt;/code&gt; or &lt;code&gt;Clone&lt;/code&gt; of some other element can also work
+if it&amp;#8217;s cheap to&amp;nbsp;obtain.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;In Rust jargon, it is sometimes said that the object has been &amp;#8220;consumed&amp;#8221; there.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;For &lt;code&gt;String&lt;/code&gt;s specifically, the usual practice is to require a more generic &lt;code&gt;&amp;amp;str&lt;/code&gt; type (string slice)
+instead of &lt;code&gt;&amp;amp;String&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Karol Kuczmarski</dc:creator><pubDate>Fri, 05 Feb 2016 00:18:00 -0800</pubDate><guid>tag:xion.io,2016-02-05:post/code/rust-move-out-of-container.html</guid><category>Rust</category><category>vector</category><category>borrow checker</category><category>references</category></item><item><title>Retry idiom for Python</title><link>http://xion.io/post/code/python-retry-idiom.html</link><description>&lt;p&gt;A relatively little known feature of Python is the &lt;code&gt;else&lt;/code&gt; block for control flow statements other than &lt;code&gt;if&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;If you haven&amp;#8217;t heard about it before, you can provide such a block for both &lt;code&gt;while&lt;/code&gt; and &lt;code&gt;for&lt;/code&gt; loops,
+as well as any variant of the &lt;code&gt;try&lt;/code&gt; statement, Its functionality is roughly analogous in both&amp;nbsp;cases:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;in loops, the &lt;code&gt;else&lt;/code&gt; block is executed if the loop didn&amp;#8217;t exit abnormally (i.e. with &lt;code&gt;break&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;in &lt;code&gt;try&lt;/code&gt; constructs, the &lt;code&gt;else&lt;/code&gt; block runs if &lt;em&gt;no&lt;/em&gt; exception&amp;nbsp;happened&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Likely because of the unique semantics that don&amp;#8217;t exist in other languages, neither of those constructs has been seen much
+in real world code. Recently, however, I&amp;#8217;ve found they can be combined into a very pythonic pattern
+that&amp;#8217;s also quite&amp;nbsp;useful.&lt;/p&gt;
+&lt;h4&gt;The&amp;nbsp;trick&lt;/h4&gt;
+&lt;p&gt;Say you have a task that won&amp;#8217;t always succeed. Perhaps it&amp;#8217;s a request made to a janky server, or other network operartion
+that&amp;#8217;s prone to timeouts. Since failures are likely to be transient, you&amp;#8217;d like to retry it several more times before
+giving up&amp;nbsp;permanently.&lt;/p&gt;
+&lt;p&gt;With &lt;code&gt;try&lt;/code&gt;/&lt;code&gt;except&lt;/code&gt; block, you can detect those half-expected failures. With a simple loop, you can repeat the attempt
+for as many times as you deem feasible. Combined, they can solve the problem rather&amp;nbsp;neatly:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;MAX_RETRIES&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="c"&gt;# ... do stuff ...&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="n"&gt;SomeTransientError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="c"&gt;# ... log it, sleep, etc. ...&lt;/span&gt;
+        &lt;span class="k"&gt;continue&lt;/span&gt;
+    &lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="k"&gt;break&lt;/span&gt;
+&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="n"&gt;PermanentError&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;h4&gt;But&amp;nbsp;why?&lt;/h4&gt;
+&lt;p&gt;What&amp;#8217;s the deal with the &lt;code&gt;else&lt;/code&gt;s here, though? Are they both&amp;nbsp;necessary?&lt;/p&gt;
+&lt;p&gt;The simple answer is of course no. &lt;code&gt;else&lt;/code&gt; after either a loop or  &lt;code&gt;try&lt;/code&gt;/&lt;code&gt;except&lt;/code&gt; block is always a &lt;em&gt;syntactic sugar&lt;/em&gt;.
+Any code that contains it can be transformed into an equivalent snippet that utilizes different techniques to achieve
+the same&amp;nbsp;effect.&lt;/p&gt;
+&lt;p&gt;But this view isn&amp;#8217;t very useful, for many of the essential features in any programming languages can be dismissed
+as superfluous using this reasoning. The real question is whether the above idiom is more readable and understandable
+than the&amp;nbsp;alternatives.&lt;/p&gt;
+&lt;p&gt;To that, I posit, the answer is: &lt;em&gt;absolutely&lt;/em&gt;.&lt;/p&gt;
+&lt;h4&gt;Desugaring&lt;/h4&gt;
+&lt;p&gt;Without the double &lt;code&gt;else&lt;/code&gt;, this example would have to be written in a considerably more convoluted&amp;nbsp;way:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;retries&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;MAX_RETRIES&lt;/span&gt;
+&lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="n"&gt;retries&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="c"&gt;# ... do stuff ...&lt;/span&gt;
+        &lt;span class="k"&gt;break&lt;/span&gt;
+    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="n"&gt;SomeTransientError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="c"&gt;# ... log it, sleep, etc. ...&lt;/span&gt;
+        &lt;span class="n"&gt;retries&lt;/span&gt; &lt;span class="o"&gt;-=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;retries&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="n"&gt;PermanentError&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Although at first glance the difference may be minuscule, this version adds significant extra busywork the programmer
+has to pay careful attention&amp;nbsp;to:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;The &lt;code&gt;retries&lt;/code&gt; variable now has to be explicit, because the final conditional statement must look at its&amp;nbsp;value.&lt;/li&gt;
+&lt;li&gt;We can&amp;#8217;t use a &lt;code&gt;for&lt;/code&gt; loop anymore (e.g. &lt;code&gt;for retries in range(MAX_RETRIES)&lt;/code&gt;), because we wouldn&amp;#8217;t distinguish the
+&amp;#8220;success at last try&amp;#8221; and &amp;#8220;retry limit exceeded&amp;#8221; cases: they&amp;#8217;d both result in &lt;code&gt;retries&lt;/code&gt; equal to &lt;code&gt;MAX_RETRIES - 1&lt;/code&gt;
+after the loop&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/li&gt;
+&lt;li&gt;As a result, we have to remember to decrement the counter ourselves upon an&amp;nbsp;error.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Additionally, the &lt;code&gt;break&lt;/code&gt; is easy to miss amidst the actual logic within the &lt;code&gt;try&lt;/code&gt; block, both for developer
+who writes the code and for any subsequent readers. An alternative is to move it outside of the &lt;code&gt;try&lt;/code&gt;/&lt;code&gt;except&lt;/code&gt; clause,
+but that in turn reintroduces &lt;code&gt;continue&lt;/code&gt; into the &lt;code&gt;except&lt;/code&gt; branch and further complicates the whole&amp;nbsp;flow.&lt;/p&gt;
+&lt;p&gt;In short, the desugared version is more error-prone (all those off-by-ones!) and also quite&amp;nbsp;inscrutable.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Or to &lt;code&gt;1&lt;/code&gt;, if we count from &lt;code&gt;MAX_RETRIES&lt;/code&gt; down to zero.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Karol Kuczmarski</dc:creator><pubDate>Wed, 27 Jan 2016 17:48:00 -0800</pubDate><guid>tag:xion.io,2016-01-27:post/code/python-retry-idiom.html</guid><category>Python</category><category>exceptions</category><category>else</category></item><item><title>You Don’t Have to Interview like Google</title><link>http://xion.io/post/programming/dont-interview-like-google.html</link><description>&lt;p&gt;If you look at discussion forums for people in the &lt;span class="caps"&gt;CS&lt;/span&gt; industry &amp;#8212;
 like &lt;a href="https://www.reddit.com/r/cscareerquestions/"&gt;/r/cscareequestions&lt;/a&gt; or even just Hacker News &amp;#8212;
 you&amp;#8217;ll find lots of talk about the so called &lt;em&gt;Big Four&lt;/em&gt;&amp;nbsp;companies.&lt;/p&gt;
 &lt;p&gt;This is mostly in the context of applying to them, or going through their interview process.
@@ -80,12 +547,12 @@ This often includes some currently large and/or successful but still &amp;#8220;
 among people who &lt;em&gt;do&lt;/em&gt; get hired, as their success could easily be construed as mostly luck.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Karol Kuczmarski</dc:creator><pubDate>Mon, 28 Dec 2015 21:26:00 +0100</pubDate><guid>tag:xion.io,2015-12-28:post/programming/dont-interview-like-google.html</guid><category>Google</category><category>interviews</category><category>startups</category><category>career</category><category>hiring</category></item><item><title>Rust: first impressions</title><link>http://xion.io/post/code/rust-first-impressions.html</link><description>&lt;p&gt;Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this
+&lt;/div&gt;</description><dc:creator xmlns:dc="http://purl.org/dc/elements/1.1/">Karol Kuczmarski</dc:creator><pubDate>Mon, 28 Dec 2015 21:26:00 -0800</pubDate><guid>tag:xion.io,2015-12-28:post/programming/dont-interview-like-google.html</guid><category>Google</category><category>interviews</category><category>startups</category><category>career</category><category>hiring</category></item><item><title>Rust: first impressions</title><link>http://xion.io/post/code/rust-first-impressions.html</link><description>&lt;p&gt;Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this
 cumbersome language evokes on regular basis. When I was working in it less sporadically, I was shrugging it off
 and telling myself it&amp;#8217;s all because of the low level it operates on. Superior performance was the other side of the deal,
 and it was supposed to make all the trade-offs&amp;nbsp;worthwhile.&lt;/p&gt;
 &lt;p&gt;Now, however, I realized that running close to the metal by no means excuses the sort of clunkiness that C++ permits.
-There really is no reason, for example, why the archaically asinine separation of header &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; source files &amp;#8212;
+For example, there really is no reason why the archaically asinine separation of header &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; source files &amp;#8212;
 with its inevitable redundancy of declarations and definitions, worked around with Java-esque contraptions such as
 &lt;a href="http://c2.com/cgi/wiki?PimplIdiom"&gt;pimpl&lt;/a&gt; &amp;#8212; is still the bread and butter of C++ programs.&lt;br/&gt;
 Same goes for the lack of sane dependency management, or a universal, portable build system. None of those would be
@@ -121,14 +588,14 @@ smart pointers from C++ (e.g. &lt;code&gt;std::shared_ptr&lt;/code&gt;), it is a
 &lt;p&gt;The trick is in the clever compiler. As long as we use regular pointers, it is capable of detecting potential memory
 bugs at &lt;em&gt;compilation time&lt;/em&gt;. They are referred to as &amp;#8220;data races&amp;#8221; in Rust&amp;#8217;s terminology, and include
 &lt;a href="https://doc.rust-lang.org/stable/book/references-and-borrowing.html#issues-borrowing-prevents"&gt;perennial problems&lt;/a&gt;
-that can segfault any C code that wasn&amp;#8217;t written with utmost&amp;nbsp;care.&lt;/p&gt;
+that will segfault any C code which wasn&amp;#8217;t written with utmost&amp;nbsp;care.&lt;/p&gt;
 &lt;p&gt;Part of those safety guarantees is also the &lt;em&gt;default immutability&lt;/em&gt; of references (pointers). The simplest reference
 of type &lt;code&gt;&amp;amp;Foo&lt;/code&gt; in Rust translates to something like &lt;code&gt;const Foo * const&lt;/code&gt; in C&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;. You have to explicitly request
 mutability with the &lt;code&gt;mut&lt;/code&gt; keyword, and Rust ensures there is always at most one mutable reference to any value,
 thus preventing problems caused by &lt;a href="https://en.wikipedia.org/wiki/Pointer_aliasing"&gt;pointer aliasing&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;What if you really must sling raw pointers and access arbitrary memory locations, because e.g. you are programming
-a microcontroller where I/O is done through a special memory region? For those occassions, there is the &lt;code&gt;unsafe&lt;/code&gt;
-keyword:&lt;/p&gt;
+&lt;p&gt;But what if you really must sling raw pointers, and access arbitrary memory locations? Maybe you are programming
+a microcontroller where I/O is done through a special memory region. For those occassions, Rust has got you covered
+with the &lt;code&gt;unsafe&lt;/code&gt; keyword:&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Read the state of a diode in some imaginary uC.&lt;/span&gt;
 &lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;get_led_state&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;isize&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;bool&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
 &lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;assert&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;lt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;There are FOUR lights!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
@@ -139,20 +606,21 @@ keyword:&lt;/p&gt;
 
 
 &lt;p&gt;Its usage, like in the above example, can be &lt;em&gt;very&lt;/em&gt; localized, limited only to those places where it&amp;#8217;s truly necessary
-and guarded by appropriate checks. As a result, the interface exposed by a function like this can be deemed&amp;nbsp;safe.&lt;/p&gt;
+and guarded by appropriate checks. As a result, the interface exposed by a function like the one above
+can be considered safe. The unrestricted memory access can be contained to where it&amp;#8217;s really&amp;nbsp;inevitable.&lt;/p&gt;
 &lt;h4&gt;Typing&amp;nbsp;counts&lt;/h4&gt;
-&lt;p&gt;Those advanced facilities that ensure memory safety are not the only way in which Rust differentiates itself from C.
+&lt;p&gt;Ensuring memory safety is not the only way in which Rust differentiates itself from C.
 What separates those two languages is also a few decades of practice and research into programming semantics.
 It&amp;#8217;s only natural to expect Rust to take advantage of this&amp;nbsp;progress.&lt;/p&gt;
-&lt;p&gt;And advantage it takes! Although Rust&amp;#8217;s type system isn&amp;#8217;t nearly as advanced and complex like &amp;#8212; say &amp;#8212; Scala&amp;#8217;s,
+&lt;p&gt;And advantage it takes. Although Rust&amp;#8217;s type system isn&amp;#8217;t nearly as advanced and complex like &amp;#8212; say &amp;#8212; Scala&amp;#8217;s,
 it exhibits several interesting properties that are indicative of its relatively modern&amp;nbsp;origin.&lt;/p&gt;
 &lt;p&gt;First, it mixes the two most popular programming paradigms &amp;#8212; functional and object-oriented &amp;#8212; in roughly equal
 concentrations, as opposed to being biased towards the latter. Rust doesn&amp;#8217;t have interfaces or classes: it has &lt;em&gt;traits&lt;/em&gt;
 and their &lt;em&gt;implementations&lt;/em&gt;. Even though they often fulfill similar purposes of abstraction and encapsulation,
 these constructs are closer to the concepts of &lt;a href="https://en.wikipedia.org/wiki/Type_class"&gt;type classes&lt;/a&gt;
 and their instances, which are found for example in&amp;nbsp;Haskell.&lt;/p&gt;
-&lt;p&gt;Still, the possibly more familiar notions of &lt;span class="caps"&gt;OOP&lt;/span&gt; aren&amp;#8217;t too far off. Most of the key functionality of classes,
-for example, can be simulated by implementing &amp;#8220;default&amp;#8221; traits for user-defined&amp;nbsp;types:&lt;/p&gt;
+&lt;p&gt;Still, the more familiar notions of &lt;span class="caps"&gt;OOP&lt;/span&gt; aren&amp;#8217;t too far off. Most of the key functionality of classes, for example,
+can be simulated by implementing &amp;#8220;default&amp;#8221; traits for user-defined&amp;nbsp;types:&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Person&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
 &lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;first_name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
 &lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;last_name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
@@ -184,7 +652,7 @@ to generic parameters, closure arguments, and closure return&amp;nbsp;values.&lt
 traits, trait implementations, etc., they allow for constraining their arguments with traits. This is similar to
 the abandoned-and-not-quite-revived-yet idea of &lt;a href="https://en.wikipedia.org/wiki/Concepts_%28C%2B%2B%29"&gt;concepts in C++&lt;/a&gt;,
 or to an analogous mechanism from&amp;nbsp;C#.&lt;/p&gt;
-&lt;p&gt;The third common trend in contemporary language design is using type system to solve common tasks.
+&lt;p&gt;The third common trend in contemporary language design is to use the type system to solve common tasks.
 Rust doesn&amp;#8217;t go full Haskell and opt for monads for everything, but its &lt;code&gt;Option&lt;/code&gt; and &lt;code&gt;Result&lt;/code&gt; types are evidently
 the functional approach to error handling&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;. To facilitate their use, a powerful
 &lt;a href="https://doc.rust-lang.org/stable/book/patterns.html"&gt;&lt;em&gt;pattern matching&lt;/em&gt; facility&lt;/a&gt; is also present in&amp;nbsp;Rust.&lt;/p&gt;
@@ -230,12 +698,12 @@ when testing examples, but &lt;em&gt;not&lt;/em&gt; included in the generated&am
 &lt;/ul&gt;
 &lt;p&gt;I&amp;#8217;m sure the list doesn&amp;#8217;t end here and will grow over time. As of this writing, for example, nightly builds of Rust
 already offer &lt;a href="https://doc.rust-lang.org/stable/book/slice-patterns.html"&gt;advanced slice pattern matching&lt;/a&gt; which are
-very similar to the &lt;a href="https://www.python.org/dev/peps/pep-3132/"&gt;extend iterable unpacking&lt;/a&gt; from Python&amp;nbsp;3.&lt;/p&gt;
+very similar to the &lt;a href="https://www.python.org/dev/peps/pep-3132/"&gt;extended iterable unpacking&lt;/a&gt; from Python&amp;nbsp;3.&lt;/p&gt;
 &lt;h4&gt;Is it worth&amp;nbsp;it?&lt;/h4&gt;
 &lt;p&gt;Depending on your background and the programming domain you are working in, you may be wondering if Rust
-is a language that&amp;#8217;s worth looking into now or in the near&amp;nbsp;future.&lt;/p&gt;
+is a language that&amp;#8217;s worth looking into now, or in the near&amp;nbsp;future.&lt;/p&gt;
 &lt;p&gt;Firstly, let me emphasize that it&amp;#8217;s still in its early stages. Although the stable version 1.0 has been released
-&lt;a href="http://blog.rust-lang.org/2015/05/15/Rust-1.0.html"&gt;a good couple months ago&lt;/a&gt;, the ecosystem isn&amp;#8217;t nearly as diverse
+&lt;a href="http://blog.rust-lang.org/2015/05/15/Rust-1.0.html"&gt;a good couple of months ago&lt;/a&gt;, the ecosystem isn&amp;#8217;t nearly as diverse
 and abundant as in some of the other new&amp;nbsp;languages.&lt;/p&gt;
 &lt;p&gt;If you are specifically looking to deploying Rust-written &lt;span class="caps"&gt;API&lt;/span&gt; servers, backends, and other &amp;#8212; shall I use the word
 &amp;#8212; microservices, then right now you&amp;#8217;ll probably be better served by more established solutions, like node.js,
@@ -245,15 +713,15 @@ with relative ease is just too compelling to&amp;nbsp;pass.&lt;/p&gt;
 &lt;p&gt;The other interesting area for Rust is &lt;em&gt;game programming&lt;/em&gt;, because it&amp;#8217;s one of the few languages capable of supporting
 even the most demanding &lt;span class="caps"&gt;AAA&lt;/span&gt;+ productions. The good news is that portable, open source
 &lt;a href="http://www.piston.rs/"&gt;game engines&lt;/a&gt; are already there. The bad news is that most of the existing knowledge
-about designing and coding high performance games is geared towards writing (stripped down) C++. Tthe community
+about designing and coding high performance games is geared towards writing (stripped down) C++. The community
 is also rather &lt;del&gt;stubborn&lt;/del&gt; reluctant to adopt anything that may carry even a &lt;em&gt;hint&lt;/em&gt; of potentially unknown
 performance implications. Although some inroads have been made (here&amp;#8217;s, for example,
 an &lt;a href="https://github.com/HeroesGrave/ecs-rs"&gt;entity component system&lt;/a&gt; written in Rust), and I wouldn&amp;#8217;t be surprised
 to see indie games written in Rust, it probably won&amp;#8217;t take over the industry anytime&amp;nbsp;soon.&lt;/p&gt;
-&lt;p&gt;When it comes to hardware, though, Rust may already have an upper hand. It is obviously much easier language to program
+&lt;p&gt;When it comes to hardware, though, Rust may already have an upper hand. It is obviously much easier language to program in
 than pure C. Along with its toolchain&amp;#8217;s ability to produce
-&lt;a href="https://doc.rust-lang.org/stable/book/no-stdlib.html"&gt;minimal executables&lt;/a&gt;, it makes for a compelling language to
-program microcontrollers and other embedded devices&amp;nbsp;in.&lt;/p&gt;
+&lt;a href="https://doc.rust-lang.org/stable/book/no-stdlib.html"&gt;minimal executables&lt;/a&gt;, it makes for a compelling language for
+programming microcontrollers and other embedded&amp;nbsp;devices.&lt;/p&gt;
 &lt;p&gt;So in short, Rust is pretty nice. And if you have read that far, I think you should just go ahead
 and &lt;a href="https://www.rust-lang.org/"&gt;have a look&lt;/a&gt; for yourself&amp;nbsp;:)&lt;/p&gt;
 &lt;div class="footnote"&gt;
