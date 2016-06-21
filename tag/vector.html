@@ -10,9 +10,7 @@
 
     <link href="http://xion.io/style.css" rel="stylesheet">
 
-    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
 
-    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
 
 
   <meta charset="utf-8" />
@@ -38,7 +36,7 @@
         <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
       </a>
       <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
-      <p>def code(tea):<br>return 42</p>
+      <p>fn(Tea) -> Code</p>
       <nav>
         <ul class="list">
           <li><a href="http://xion.io/page/about.html#about">About</a></li>
@@ -50,7 +48,7 @@
         <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
         <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
         <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
-        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
       </ul>
     </div>
   </aside>
@@ -61,8 +59,6 @@
       <a href="/categories.html">Categories</a>
       <a href="/tags.html">Tags</a>
       <a href="http://xion.org.pl/">Old blog</a>
-      <a href="http://xion.io/feeds/atom.xml">Atom</a>
-      <a href="http://xion.io/feeds/rss.xml">RSS</a>
     </nav>
 
 <article>
@@ -109,7 +105,8 @@ a legal <code>String</code>: its internal pointer could&#8217;ve been invalidate
 <p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
 there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
 it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
-the program is inarguably correct: Rust&#8217;s borrow checker is just incapable of ascertaining&nbsp;it.</p>
+the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
+by the borrow&nbsp;checker.</p>
 <h4>Pointers to the&nbsp;rescue?</h4>
 <p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
 As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
@@ -128,7 +125,7 @@ solely through&nbsp;references:</p>
 
 
 <p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
-pointers instead of actual objects<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
+pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
 the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
 In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
 the call stacks and abstraction&nbsp;layers.</p>
@@ -211,8 +208,14 @@ if it&#8217;s cheap to&nbsp;obtain.</p>
 <p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
 </li>
 <li id="fn:2">
+<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
+on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the languag itself,
+it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
+is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
 <p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
-instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
@@ -225,7 +228,7 @@ instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnr
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

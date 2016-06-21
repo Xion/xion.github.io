@@ -10,9 +10,7 @@
 
     <link href="http://xion.io/style.css" rel="stylesheet">
 
-    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
 
-    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
 
 
   <meta charset="utf-8" />
@@ -38,7 +36,7 @@
         <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
       </a>
       <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
-      <p>def code(tea):<br>return 42</p>
+      <p>fn(Tea) -> Code</p>
       <nav>
         <ul class="list">
           <li><a href="http://xion.io/page/about.html#about">About</a></li>
@@ -50,7 +48,7 @@
         <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
         <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
         <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
-        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
       </ul>
     </div>
   </aside>
@@ -61,8 +59,6 @@
       <a href="/categories.html">Categories</a>
       <a href="/tags.html">Tags</a>
       <a href="http://xion.org.pl/">Old blog</a>
-      <a href="http://xion.io/feeds/atom.xml">Atom</a>
-      <a href="http://xion.io/feeds/rss.xml">RSS</a>
     </nav>
 
 <article>
@@ -111,7 +107,7 @@ However, the kind of global, stop-the-world garbage collections
 (e.g. <a href="https://en.wikipedia.org/wiki/Tracing_garbage_collection#Na.C3.AFve_mark-and-sweep">mark-and-sweep</a>)
 is costly and unpredictable, ruling it out as a mechanism for real-time&nbsp;systems.</p>
 <p>For this reason, Rust doesn&#8217;t mandate a <span class="caps">GC</span> of this kind<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And although it offers mechanisms that are similar to
-smart pointers from C++ (e.g. <code>std::shared_ptr</code>), it is actually preferrable and <em>safer</em> to use regular, &#8220;naked&#8221; pointers:
+smart pointers from C++ (e.g. <code>std::shared_ptr</code>), it is actually preferable and <em>safer</em> to use regular, &#8220;naked&#8221; pointers:
 <code>&amp;Foo</code> versus <code>Cell&lt;Foo&gt;</code> or <code>RefCell&lt;Foo&gt;</code> (which are some of the Rust&#8217;s &#8220;smart pointer&#8221;&nbsp;types).</p>
 <p>The trick is in the clever compiler. As long as we use regular pointers, it is capable of detecting potential memory
 bugs at <em>compilation time</em>. They are referred to as &#8220;data races&#8221; in Rust&#8217;s terminology, and include
@@ -122,7 +118,7 @@ of type <code>&amp;Foo</code> in Rust translates to something like <code>const F
 mutability with the <code>mut</code> keyword, and Rust ensures there is always at most one mutable reference to any value,
 thus preventing problems caused by <a href="https://en.wikipedia.org/wiki/Pointer_aliasing">pointer aliasing</a>.</p>
 <p>But what if you really must sling raw pointers, and access arbitrary memory locations? Maybe you are programming
-a microcontroller where I/O is done through a special memory region. For those occassions, Rust has got you covered
+a microcontroller where I/O is done through a special memory region. For those occasions, Rust has got you covered
 with the <code>unsafe</code> keyword:</p>
 <div class="highlight"><pre><span class="c1">// Read the state of a diode in some imaginary uC.</span>
 <span class="k">fn</span><span class="w"> </span><span class="n">get_led_state</span><span class="p">(</span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="n">isize</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
@@ -134,7 +130,7 @@ with the <code>unsafe</code> keyword:</p>
 
 
 <p>Its usage, like in the above example, can be <em>very</em> localized, limited only to those places where it&#8217;s truly necessary
-and guarded by appropriate checks. As a result, the interface exposed by a function like the one above
+and guarded by the appropriate checks. As a result, the interface exposed by the above function
 can be considered safe. The unrestricted memory access can be contained to where it&#8217;s really&nbsp;inevitable.</p>
 <h4>Typing&nbsp;counts</h4>
 <p>Ensuring memory safety is not the only way in which Rust differentiates itself from C.
@@ -180,12 +176,12 @@ to generic parameters, closure arguments, and closure return&nbsp;values.</p>
 traits, trait implementations, etc., they allow for constraining their arguments with traits. This is similar to
 the abandoned-and-not-quite-revived-yet idea of <a href="https://en.wikipedia.org/wiki/Concepts_%28C%2B%2B%29">concepts in C++</a>,
 or to an analogous mechanism from&nbsp;C#.</p>
-<p>The third common trend in contemporary language design is to use the type system to solve common tasks.
+<p>The third common trend in contemporary language design is the use of type system to solve common tasks.
 Rust doesn&#8217;t go full Haskell and opt for monads for everything, but its <code>Option</code> and <code>Result</code> types are evidently
 the functional approach to error handling<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>. To facilitate their use, a powerful
 <a href="https://doc.rust-lang.org/stable/book/patterns.html"><em>pattern matching</em> facility</a> is also present in&nbsp;Rust.</p>
 <h4>Unexpectedly&nbsp;pythonic</h4>
-<p>If your general go-to language is Python, you will find Rust a very nice complement and possibly a valuable weapon
+<p>If your general go-to language is Python, you will find Rust a very nice complement and possibly a valuable instrument
 in your coding arsenal. Interoperability between Python and Rust is
 <a href="https://doc.rust-lang.org/stable/book/rust-inside-other-languages.html#python">stupidly easy</a>,
 thanks to both the <a href="https://docs.python.org/3.5/library/ctypes.html"><code>ctypes</code> module</a> and the extreme simplicity
@@ -234,19 +230,20 @@ is a language that&#8217;s worth looking into now, or in the near&nbsp;future.</
 <a href="http://blog.rust-lang.org/2015/05/15/Rust-1.0.html">a good couple of months ago</a>, the ecosystem isn&#8217;t nearly as diverse
 and abundant as in some of the other new&nbsp;languages.</p>
 <p>If you are specifically looking to deploying Rust-written <span class="caps">API</span> servers, backends, and other &#8212; shall I use the word
-&#8212; microservices, then right now you&#8217;ll probably be better served by more established solutions, like node.js,
-Go, Java with <a href="http://docs.paralleluniverse.co/quasar/">fibers</a>, asynchronous Python on PyPy, Erlang, or similar.
+&#8212; microservices, then right now you&#8217;ll probably be better served by more established solutions,
+like Java with <a href="http://docs.paralleluniverse.co/quasar/">fibers</a>, asynchronous Python on PyPy, Erlang,
+Go, node.js, or similar.
 I predict Rust catching up here in the coming months, though, because the prospect of writing native speed <span class="caps">JSON</span> slingers
 with relative ease is just too compelling to&nbsp;pass.</p>
 <p>The other interesting area for Rust is <em>game programming</em>, because it&#8217;s one of the few languages capable of supporting
 even the most demanding <span class="caps">AAA</span>+ productions. The good news is that portable, open source
-<a href="http://www.piston.rs/">game engines</a> are already there. The bad news is that most of the existing knowledge
+<a href="http://www.piston.rs/">game engines</a> are already here. The bad news is that most of the existing knowledge
 about designing and coding high performance games is geared towards writing (stripped down) C++. The community
 is also rather <del>stubborn</del> reluctant to adopt anything that may carry even a <em>hint</em> of potentially unknown
 performance implications. Although some inroads have been made (here&#8217;s, for example,
 an <a href="https://github.com/HeroesGrave/ecs-rs">entity component system</a> written in Rust), and I wouldn&#8217;t be surprised
 to see indie games written in Rust, it probably won&#8217;t take over the industry anytime&nbsp;soon.</p>
-<p>When it comes to hardware, though, Rust may already have an upper hand. It is obviously much easier language to program in
+<p>When it comes to hardware, though, Rust may already have the upper hand. It is obviously much easier language to program in
 than pure C. Along with its toolchain&#8217;s ability to produce
 <a href="https://doc.rust-lang.org/stable/book/no-stdlib.html">minimal executables</a>, it makes for a compelling language for
 programming microcontrollers and other embedded&nbsp;devices.</p>
@@ -280,7 +277,7 @@ we may have better luck waiting for the Year of Linux on Desktop to dawn&#8230;&
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

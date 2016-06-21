@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="a.k.a. Curious Facts about Python Syntax In Python 3.3, a new method has been added to the str type: casefold. Its purpose is to return a “sanitized” version of the string that’s suitable for case-insensitive comparison. For older versions of Python, an alternative way that’s mostly compatible is to use the str.lower method, which simply changes all letters in the string to lowercase. Syntax is hard Easy enough for a compatibility shim, right? That’s exactly what I thought when I came up with this: casefold = getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower() Let’s ignore for a moment the fact that for a correct handling of unicode objects in Python 2, a much more sophisticated approach is necessary. What’s rather more pertinent is that this simple code doesn’t parse: File &#34;foo.py&#34;, line 42 getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower() ^ SyntaxError: invalid syntax It’s not very often that you would produce a SyntaxError with code that looks perfectly valid to most pythonistas. The last time I had it happen, the explanation was rather surprising and not exactly trivial to come by. Fortunately, there is always one place where we can definitively resolve any syntactic confusion. That place is the full grammar specification of the Python language. It may be a little intimidating at first, especially if you’re not familiar with the ENBF notation it uses. All the Python’s language constructs are there, though, so the SyntaxError from above should be traceable to a some rule of the grammar1. The culprit And indeed, the offending bit is right here: or_test: and_test (&#39;or&#39; and_test)* and_test: not_test (&#39;and&#39; not_test)* ... It says, essentially, that Python defines the or expression (or_test) as a sequence of and expressions (and_test). If you follow the syntax definition further, however, you will notice that and_test expands to comparisons (a &lt; b, etc.), arithmetic expressions (x + y, etc.), list &amp; dict constructors ([foo, bar], etc.), and finally to atoms such as literal strings and numbers. What you won’t see along the way are lambda definitions: lambdef: &#39;lambda&#39; [varargslist] &#39;:&#39; test In fact, the branch to allow them is directly above the or_test: test: or_test [&#39;if&#39; or_test &#39;else&#39; test] | lambdef As you can see, the rule puts lambdas at the same syntactical level as conditional expressions (x if a else b), which is very high up. The only thing you can do with a lambda to make a larger expression is to add a yield keyword before it2, or follow it with a comma to create a tuple3. You cannot, however, pass it as an argument to a binary operator, even if it otherwise makes sense and even looks unambiguous. This is also why the nonsensical expressions such as this one: 1 + lambda: None will fail not with TypeError, but also with SyntaxError, as they won’t even be evaluated. More parentheses Savvy readers may have noticed that this phenomenon is very much reminiscent of the issue of operator precedence. Indeed, in Python and in many other languages it is the grammar that ultimately specifies the order of operations. It does so simply by defining how expressions can be constructed. Addition, for example, will be of lower priority than multiplication simply because a sum is said to comprise of terms that are products: arith_expr: term ((&#39;+&#39;|&#39;-&#39;) term)* term: factor ((&#39;*&#39;|&#39;/&#39;|&#39;%&#39;|&#39;//&#39;) factor)* This makes operator precedence a syntactic feature, and its resolution is baked into the language parser and handled implicitly4. We know, however, that precedence can be worked around where necessary by enclosing the operator and its arguments in a pair of parenthesis. On the syntax level, this means creating an entirely new, top-level expression: atom: &#39;(&#39; [yield_expr|testlist_comp] &#39;)&#39; | # parenthesized expression &#39;[&#39; [listmaker] &#39;]&#39; | &#39;{&#39; [dictorsetmaker] &#39;}&#39; | &#39;`&#39; testlist1 &#39;`&#39; | NAME | NUMBER | STRING+) There, it is again possible to use even the highest-level constructs, including also the silly stuff such as trying to add a number to a function: 1 + (lambda: None) This expression will now parse correctly, and produce TypeError as expected. In the end, the resolution of our initial dilemma is therefore rather simple: casefold = getattr(str, &#39;casefold&#39;, None) or (lambda s: s.lower()) Such rules are sometimes called productions of the grammar, a term from computational linguistics. ↩ Yes, yield foo is an expression. Its result is the value sent to the generator by outer code via the send method. Since most generators are used as iterables, typically no values are passed this way so the result of a yield expression is None. ↩ There are also a legacy corner cases of lambdas in list/dict/etc. comprehensions, but those only apply under Python 2.x. ↩ This saying, there are languages where the order is resolved at later stage, after the expressions have already been parsed. They usually allow the programmer to change the precedence of their own operators, as it’s the case in Haskell. ↩" />
+<meta name="keywords" content="Python, syntax, lambda, operators">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="…or lambda?"/>
+<meta property="og:description" content="a.k.a. Curious Facts about Python Syntax In Python 3.3, a new method has been added to the str type: casefold. Its purpose is to return a “sanitized” version of the string that’s suitable for case-insensitive comparison. For older versions of Python, an alternative way that’s mostly compatible is to use the str.lower method, which simply changes all letters in the string to lowercase. Syntax is hard Easy enough for a compatibility shim, right? That’s exactly what I thought when I came up with this: casefold = getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower() Let’s ignore for a moment the fact that for a correct handling of unicode objects in Python 2, a much more sophisticated approach is necessary. What’s rather more pertinent is that this simple code doesn’t parse: File &#34;foo.py&#34;, line 42 getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower() ^ SyntaxError: invalid syntax It’s not very often that you would produce a SyntaxError with code that looks perfectly valid to most pythonistas. The last time I had it happen, the explanation was rather surprising and not exactly trivial to come by. Fortunately, there is always one place where we can definitively resolve any syntactic confusion. That place is the full grammar specification of the Python language. It may be a little intimidating at first, especially if you’re not familiar with the ENBF notation it uses. All the Python’s language constructs are there, though, so the SyntaxError from above should be traceable to a some rule of the grammar1. The culprit And indeed, the offending bit is right here: or_test: and_test (&#39;or&#39; and_test)* and_test: not_test (&#39;and&#39; not_test)* ... It says, essentially, that Python defines the or expression (or_test) as a sequence of and expressions (and_test). If you follow the syntax definition further, however, you will notice that and_test expands to comparisons (a &lt; b, etc.), arithmetic expressions (x + y, etc.), list &amp; dict constructors ([foo, bar], etc.), and finally to atoms such as literal strings and numbers. What you won’t see along the way are lambda definitions: lambdef: &#39;lambda&#39; [varargslist] &#39;:&#39; test In fact, the branch to allow them is directly above the or_test: test: or_test [&#39;if&#39; or_test &#39;else&#39; test] | lambdef As you can see, the rule puts lambdas at the same syntactical level as conditional expressions (x if a else b), which is very high up. The only thing you can do with a lambda to make a larger expression is to add a yield keyword before it2, or follow it with a comma to create a tuple3. You cannot, however, pass it as an argument to a binary operator, even if it otherwise makes sense and even looks unambiguous. This is also why the nonsensical expressions such as this one: 1 + lambda: None will fail not with TypeError, but also with SyntaxError, as they won’t even be evaluated. More parentheses Savvy readers may have noticed that this phenomenon is very much reminiscent of the issue of operator precedence. Indeed, in Python and in many other languages it is the grammar that ultimately specifies the order of operations. It does so simply by defining how expressions can be constructed. Addition, for example, will be of lower priority than multiplication simply because a sum is said to comprise of terms that are products: arith_expr: term ((&#39;+&#39;|&#39;-&#39;) term)* term: factor ((&#39;*&#39;|&#39;/&#39;|&#39;%&#39;|&#39;//&#39;) factor)* This makes operator precedence a syntactic feature, and its resolution is baked into the language parser and handled implicitly4. We know, however, that precedence can be worked around where necessary by enclosing the operator and its arguments in a pair of parenthesis. On the syntax level, this means creating an entirely new, top-level expression: atom: &#39;(&#39; [yield_expr|testlist_comp] &#39;)&#39; | # parenthesized expression &#39;[&#39; [listmaker] &#39;]&#39; | &#39;{&#39; [dictorsetmaker] &#39;}&#39; | &#39;`&#39; testlist1 &#39;`&#39; | NAME | NUMBER | STRING+) There, it is again possible to use even the highest-level constructs, including also the silly stuff such as trying to add a number to a function: 1 + (lambda: None) This expression will now parse correctly, and produce TypeError as expected. In the end, the resolution of our initial dilemma is therefore rather simple: casefold = getattr(str, &#39;casefold&#39;, None) or (lambda s: s.lower()) Such rules are sometimes called productions of the grammar, a term from computational linguistics. ↩ Yes, yield foo is an expression. Its result is the value sent to the generator by outer code via the send method. Since most generators are used as iterables, typically no values are passed this way so the result of a yield expression is None. ↩ There are also a legacy corner cases of lambdas in list/dict/etc. comprehensions, but those only apply under Python 2.x. ↩ This saying, there are languages where the order is resolved at later stage, after the expressions have already been parsed. They usually allow the programmer to change the precedence of their own operators, as it’s the case in Haskell. ↩"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/python-or-lambda.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2016-06-20 22:07:00-07:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Python"/>
+<meta property="article:tag" content="syntax"/>
+<meta property="article:tag" content="lambda"/>
+<meta property="article:tag" content="operators"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; …or lambda?</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="python-or-lambda">&#8230;or&nbsp;lambda?</h1>
+    <p>Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p><em>a.k.a. Curious Facts about Python&nbsp;Syntax</em></p>
+<p>In Python 3.3,
+a new method has been <a href="https://docs.python.org/3/library/stdtypes.html#str.casefold">added</a> to the <code>str</code> type: <code>casefold</code>.
+Its purpose is to return a &#8220;sanitized&#8221; version of the string
+that&#8217;s suitable for case-insensitive comparison.
+For older versions of Python,
+an alternative way that&#8217;s <em>mostly</em> compatible is to use the <code>str.lower</code> method,
+which simply changes all letters in the string to&nbsp;lowercase.</p>
+<h4>Syntax is&nbsp;hard</h4>
+<p>Easy enough for a compatibility shim, right?
+That&#8217;s exactly what I thought when I came up with&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Let&#8217;s ignore for a moment
+the fact that for a correct handling of <code>unicode</code> objects in Python 2,
+a <a href="http://stackoverflow.com/a/32838944/434799">much more sophisticated approach</a> is necessary.
+What&#8217;s rather more pertinent is that this simple code <em>doesn&#8217;t parse</em>:</p>
+<div class="highlight"><pre>  File &quot;foo.py&quot;, line 42
+    getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower()
+                                      ^
+SyntaxError: invalid syntax
+</pre></div>
+
+
+<p>It&#8217;s not very often that you would produce a <code>SyntaxError</code> with code
+that looks perfectly valid to most pythonistas.
+The <a href="http://xion.org.pl/2012/04/16/the-infernal-comma/">last time I had it happen</a>,
+the explanation was rather surprising and not exactly trivial to come&nbsp;by.</p>
+<p>Fortunately, there is always one place
+where we can definitively resolve any syntactic confusion.
+That place is the <a href="https://docs.python.org/2/reference/grammar.html">full grammar specification</a>
+of the Python&nbsp;language.</p>
+<p>It may be a little intimidating at first,
+especially if you&#8217;re not familiar with the <a href="https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_Form"><span class="caps">ENBF</span> notation</a> it uses.
+All the Python&#8217;s language constructs are there, though,
+so the <code>SyntaxError</code> from above should be traceable to a some rule of the grammar<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>The&nbsp;culprit</h4>
+<p>And indeed, the offending bit is right&nbsp;here:</p>
+<div class="highlight"><pre>or_test: and_test (&#39;or&#39; and_test)*
+and_test: not_test (&#39;and&#39; not_test)*
+...
+</pre></div>
+
+
+<p>It says, essentially, that Python defines the <code>or</code> expression (<code>or_test</code>)
+as a sequence of <code>and</code> expressions (<code>and_test</code>).
+If you follow the syntax definition further, however,
+you will notice that <code>and_test</code> expands to
+comparisons (<code>a &lt; b</code>, etc.),
+arithmetic expressions (<code>x + y</code>, etc.),
+<code>list</code> <span class="amp">&amp;</span> <code>dict</code> constructors (<code>[foo, bar]</code>, etc.),
+and finally to <em>atoms</em> such as literal strings and&nbsp;numbers.</p>
+<p>What you <em>won&#8217;t</em> see along the way are lambda&nbsp;definitions:</p>
+<div class="highlight"><pre>lambdef: &#39;lambda&#39; [varargslist] &#39;:&#39; test
+</pre></div>
+
+
+<p>In fact, the branch to allow them is directly above the <code>or_test</code>:</p>
+<div class="highlight"><pre>test: or_test [&#39;if&#39; or_test &#39;else&#39; test] | lambdef
+</pre></div>
+
+
+<p>As you can see, the rule puts lambdas at the same syntactical level as conditional expressions
+(<code>x if a else b</code>), which is <em>very</em> high up.
+The only thing you can do with a <code>lambda</code> to make a larger expression
+is to add a <code>yield</code> keyword before it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>, or follow it with a comma to create a tuple<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>You cannot, however, pass it as an argument to a binary operator,
+even if it otherwise makes sense and even <em>looks</em> unambiguous.
+This is also why the nonsensical expressions such as this&nbsp;one:</p>
+<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span>
+</pre></div>
+
+
+<p>will fail not with <code>TypeError</code>, but also with <code>SyntaxError</code>,
+as they won&#8217;t even be&nbsp;evaluated.</p>
+<h4>More&nbsp;parentheses</h4>
+<p>Savvy readers may have noticed that this phenomenon is very much reminiscent
+of the issue of <em>operator precedence</em>.</p>
+<p>Indeed, in Python and in many other languages it is the grammar
+that ultimately specifies the order of operations.
+It does so simply by defining how expressions can be&nbsp;constructed.</p>
+<p>Addition, for example, will be of lower priority than multiplication
+simply because a <em>sum</em> is said to comprise of terms that are <em>products</em>:</p>
+<div class="highlight"><pre>arith_expr: term ((&#39;+&#39;|&#39;-&#39;) term)*
+term: factor ((&#39;*&#39;|&#39;/&#39;|&#39;%&#39;|&#39;//&#39;) factor)*
+</pre></div>
+
+
+<p>This makes operator precedence a syntactic feature,
+and its resolution is baked into the language parser and handled implicitly<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.</p>
+<p>We know, however, that precedence can be worked around where necessary
+by enclosing the operator and its arguments in a pair of parenthesis.
+On the syntax level, this means creating an entirely new, top-level&nbsp;expression:</p>
+<div class="highlight"><pre>atom: &#39;(&#39; [yield_expr|testlist_comp] &#39;)&#39; |  # parenthesized expression
+       &#39;[&#39; [listmaker] &#39;]&#39; |
+       &#39;{&#39; [dictorsetmaker] &#39;}&#39; |
+       &#39;`&#39; testlist1 &#39;`&#39; |
+       NAME | NUMBER | STRING+)
+</pre></div>
+
+
+<p>There, it is again possible to use even the highest-level constructs,
+including also the silly stuff such as trying to add a number to a&nbsp;function:</p>
+<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This expression will now parse correctly,
+ and produce <code>TypeError</code> as&nbsp;expected.</p>
+<p>In the end, the resolution of our initial dilemma is therefore rather&nbsp;simple:</p>
+<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+</pre></div>
+
+
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Such rules are sometimes called <em>productions</em> of the grammar,
+a <a href="https://en.wikipedia.org/wiki/Production_%28computer_science%29">term</a> from computational linguistics.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Yes, <code>yield foo</code> is an expression.
+Its result is the value sent <em>to</em> the generator by outer code via the <code>send</code> method.
+Since most generators are used as iterables, typically no values are passed this way
+so the result of a <code>yield</code> expression is <code>None</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>There are also a legacy corner cases of lambdas in <code>list</code>/<code>dict</code>/etc. comprehensions,
+but those only apply under Python 2.x.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>This saying, there are languages where the order is resolved at later stage,
+after the expressions have already been parsed. They usually allow the programmer
+to change the precedence of their own operators,
+as it&#8217;s the case in <a href="https://www.haskell.org/tutorial/functions.html#sect3.2.2">Haskell</a>.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/python.html">Python</a>
+      <a href="http://xion.io/tag/syntax.html">syntax</a>
+      <a href="http://xion.io/tag/lambda.html">lambda</a>
+      <a href="http://xion.io/tag/operators.html">operators</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "…or lambda?",
+  "headline": "…or lambda?",
+  "datePublished": "2016-06-20 22:07:00-07:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/python-or-lambda.html",
+  "description": "a.k.a. Curious Facts about Python Syntax In Python 3.3, a new method has been added to the str type: casefold. Its purpose is to return a “sanitized” version of the string that’s suitable for case-insensitive comparison. For older versions of Python, an alternative way that’s mostly compatible is to use the str.lower method, which simply changes all letters in the string to lowercase. Syntax is hard Easy enough for a compatibility shim, right? That’s exactly what I thought when I came up with this: casefold = getattr(str, 'casefold', None) or lambda s: s.lower() Let’s ignore for a moment the fact that for a correct handling of unicode objects in Python 2, a much more sophisticated approach is necessary. What’s rather more pertinent is that this simple code doesn’t parse: File "foo.py", line 42 getattr(str, 'casefold', None) or lambda s: s.lower() ^ SyntaxError: invalid syntax It’s not very often that you would produce a SyntaxError with code that looks perfectly valid to most pythonistas. The last time I had it happen, the explanation was rather surprising and not exactly trivial to come by. Fortunately, there is always one place where we can definitively resolve any syntactic confusion. That place is the full grammar specification of the Python language. It may be a little intimidating at first, especially if you’re not familiar with the ENBF notation it uses. All the Python’s language constructs are there, though, so the SyntaxError from above should be traceable to a some rule of the grammar1. The culprit And indeed, the offending bit is right here: or_test: and_test ('or' and_test)* and_test: not_test ('and' not_test)* ... It says, essentially, that Python defines the or expression (or_test) as a sequence of and expressions (and_test). If you follow the syntax definition further, however, you will notice that and_test expands to comparisons (a < b, etc.), arithmetic expressions (x + y, etc.), list & dict constructors ([foo, bar], etc.), and finally to atoms such as literal strings and numbers. What you won’t see along the way are lambda definitions: lambdef: 'lambda' [varargslist] ':' test In fact, the branch to allow them is directly above the or_test: test: or_test ['if' or_test 'else' test] | lambdef As you can see, the rule puts lambdas at the same syntactical level as conditional expressions (x if a else b), which is very high up. The only thing you can do with a lambda to make a larger expression is to add a yield keyword before it2, or follow it with a comma to create a tuple3. You cannot, however, pass it as an argument to a binary operator, even if it otherwise makes sense and even looks unambiguous. This is also why the nonsensical expressions such as this one: 1 + lambda: None will fail not with TypeError, but also with SyntaxError, as they won’t even be evaluated. More parentheses Savvy readers may have noticed that this phenomenon is very much reminiscent of the issue of operator precedence. Indeed, in Python and in many other languages it is the grammar that ultimately specifies the order of operations. It does so simply by defining how expressions can be constructed. Addition, for example, will be of lower priority than multiplication simply because a sum is said to comprise of terms that are products: arith_expr: term (('+'|'-') term)* term: factor (('*'|'/'|'%'|'//') factor)* This makes operator precedence a syntactic feature, and its resolution is baked into the language parser and handled implicitly4. We know, however, that precedence can be worked around where necessary by enclosing the operator and its arguments in a pair of parenthesis. On the syntax level, this means creating an entirely new, top-level expression: atom: '(' [yield_expr|testlist_comp] ')' | # parenthesized expression '[' [listmaker] ']' | '{' [dictorsetmaker] '}' | '`' testlist1 '`' | NAME | NUMBER | STRING+) There, it is again possible to use even the highest-level constructs, including also the silly stuff such as trying to add a number to a function: 1 + (lambda: None) This expression will now parse correctly, and produce TypeError as expected. In the end, the resolution of our initial dilemma is therefore rather simple: casefold = getattr(str, 'casefold', None) or (lambda s: s.lower()) Such rules are sometimes called productions of the grammar, a term from computational linguistics. ↩ Yes, yield foo is an expression. Its result is the value sent to the generator by outer code via the send method. Since most generators are used as iterables, typically no values are passed this way so the result of a yield expression is None. ↩ There are also a legacy corner cases of lambdas in list/dict/etc. comprehensions, but those only apply under Python 2.x. ↩ This saying, there are languages where the order is resolved at later stage, after the expressions have already been parsed. They usually allow the programmer to change the precedence of their own operators, as it’s the case in Haskell. ↩"
+}
+</script></body>
+</html>

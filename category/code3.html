@@ -10,9 +10,7 @@
 
     <link href="http://xion.io/style.css" rel="stylesheet">
 
-    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
 
-    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
 
 
   <meta charset="utf-8" />
@@ -38,7 +36,7 @@
         <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
       </a>
       <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
-      <p>def code(tea):<br>return 42</p>
+      <p>fn(Tea) -> Code</p>
       <nav>
         <ul class="list">
           <li><a href="http://xion.io/page/about.html#about">About</a></li>
@@ -50,7 +48,7 @@
         <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
         <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
         <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
-        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
       </ul>
     </div>
   </aside>
@@ -61,10 +59,913 @@
       <a href="/categories.html">Categories</a>
       <a href="/tags.html">Tags</a>
       <a href="http://xion.org.pl/">Old blog</a>
-      <a href="http://xion.io/feeds/atom.xml">Atom</a>
-      <a href="http://xion.io/feeds/rss.xml">RSS</a>
     </nav>
 
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/sqlalchemy-regex-filters.html#sqlalchemy-regex-filters">Regular expression filters in&nbsp;SQLAlchemy</a></h2>
+    <p>
+      Posted on Wed 14 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/regular-expressions.html">regular expressions</a>,      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>,      <a href="http://xion.io/tag/sql.html">SQL</a>,      <a href="http://xion.io/tag/postgres.html">Postgres</a>,      <a href="http://xion.io/tag/sqlite.html">SQLite</a>,      <a href="http://xion.io/tag/ast.html">AST</a>      &#8226; <a href="http://xion.io/post/code/sqlalchemy-regex-filters.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>The nice part about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a>
+&#8212; an <a href="https://en.wikipedia.org/wiki/Object-relational_mapping"><span class="caps">ORM</span></a> library/framework for Python &#8212;
+is that it offers much more than just mapping of <span class="caps">SQL</span> relations to model classes. At its lower level, for example,
+there exists an additional layer between those classes and raw <span class="caps">SQL</span> queries: an abstraction for the <em><span class="caps">SQL</span> language itself</em>.</p>
+<p>Although it may sound byzantine at first, this extra layer serves two important&nbsp;purposes:</p>
+<ul>
+<li><em>portability</em>: compiling of the same query to potentially different <span class="caps">SQL</span> syntaxes,
+as required by different database&nbsp;backends</li>
+<li><em>extensibility</em>: allowing the user to introduce new elements: operators, functions, or even whole&nbsp;statements</li>
+</ul>
+<p>I&#8217;m going to take advantage of both of these qualities here, and show how you can implement support
+for <em>regular expression</em> operators in query filters. On supported database backends, it will allow for powerful
+pattern matching on string&nbsp;columns.</p>
+<h4>Database&nbsp;side</h4>
+<p>We will use the Postgres syntax of <span class="caps">POSIX</span>
+<a href="http://www.postgresql.org/docs/9.3/static/functions-matching.html#FUNCTIONS-POSIX-REGEXP">regular expression matchers</a>
+as a reference. It includes four operators: for case sensitive or insensitive matching, in regular or negated&nbsp;versions.</p>
+<p>Since it&#8217;s a common practice to use an in-memory <a href="https://www.sqlite.org/">SQLite</a> for running database-involved
+&#8220;unit&#8221; tests<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>, we will also add support for that backend. Regular expressions are not implemented there directly,
+but thanks to
+<a href="https://docs.python.org/2/library/sqlite3.html#sqlite3.Connection.create_function"><code>sqlite3</code><span class="quo">&#8216;</span>s custom function ability</a>,
+it&#8217;ll be easy enough to provide the necessary support in&nbsp;Python.</p>
+<h4>Desired <span class="caps">API</span></h4>
+<p>In essence, what we want to do is to enhance the <code>String</code> column type with additional <em>comparators</em>, which will then
+be usable as arguments for the <code>Query.filter</code> method.</p>
+<p>As an example, consider the following model class with a string&nbsp;column:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Person</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="n">nick</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">255</span><span class="p">))</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Once we&#8217;re done, it should be possible to query for e.g. all the people whose nicks contain numbers
+in a pretty straightforward&nbsp;fashion:</p>
+<div class="highlight"><pre><span class="n">numerics</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">Person</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">Person</span><span class="o">.</span><span class="n">nick</span><span class="o">.</span><span class="n">regexp</span><span class="p">(</span><span class="s">r&#39;\d+&#39;</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Because of the limitations of underlying databases backends, only <em>literal</em> regular expressions would be supported.
+It means that, from the <span class="caps">SQL</span> standpoint, they have to be constants: you cannot use the value of one column as part
+of a regular expression that another column is matched&nbsp;against.</p>
+<p>But of course, you can still construct those literals in Python&nbsp;code:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">get_copycats</span><span class="p">(</span><span class="n">nick</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Return all the people who tried to parrot given nick</span>
+<span class="sd">    but failed and had to append some numbers to it.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">nick_regexp</span> <span class="o">=</span> <span class="s">&#39;^&#39;</span> <span class="o">+</span> <span class="n">re</span><span class="o">.</span><span class="n">escape</span><span class="p">(</span><span class="n">nick</span><span class="p">)</span> <span class="o">+</span> <span class="s">r&#39;\d+$&#39;</span>
+    <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">Person</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">Person</span><span class="o">.</span><span class="n">nick</span><span class="o">.</span><span class="n">regexp</span><span class="p">(</span><span class="n">nick_regexp</span><span class="p">))</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Considering that regular expressions themselves are already pretty powerful, this really ought to be sufficient
+for all reasonable&nbsp;purposes.</p>
+<h4>How comparators&nbsp;work?</h4>
+<p>So how do we add the <code>regexp</code> method to the <code>String</code> type? It may seem logical to simply extend the class
+and add it&nbsp;directly:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">String</span> <span class="k">as</span> <span class="n">_String</span>
+
+
+<span class="k">class</span> <span class="nc">String</span><span class="p">(</span><span class="n">_String</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Enhanced version of the standard string type.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">regexp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="c"># hmm...</span>
+</pre></div>
+
+
+<p>But this won&#8217;t actually work. In SQLAlchemy, objects like <code>String</code> or <code>Integer</code> do not represent columns of certain type;
+they correspond to <em>types themselves</em><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. Extending them with additional methods won&#8217;t do much good, because regular code
+rarely operates on column&nbsp;types.</p>
+<p>On the other hand, though, we obviously don&#8217;t want to mess with the <code>Column</code> class itself. Our additions are only
+meaningful for string columns, but putting them there would expose them to <em>all</em> columns, regardless of&nbsp;type!</p>
+<p>Thankfully, there is an intermediate mechanism which SQLAlchemy introduced precisely to address the need we&#8217;ve got here.
+Every column type can define a
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/core/type_api.html#sqlalchemy.types.TypeEngine.comparator_factory"><code>comparator_factory</code></a>: a kind of mixin class whose methods are incorporated into columns of that type.
+By <a href="http://docs.sqlalchemy.org/en/rel_0_9/core/custom_types.html#types-operators">overriding this inner class</a>,
+we can both modify the behavior of existing operators, as well as introduce completely new&nbsp;ones.</p>
+<p>So in order to add <code>regexp</code> and other methods to all <code>String</code> columns, our new string type must define its own
+<code>comparator_factory</code>:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">String</span><span class="p">(</span><span class="n">_String</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">comparator_factory</span><span class="p">(</span><span class="n">_String</span><span class="o">.</span><span class="n">comparator_factory</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">regexp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+            <span class="c"># ...</span>
+</pre></div>
+
+
+<p>We need to remember about deriving it from the original one, too. Otherwise, all the standard operators
+you&#8217;d want to use in queries (<code>==</code>, <code>+</code>, etc.) would cease to work, because the new <code>comparator_factory</code> wouldn&#8217;t
+include an implementation of any of the necessary magic methods (<code>__eq__</code>, <code>__add__</code>,&nbsp;etc.).</p>
+<h4><span class="caps">SQL</span>,&nbsp;abstracted</h4>
+<p>Knowing where to put our new comparator methods is certainly desirable, but the more interesting question is
+how do we implement&nbsp;them?</p>
+<p>Like I&#8217;ve mentioned in the beginning, SQLAlchemy employs an additional layer between
+<span class="caps">ORM</span> models and raw, textual <span class="caps">SQL</span> language. Basically, it&#8217;s an <a href="https://en.wikipedia.org/wiki/Abstract_syntax_tree"><span class="caps">AST</span></a>
+for backend-independent queries which includes almost all of the various <span class="caps">SQL</span> constructs, codified in a platform-agnostic
+way inside the <code>sqlalchemy.sql</code> package.</p>
+<p>You may have used this layer directly if you ever wrote queries based on
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/core/metadata.html#sqlalchemy.schema.Table"><code>Table</code> objects</a> and ran them with
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/orm/session_api.html#sqlalchemy.orm.session.Session.execute"><code>Session.execute</code></a>. But even those constructed using the more familiar
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/orm/query.html#sqlalchemy.orm.query.Query"><code>Query</code> class</a> interface
+end up in this intermediate representation. Often there is little to no additional processing&nbsp;involved.</p>
+<p>Arguments to the
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/orm/query.html#sqlalchemy.orm.query.Query.filter"><code>Query.filter</code> method</a>,
+for example, are already given as <span class="caps">SQL</span> clause objects. It just so happens that its creation is hidden behind
+a very neat, operator-based <span class="caps">API</span>.</p>
+<p>Thus, if our regular expression filters are to cooperate, they also need to return pieces of the <span class="caps">SQL</span> syntax tree.
+Not very complicated pieces, mind you, since we only need to represent simple expressions: something like <code>foo ~ 'bar'</code>, where <code>~</code> may optionally be replaced by one of the other three&nbsp;operators.</p>
+<h4>Creating the&nbsp;node</h4>
+<p>They are all <em>binary</em> operators, by the way (i.e. taking exactly two arguments), so it makes sense that the corresponding
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/core/sqlelement.html#sqlalchemy.sql.expression.BinaryExpression"><span class="caps">AST</span> node class</a> is called <code>BinaryExpression</code>. The node&#8217;s children are the left argument, the right argument, and the operator&nbsp;itself.</p>
+<p>With a little help from a few more <span class="caps">SQL</span> syntax wrappers, the implementation of <code>regexp</code> and the other methods
+turns out to be quite&nbsp;straightforward:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.sql.expression</span> <span class="kn">import</span> <span class="n">BinaryExpression</span><span class="p">,</span> <span class="n">literal</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.sql.operators</span> <span class="kn">import</span> <span class="n">custom_op</span>
+
+
+<span class="c"># (inside String.comparator_factory)</span>
+
+<span class="k">def</span> <span class="nf">regexp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">BinaryExpression</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">,</span> <span class="n">literal</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">custom_op</span><span class="p">(</span><span class="s">&#39;~&#39;</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">iregexp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">BinaryExpression</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">,</span> <span class="n">literal</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">custom_op</span><span class="p">(</span><span class="s">&#39;~*&#39;</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">not_regexp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">BinaryExpression</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">,</span> <span class="n">literal</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">custom_op</span><span class="p">(</span><span class="s">&#39;!~&#39;</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">not_iregexp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">BinaryExpression</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">,</span> <span class="n">literal</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">custom_op</span><span class="p">(</span><span class="s">&#39;!~*&#39;</span><span class="p">))</span>
+</pre></div>
+
+
+<p>The use of
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/core/sqlelement.html#sqlalchemy.sql.expression.literal"><code>literal</code> function</a>
+is dictated by the limitation that was mentioned earlier: any regular expression given in the query must be a <span class="caps">SQL</span> literal.
+If we now try to pass a column-like clause, we&#8217;ll get an exception right at the query definition, rather than
+a database error when we try to execute&nbsp;it.</p>
+<p>The <a href="docs.sqlalchemy.org/en/rel_0_9/core/sqlelement.html#sqlalchemy.sql.operators.custom_op"><code>custom_op</code> function</a>,
+on the other hand, is simply the easiest way to create an &#8220;operator node&#8221; that&#8217;s required as a child
+of <code>BinaryExpression</code>. Since it&#8217;s a custom operator, it won&#8217;t be interpreted by SQLAlchemy in any way; it will simply
+be used verbatim in the final <span class="caps">SQL</span> string that&#8217;s sent to the&nbsp;database.</p>
+<h4>Compile!</h4>
+<p>You may have noticed that this would pose a problem if said database doesn&#8217;t support <code>~</code> or the other operators,
+which happens to be the case for everything besides Postgres. Because we originally intended to support SQLite in addition
+to Postgres, this is evidently a&nbsp;problem.</p>
+<p>It&#8217;s also where the portability of an intermediate <span class="caps">SQL</span> representation comes into play. Since our new operators return
+<span class="caps">AST</span> nodes and not just textual <span class="caps">SQL</span>, we can redefine the way those nodes are <em>compiled</em> into actual query fragments
+on various database&nbsp;backends.</p>
+<p>To accomplish that, first we need to distinguish our regex filters from other <code>BinaryExpression</code>s:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">RegexMatchExpression</span><span class="p">(</span><span class="n">BinaryExpression</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Represents matching of a column againsts a regular expression.&quot;&quot;&quot;</span>
+
+<span class="c"># (inside String.comparator_factory)</span>
+
+<span class="k">def</span> <span class="nf">regexp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">RegexMatchExpression</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">expr</span><span class="p">,</span> <span class="n">literal</span><span class="p">(</span><span class="n">other</span><span class="p">),</span> <span class="n">custom_op</span><span class="p">(</span><span class="s">&#39;~&#39;</span><span class="p">))</span>
+<span class="c"># etc.</span>
+</pre></div>
+
+
+<p>Once we&#8217;ve introduced such a distinction, it becomes possible to provide a different way for those filters to be turned
+into <span class="caps">SQL</span>. We can namely define a new compilation routine for them,
+and <a href="docs.sqlalchemy.org/en/rel_0_9/core/compiler.html#sqlalchemy.ext.compiler.compiles">mark it as canonical</a>
+for a specific <span class="caps">SQL</span>&nbsp;dialect:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.ext.compiler</span> <span class="kn">import</span> <span class="n">compiles</span>
+
+
+<span class="nd">@compiles</span><span class="p">(</span><span class="n">RegexMatchExpression</span><span class="p">,</span> <span class="s">&#39;sqlite&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sqlite_regex_match</span><span class="p">(</span><span class="n">element</span><span class="p">,</span> <span class="n">compiler</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compile the SQL expression representing a regular expression match</span>
+<span class="sd">    for the SQLite engine.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>The function receives an <span class="caps">AST</span> <code>element</code> to process (here, the <code>RegexMatchExpression</code>), along with a
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/core/internals.html#sqlalchemy.sql.compiler.SQLCompiler">special <code>compiler</code> object</a>
+that controls the whole translation process. Armed with those tools, we are allowed to modify the process
+in arbitrary ways and output just the right <span class="caps">SQL</span> statement that&#8217;ll do the job in&nbsp;SQLite.</p>
+<h4>Regex support&nbsp;lite</h4>
+<p>How does such a statement look like, though? As I&#8217;ve remarked early on, SQLite is very easy to extend with your own
+functions, and the <code>sqlite3</code> driver used by SQLAlchemy enables us to write those functions directly in Python.
+Obviously, this is fantastic news when you have something like
+<a href="https://docs.python.org/2/library/re.html">the standard <code>re</code> module</a> at your&nbsp;disposal.</p>
+<p>Indeed, coding the four required functions is quite&nbsp;trivial:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">re</span>
+
+<span class="c"># Mapping from the regular expression matching operators</span>
+<span class="c"># to named Python functions that implement them for SQLite.</span>
+<span class="n">SQLITE_REGEX_FUNCTIONS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s">&#39;~&#39;</span><span class="p">:</span> <span class="p">(</span><span class="s">&#39;REGEXP&#39;</span><span class="p">,</span>
+          <span class="k">lambda</span> <span class="n">value</span><span class="p">,</span> <span class="n">regex</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">regex</span><span class="p">,</span> <span class="n">value</span><span class="p">))),</span>
+    <span class="s">&#39;~*&#39;</span><span class="p">:</span> <span class="p">(</span><span class="s">&#39;IREGEXP&#39;</span><span class="p">,</span>
+           <span class="k">lambda</span> <span class="n">value</span><span class="p">,</span> <span class="n">regex</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">regex</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">))),</span>
+    <span class="s">&#39;!~&#39;</span><span class="p">:</span> <span class="p">(</span><span class="s">&#39;NOT_REGEXP&#39;</span><span class="p">,</span>
+           <span class="k">lambda</span> <span class="n">value</span><span class="p">,</span> <span class="n">regex</span><span class="p">:</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">regex</span><span class="p">,</span> <span class="n">value</span><span class="p">)),</span>
+    <span class="s">&#39;!~*&#39;</span><span class="p">:</span> <span class="p">(</span><span class="s">&#39;NOT_IREGEXP&#39;</span><span class="p">,</span>
+            <span class="k">lambda</span> <span class="n">value</span><span class="p">,</span> <span class="n">regex</span><span class="p">:</span> <span class="ow">not</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">regex</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)),</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>What&#8217;s less apparent is how &#8212; or rather, <em>when</em> &#8212; to instruct the SQLite database to use them.
+As per the <a href="https://docs.python.org/2/library/sqlite3.html#sqlite3.Connection.create_function"><span class="caps">API</span> we have to use</a>,
+custom SQLite functions are created on a per-connection basis. But SQLAlchemy, like any good database interface,
+takes care of connection management, lifecycle, and pooling. Nowhere in our application there is a <code>connect</code> call
+(nor there should be!) that we could just follow with a few <code>create_function</code> invocations.</p>
+<p>Yet, there is a way of doing exactly what we require, and it involves utilizing the
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/core/event.html">event subsystem</a> included in SQLAlchemy. Anytime something
+interesting happens to any of its <span class="caps">ORM</span> or core objects &#8212; models, sessions, connection pools, etc. &#8212; SQLAlchemy
+publishes an <em>event</em> that our application code can <em>listen</em> (subscribe) to. It&#8217;s a classic
+<a href="https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern">PubSub system</a> that introduces some serious potential
+for&nbsp;extensibility.</p>
+<p>Our use of it will be pretty modest, though. All we&#8217;re interested in is the establishing of a connection
+to the SQLite database. This translates directly to a <code>'connect'</code> event of the
+<a href="docs.sqlalchemy.org/en/rel_0_9/core/connections.html"><code>Engine</code> object</a>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">event</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.engine</span> <span class="kn">import</span> <span class="n">Engine</span>
+<span class="kn">import</span> <span class="nn">sqlite3</span>
+
+
+<span class="nd">@event.listens_for</span><span class="p">(</span><span class="n">Engine</span><span class="p">,</span> <span class="s">&#39;connect&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sqlite_engine_connect</span><span class="p">(</span><span class="n">dbapi_connection</span><span class="p">,</span> <span class="n">connection_record</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Listener for the event of establishing connection to a SQLite database.</span>
+
+<span class="sd">    Creates the functions handling regular expression operators</span>
+<span class="sd">    within SQLite engine, pointing them to their Python implementations above.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dbapi_connection</span><span class="p">,</span> <span class="n">sqlite3</span><span class="o">.</span><span class="n">Connection</span><span class="p">):</span>
+        <span class="k">return</span>
+
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">function</span> <span class="ow">in</span> <span class="n">SQLITE_REGEX_FUNCTIONS</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">dbapi_connection</span><span class="o">.</span><span class="n">create_function</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">function</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Note that this will catch all the connection events, so we have to verify it&#8217;s really SQLite we&#8217;re talking to.
+Afterwards, the creation of <code>REGEXP</code>, <code>IREGEXP</code>, etc. functions is extremely&nbsp;straightforward.</p>
+<h4>Compilation, take&nbsp;two</h4>
+<p>This was quite a build-up, but now we&#8217;re very close to the finale. What remains is finishing the compilation&nbsp;routine:</p>
+<div class="highlight"><pre><span class="nd">@compiles</span><span class="p">(</span><span class="n">RegexMatchExpression</span><span class="p">,</span> <span class="s">&#39;sqlite&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sqlite_regex_match</span><span class="p">(</span><span class="n">element</span><span class="p">,</span> <span class="n">compiler</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+    <span class="k">pass</span>
+</pre></div>
+
+
+<p>We know that <code>element</code> corresponds to an expression in the form of <code>a ~ 'foo'</code>. For SQLite, however, the compatible
+version is a <em>function call</em>: <code>REGEXP(a, 'foo')</code>. At first this may appear rather disconcerting, because it&#8217;s basically
+a completely different <span class="caps">AST</span> node to&nbsp;build.</p>
+<p>But it&#8217;s actually not a problem at all. Inside compiler hooks, we are allowed to use the much of the same <span class="caps">API</span> that&#8217;s
+available when drafting regular queries. This includes the
+<a href="http://docs.sqlalchemy.org/en/rel_0_9/core/sqlelement.html#sqlalchemy.sql.expression.func"><code>func</code> factory object</a>
+which produces calls to arbitrary <span class="caps">SQL</span> functions. Rather than compiling the original binary expression, we&#8217;ll simply
+poach its operands and use them as arguments to one of the new&nbsp;functions:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">exc</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.sql.expression</span> <span class="kn">import</span> <span class="n">func</span>
+
+
+<span class="nd">@compiles</span><span class="p">(</span><span class="n">RegexMatchExpression</span><span class="p">,</span> <span class="s">&#39;sqlite&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sqlite_regex_match</span><span class="p">(</span><span class="n">element</span><span class="p">,</span> <span class="n">compiler</span><span class="p">,</span> <span class="o">**</span><span class="n">kw</span><span class="p">):</span>
+    <span class="c"># determine the name of a custom SQLite function to use for the operator</span>
+    <span class="n">operator</span> <span class="o">=</span> <span class="n">element</span><span class="o">.</span><span class="n">operator</span><span class="o">.</span><span class="n">opstring</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">func_name</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">SQLITE_REGEX_FUNCTIONS</span><span class="p">[</span><span class="n">operator</span><span class="p">]</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">),</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">would_be_sql_string</span> <span class="o">=</span> <span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">((</span><span class="n">compiler</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">left</span><span class="p">),</span>
+                                        <span class="n">operator</span><span class="p">,</span>
+                                        <span class="n">compiler</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">right</span><span class="p">)))</span>
+        <span class="k">raise</span> <span class="n">exc</span><span class="o">.</span><span class="n">StatementError</span><span class="p">(</span>
+            <span class="s">&quot;unknown regular expression match operator: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="n">operator</span><span class="p">,</span>
+            <span class="n">would_be_sql_string</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+
+    <span class="c"># compile the expression as an invocation of the custom function</span>
+    <span class="n">regex_func</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">func</span><span class="p">,</span> <span class="n">func_name</span><span class="p">)</span>
+    <span class="n">regex_func_call</span> <span class="o">=</span> <span class="n">regex_func</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">element</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">compiler</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">regex_func_call</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Notice how <code>compiler.process</code> is used to obtain the final result. The <code>compiler</code> object doesn&#8217;t care that we use it on
+a totally different <span class="caps">AST</span> node; it will dutifully carry out its compilation into raw <span class="caps">SQL</span>. We can even use this capability
+to add a little bit of paranoid error handling: if we encounter an unknown operator, the resulting error message
+will include fully compiled, <span class="caps">SQL</span> versions of both&nbsp;arguments.</p>
+<h4>Summary</h4>
+<p>This concludes our efforts: the original query examples with <code>Person.nick.regexp</code> should now work
+in both Postgres and SQLite.
+For you convenience, I&#8217;ve bundled all the code in <a href="https://gist.github.com/Xion/204ddbd020f1a4275a53">this gist</a>.</p>
+<p>If you feel like tinkering with it further, I would suggest you try to remove the superfluous <code>NOT_*</code> functions.
+They make little sense given that <span class="caps">SQL</span> has a perfectly adequate <code>NOT</code> keyword. A clean solution would probably prefer
+an additional <code>reverse</code> flag in <code>RegexMatchExpression</code> over looking for a <code>'!'</code> character in the operator&nbsp;string.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It may or <a href="http://michael.robellard.com/2015/07/dont-test-with-sqllite-when-you-use.html">may not be</a>
+a <em>good</em> practice, though.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Although it&#8217;s possible to write <code>Column(Integer)</code>, it&#8217;s merely a syntactical convenience.
+SQLAlchemy interprets it readily as <code>Column(Integer())</code>. Parameterized types &#8212; like <code>String</code> &#8212; always require explicit
+instantiation.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/sqlalchemy-regex-filters.html#sqlalchemy-regex-filters">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/requirejs-optional.html#requirejs-optional">Optional loading of RequireJS&nbsp;modules</a></h2>
+    <p>
+      Posted on Tue 29 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/requirejs.html">RequireJS</a>,      <a href="http://xion.io/tag/modules.html">modules</a>,      <a href="http://xion.io/tag/web-workers.html">Web Workers</a>,      <a href="http://xion.io/tag/dom.html">DOM</a>,      <a href="http://xion.io/tag/ajax.html">AJAX</a>      &#8226; <a href="http://xion.io/post/code/requirejs-optional.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://requirejs.org/">RequireJS</a> is a module loader for JavaScript. Similar to its alternatives such as
+<a href="http://browserify.org/">Browserify</a>, it tries to solve an important problem on the web front(end):
+dividing JavaScript code into modules for better maintainability while still loading them correctly and efficiently
+without manual curation of the <code>&lt;script&gt;</code> tags.</p>
+<p>Once it&#8217;s configured correctly (which can be rather <a href="http://requirejs.org/docs/api.html#config">non-trivial</a>, though),
+modules in RequireJS are simply <code>define</code>d as functions that return arbitrary JavaScript&nbsp;objects:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;jquery&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;lodash&#39;</span><span class="p">,</span>
+
+    <span class="s1">&#39;myapp/dep1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;myapp/dep2&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">$</span><span class="p">,</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">dep1</span><span class="p">,</span> <span class="nx">dep2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... all of the module&#39;s code ...</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="nx">exportedSymbol1</span><span class="o">:</span> <span class="p">...,</span>
+        <span class="nx">exportedSymbol2</span><span class="o">:</span> <span class="p">...,</span>
+    <span class="p">};</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Before executing the function, RequireJS loads all the specified dependencies, repeating the process recursively
+and asynchronously. Return values from module functions are passed as parameters to the next module function,
+and thus the whole mechanism clicks, serving as a crafty workaround for the lack of proper <code>import</code> functionality<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>Relative&nbsp;failures</h4>
+<p>If, at some point in the chain, the desired module cannot be found or loaded, the entire process grinds to a halt
+with an error. Most of the time, this is perfectly acceptable (or even desirable) behavior, equivalent to an incorrect
+<code>import</code> statement, invalid <code>#include</code> directive, or similar mistake in other&nbsp;languages.</p>
+<p>But there are situations when we&#8217;d like to proceed with a missing module, because the dependent code is prepared
+to handle it. The canonical example are
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers">Web Workers</a>.
+Unlike traditional web application code, Web Worker scripts operate outside of a context of any single page,
+having no access to the <abbr title="Document Object Model"><span class="caps">DOM</span></abbr> tree (because <em>which</em> <span class="caps">DOM</span> tree would it be?).
+Correspondingly, they have no <code>document</code> nor <code>window</code> objects in their global&nbsp;scope.</p>
+<p>Unfortunately, some libraries (<em>*cough*</em> jQuery <em>*cough*</em>) require those objects as a hard (and usually implicit)
+dependency. This doesn&#8217;t exactly help if we&#8217;d like to use them in worker code for other features, not related to <span class="caps">DOM</span>.
+In case of jQuery, for example, it could be the <span class="caps">API</span> for making <span class="caps">AJAX</span> calls, which is still decidedly more pleasant
+than dealing with bare <code>XMLHTTPRequest</code> if we&#8217;re doing anything&nbsp;non-trivial.</p>
+<p>Due to this hard dependency on <span class="caps">DOM</span>, however, Web Workers cannot <code>require</code> jQuery. No biggie, you may think: browsers
+supporting workers also offer an excellent, promise-based
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API">Fetch <span class="caps">API</span></a> that largely replaces the old <span class="caps">AJAX</span>,
+so we may just use it in worker code. Good thinking indeed, but it doesn&#8217;t solve the issue of <em>sharing code</em> between
+main (&#8220;<span class="caps">UI</span>&#8221;) part of the app and Web&nbsp;Workers.</p>
+<p>Suppose you have the following dependency&nbsp;graph:</p>
+<p><div class="graphviz" style="text-align: center;"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAD7CAYAAAAvttudAAAy0klEQVR4Ae2dBbhVVRbHtzEWtoiOimJjIphYYHegjgp2d4/1GTjG2DHGOJigiIqtYIGK2DN2JyCYOHYyo+5ZvzXu63n3nXvejXPuPbHX95137juxY529dqz476mstcONJ88Bz4FQDkwlAmJD7/iLngOeA2ZqzwPPAc+ByhzwAlKZN/6O54AfQXwb8ByI4sC0UTeTvvfvf//bvPrqq3qMGzfOfPTRR3p8/PHH5rvvvjM//vij+emnn8x///tfM8MMM+gx44wzmtlnn93MN998esw///yme/fuZtlllzVLLbWUPpN0uYuQ/i+//GI++OADM378eMO3mTBhgvnss88M38wdX3/9tfnPf/5jpkyZUjrDm+mnn95MN910pfNss81mOnfuXDrmnntu061bN7PIIouYhRde2CywwAJmmmmmSSVbm7pIRxgeffRRPR5//HGDIEBzzjmnWXzxxQ2NnYb/xz/+0cwyyywlgfjDH/6ggoKwIDRffPFFSZj4iG+//bZ+JJiMkKy99tqmT58+eswzzzypZHyaCjV58mTzwgsvmBdffLF0vPfee9oxUc6ZZppJGzS8nGuuuUoNnY4KYQgKBM8HBYbfX331VUmoPv/8c/Ppp5+qwP3www88bvi+iy22mOnRo4dZYYUV9OjZs6fp0qWL3m/ln0QF5NdffzVPPPGEuf322/WYOHGioTdZc801zVprrWV69eqlPT8C0QjR273zzjs6Ej3zzDNm7Nix5vnnnzdcX2211cw222xjtt12W+2tGsknL+8yUo8ZM6bUWb311ltaNXpyGinHMsssU+rhk+pkEBQ3Qr322mvmpZdeUgH98MMPtTxLLrlkqaPr27evdp5N/waoeeOmTz75xJ5xxhl2oYUWQoVsl156aXvCCSfYf/3rX1YabdzZhab37bff2rvvvtvuvvvuVkYoLYcw2d50001WpgWh7+T5oowO9pRTTrHSMysvpNe2vXv3tscdd5y99957rUybUlN9ykKZKBtlpKy0I8pOHahLs8jEmZH04na33XbTCtEojzjiCCs9Q5xZ1JWWrGGU4VtttZWVaZiVHtGeffbZVtY5daWXlZdk3WAHDhxoZZ6vDUymr3b//fdXXnz//fdZqYalrAgMZacOCAt1om7UMUmKRUBk6qSCQeNbYokl7LXXXmtlrZBkuetOW9Ys9thjj7UzzzyzlcWiPe+886zMk+tOL20vMkLfcsstdv3117dTTTWVlXm8PfLII3X0lilv2opbc3moAzMR6kTdqCN1pc5JzE4aEhB65nPOOcd26tTJLrroonbo0KH2559/rrnSrXiBYfz444+3ohWzogWzDz/8cCuKEVueosCwgwYNsrLYtVNPPbXdcsst7V133WX5Rnkl6kYdt9hiC60zdYcH8CIuqltAXn/9dbv88strAzv11FNjLVRclasmHVkkamNi2N577711OK/mvbQ8Q6951VVXWVF0WNEm2X322cfKojstxWtaOagzdYcH8AKexDGi1CUg11xzjRXVn1111VWtqAObxoQkM7rtttt0MY9C4ZVXXkkyq9jSZtQTjZOddtpp7YEHHmhRjhSd4AG8gCfwptGZQU0CwvyPhTfzPjQMeRu+WUuJClrXJw888EBq2xoaOkY7Rj2mF2+88UZqy9qqgsETeONmBvCsHqpaQFCN9u/f34qF1A4bNqyevDLxDvXcZZddVBN3/fXXp67MYmBVDY5YpnVhmroCpqxALN7hFVoveFcrVSUgjBwDBgzQnrXRIavWArbq+WOOOUYXfjA4LXTllVeq4LIAFyNbWoqV+nLAK3iGPQUe1kJVCQjTKkaOUaNG1ZJ25p89+OCDddH3yCOPtLQudFBHH320Tm1POukky/+eauMAPIN3LA/gZbU87FBAbrzxRp3HcS4awcTttttO7SXiN9aS6lMGtDP0fkX8BnEzHR7CS3hajZBECghWSvGdUq1A3AXNSnrffPON2ng23HDDqhgad70wamKAHT58eNxJFzY9eAlPUTR1RJECghYAtWdareIdVS6u++IAqeuR6667Lq4kq0rnhhtu0NEbzwRP8XIAnqLhgsdRVFFAxC1dE7j//vuj3i/Mvb322ssuuOCCTTOIMnrjDnP44YcXhsfNrii8hcdR/lwV3d3XWWcd9dN/8MEHRdA84SJOzIL4bhkxRCXOEBm9NVAJt33iLTzFzwFiVQi5IHDrnnvuCc0gVEDeffddDWAaMWKE2WyzzUJfjOOiqIw1eCaYFtGBBMtARKyJF2fwtlljjTU0xqTNRfmHGJOuXbuWX471f3GdN2JlN88991ys6ZYn9thjj2nQl2gNjTjild/OzP8EXfH9iDPp169f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"></div></p>
+<p>The <code>common</code> module has some logic that we&#8217;d want reused between regular <code>&lt;script&gt;</code>-based code and a Web Worker,
+but its dependency on jQuery makes it impossible. It would work, however, if this dependency was a <em>soft</em> one.
+If <code>common</code> could <em>detect</em> that jQuery is not available and fall back to other solutions (like the Fetch <span class="caps">API</span>),
+we would be able to <code>require</code> it in both execution&nbsp;environments.</p>
+<h4>The <code>optional</code> plugin</h4>
+<p>What we need, it seems, is an ability to say that some dependencies (like <code>'jquery'</code>) are <em>optional</em>. They can be loaded
+if they&#8217;re available but otherwise, they shouldn&#8217;t cause the whole dependency structure to crumble. RequireJS does not
+support this functionality by default, but it&#8217;s easy enough to add it via a <em>plugin</em>.</p>
+<p>There are already <a href="https://github.com/jrburke/requirejs/wiki/Plugins">several useful plugins</a> available for RequireJS
+that offer some interesting features. As of this writing, however, optional module loading doesn&#8217;t seem to be among them.
+That&#8217;s not a big problem: rolling out our own<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> plugin turns out to be relatively&nbsp;easy.</p>
+<p><a href="http://requirejs.org/docs/plugins.html">RequireJS plugins</a> are themselves modules: you create them as separate JavaScript
+files having code wrapped in <code>define</code> call. They can also declare their own dependencies like any other module.
+The only requirement is that they export an object with <a href="http://requirejs.org/docs/plugins.html#api">certain <span class="caps">API</span></a>:
+at minimum, it has to include the <code>load</code> method. Since our <code>optional</code> plugin is very simple, <code>load</code> is in fact
+the only method we have to&nbsp;implement:</p>
+<div class="highlight"><pre><span class="cm">/* Skeleton of a simple RequireJS plugin module. */</span>
+
+<span class="nx">define</span><span class="p">([],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+
+<span class="kd">function</span> <span class="nx">load</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">,</span> <span class="nx">parentRequire</span><span class="p">,</span> <span class="nx">onload</span><span class="p">,</span> <span class="nx">config</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+
+<span class="k">return</span> <span class="p">{</span>
+    <span class="nx">load</span><span class="o">:</span> <span class="nx">load</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As its name would hint, <code>load</code> carries out the actual module loading which a plugin is allowed to influence, modify,
+or even replace with something altogether different. In our case, we don&#8217;t want to be too invasive, but we need to
+detect failure in the original loading procedure and step&nbsp;in.</p>
+<p>I mentioned previously that module loading is asynchronous, which JavaScript often translates to &#8220;callbacks&#8221;.
+Here, <code>load</code> receives the <code>onload</code> callback which we eventually need to invoke. It also get the mysterious
+<code>parentRequire</code> argument; this is simply a regular <code>require</code> function that&#8217;d normally be used if our plugin didn&#8217;t
+stand in the&nbsp;way.</p>
+<p>Those two are the most important pieces of the puzzle, which overall has a pretty succinct&nbsp;solution:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25</pre></div></td><td class="code"><div class="highlight"><pre><span class="cm">/**</span>
+<span class="cm"> * RequireJS plugin for optional module loading.</span>
+<span class="cm"> */</span>
+<span class="nx">define</span> <span class="p">([],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+
+
+<span class="cm">/** Default value to return when a module failed to load. */</span>
+<span class="kd">var</span> <span class="nx">DEFAULT</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">load</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">,</span> <span class="nx">parentRequire</span><span class="p">,</span> <span class="nx">onload</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">parentRequire</span><span class="p">([</span><span class="nx">moduleName</span><span class="p">],</span> <span class="nx">onload</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">failedModule</span> <span class="o">=</span> <span class="nx">err</span><span class="p">.</span><span class="nx">requireModules</span> <span class="o">&amp;&amp;</span> <span class="nx">requireModules</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">warn</span><span class="p">(</span><span class="s2">&quot;Could not load optional module: &quot;</span> <span class="o">+</span> <span class="nx">failedModule</span><span class="p">);</span>
+        <span class="nx">requirejs</span><span class="p">.</span><span class="nx">undef</span><span class="p">(</span><span class="nx">failedModule</span><span class="p">);</span>
+
+        <span class="nx">define</span><span class="p">(</span><span class="nx">failedModule</span><span class="p">,</span> <span class="p">[],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">DEFAULT</span><span class="p">;</span> <span class="p">});</span>
+        <span class="nx">parentRequire</span><span class="p">([</span><span class="nx">failedModule</span><span class="p">],</span> <span class="nx">onload</span><span class="p">);</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="k">return</span> <span class="p">{</span>
+    <span class="nx">load</span><span class="o">:</span> <span class="nx">load</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="p">});</span>
+</pre></div>
+</td></tr></table>
+
+<p>The logic here is as&nbsp;follows:</p>
+<ul>
+<li>First, try to load the module normally (via the outer <code>parentRequire</code> call).</li>
+<li>If it succeeds, <code>onload</code> is called and there is nothing for us to&nbsp;do.</li>
+<li>If it fails, we log the <code>failedModule</code> and cleanup some internal RequireJS state with <code>requirejs.undef</code>.</li>
+<li>Most importantly, we <code>define</code> the module as a trivial shim that returns some <code>DEFAULT</code> (here, <code>null</code>).</li>
+<li>As a result, when we require it again (through the inner <code>parentRequire</code> call), we <em>know</em> it&#8217;ll be loaded&nbsp;successfully.</li>
+</ul>
+<h4>Usage</h4>
+<p>Plugins in RequireJS are invoked on a per-module basis. You can specify that a certain dependency <code>'bar'</code> shall be loaded
+through a plugin <code>'foo'</code> by putting <code>'foo!bar'</code> on the dependency&nbsp;list:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span> <span class="s1">&#39;foo!bar&#39;</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">bar</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Both <code>'foo'</code> and <code>'bar'</code> represent module paths here: the first one is the path to the <em>plugin</em> module,
+while the second one is the actual dependency. In a more realistic example &#8212; like when our optional loader is involved &#8212;
+both of them would most likely be multi-segments&nbsp;paths:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;myapp/ext/require/optional!myapp/common/buttons/awesome-button&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As you can see, they can get pretty unreadable rather quickly. It would be better if the plugin prefix consisted
+of just one segment (i.e. <code>optional!</code>) instead. We can make that happen by adding
+<a href="http://requirejs.org/docs/api.html#config-map">a mapping</a> to the RequireJS&nbsp;config:</p>
+<div class="highlight"><pre><span class="nx">requirejs</span><span class="p">.</span><span class="nx">config</span><span class="p">({</span>
+    <span class="c1">// ...</span>
+    <span class="nx">map</span><span class="o">:</span> <span class="p">{</span>
+        <span class="s1">&#39;*&#39;</span><span class="o">:</span> <span class="p">{</span>
+            <span class="s1">&#39;optional&#39;</span><span class="o">:</span> <span class="s1">&#39;myapp/ext/require/optional&#39;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">})</span>
+</pre></div>
+
+
+<p>With this renaming in place, the loading of non-mandatory dependencies becomes quite a bit&nbsp;clearer:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;optional!myapp/common/buttons/awesome-button&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+
+<span class="c1">// ...</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... (some work around) ...</span>
+<span class="p">}</span>
+
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Of course, you still need to actually code around the potential lack of an optional dependency.
+The <code>if</code> statement above is just an illustrative example; you may find it more sensible to provide some shim&nbsp;instead:</p>
+<div class="highlight"><pre><span class="nx">AwesomeButtonController</span> <span class="o">=</span> <span class="nx">AwesomeButtonController</span> <span class="o">||</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">};</span>
+</pre></div>
+
+
+<p>Either way, I recommend trying to keep the size of such conditional logic to a minimum.
+Ideally, it should be confined to a single place, or &#8212; better yet &#8212; abstracted behind a&nbsp;function.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>An actual <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import"><code>import</code> statement</a>
+has made it into the <span class="caps">ES6</span> (ECMAScript 2015) standard but, as of this writing, no browser implements it.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Most of the code for the plugin presented here is based on
+<a href="http://stackoverflow.com/a/27422370/434799">this StackOverflow answer</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/requirejs-optional.html#requirejs-optional">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Reload Jinja macro&nbsp;files</a></h2>
+    <p>
+      Posted on Thu 24 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/werkzeug.html">Werkzeug</a>,      <a href="http://xion.io/tag/flask-script.html">Flask-Script</a>      &#8226; <a href="http://xion.io/post/code/jinja-reload-macro-files.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>The integration between <a href="http://jinja.pocoo.org">Jinja templating engine</a> and the
+<a href="http://flask.pocoo.org">Flask microframework</a> for Python is quite seamless most of the time. It also facilitates
+rapid development: when we run our web application through Flask&#8217;s development server, any changes in Python code
+will get picked up immediately without restarting it. Similarly, Jinja&#8217;s default template loader will detect
+whether any template has been modified after its last compilation and recompile it if&nbsp;necessary.</p>
+<p>One instance when it <em>doesn&#8217;t</em> seem to work that well, though, is template files that only contain
+<a href="http://jinja.pocoo.org/docs/dev/templates/#macros">Jinja macros</a>. They apparently aren&#8217;t subject to the same caching
+rules that apply to regular templates. Modifications to those files alone may not be picked up by Jinja <code>Environment</code>,
+causing <a href="http://flask.pocoo.org/docs/0.10/api/#flask.render_template"><code>render_template</code> calls</a> in Flask
+to (indirectly) use their stale&nbsp;versions.</p>
+<h4>I&#8217;ll be watching&nbsp;you</h4>
+<p>This problem can be alleviated by making the server watch those macro files explicitly, not unlike the Python sources
+it already monitors. When running a Flask server through
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.run">the <code>Flask.run</code> method</a>, you can pass additional keyword arguments
+which aren&#8217;t handled by Flask itself, but by the underlying <a href="http://wsgi.readthedocs.org/en/latest/what.html"><span class="caps">WSGI</span></a>
+scaffolding called <a href="http://werkzeug.pocoo.org/">Werkzeug</a>. The automatic reloader is actually part of it and is quite
+configurable. Most importantly, it allows passing a list of <code>extra_files=</code> to&nbsp;watch:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&#39;0.0.0.0&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)),</span>
+        <span class="n">extra_files</span><span class="o">=</span><span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="s">&#39;macros.html&#39;</span><span class="p">)])</span>
+</pre></div>
+
+
+<p>But of course it&#8217;s tedious and error-prone to keep this list up to date manually, so let&#8217;s try to do&nbsp;better.</p>
+<h4>&#8230;all of&nbsp;you</h4>
+<p>I&#8217;m going to assume you&#8217;re keeping all your Jinja macro files inside a single directory. This makes sense,
+as macros are reusable pieces of template code that are imported by multiple regular templates,
+so they shouldn&#8217;t be scattered around the codebase without some order. The folder may be named <em>macros</em>, <em>util</em>,
+<em>common</em>, or similar; what&#8217;s important is that all the macros have a designated place in the project source&nbsp;tree.</p>
+<p>Under this assumption, it&#8217;s not difficult to programmatically compute their complete list<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>  <span class="c"># Flask application object</span>
+
+
+<span class="c">#: Directories under app&#39;s template folder that contain files</span>
+<span class="c">#: with only Jinja macros.</span>
+<span class="n">JINJA_MACRO_DIRS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;macros&#39;</span><span class="p">,)</span>
+
+
+<span class="k">def</span> <span class="nf">get_extra_files</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;Returns an iterable of the extra files that the Flask server</span>
+<span class="sd">    should monitor for changes and reload the app if any has been modified.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">app_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">dirname</span> <span class="ow">in</span> <span class="n">JINJA_MACRO_DIRS</span><span class="p">:</span>
+        <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">app_root</span> <span class="o">/</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
+        <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
+            <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+
+
+<p>If you&#8217;re using Flask <a href="http://flask.pocoo.org/docs/0.10/blueprints/">blueprints</a>,
+in addition to the global application templates you&#8217;d also want to monitor any blueprint-specific macro&nbsp;files:</p>
+<div class="highlight"><pre>        <span class="k">for</span> <span class="n">bp</span> <span class="ow">in</span> <span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">blueprints</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">bp</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span> <span class="o">/</span> <span class="n">bp</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
+            <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
+                <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
+</pre></div>
+
+
+<h4>A new&nbsp;start</h4>
+<p>How you&#8217;re going to use the <code>get_extra_files</code> function from the snippet above depends on how exactly you&#8217;re running
+the Flask development server. In the simplest case, when <code>Flask.run</code> is invoked at the top-level scope of some module,
+it&#8217;s pretty&nbsp;obvious:</p>
+<div class="highlight"><pre><span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">extra_files</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">()))</span>
+</pre></div>
+
+
+<p>More realistically, though, you may be using the <a href="http://flask-script.readthedocs.org/">Flask-Script</a> extension
+for all management tasks, including starting the server. If so, calling <code>Flask.run</code> will be relegated to it,
+so you&#8217;ll need to override the <code>Server</code> command to inject additional parameters&nbsp;there:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">from</span> <span class="nn">flask.ext.script</span> <span class="kn">import</span> <span class="n">Manager</span><span class="p">,</span> <span class="n">Server</span> <span class="k">as</span> <span class="n">_Server</span>
+
+<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>
+
+
+<span class="k">class</span> <span class="nc">Server</span><span class="p">(</span><span class="n">_Server</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;use_reloader&#39;</span><span class="p">,</span> <span class="bp">True</span><span class="p">):</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s">&#39;extra_files&#39;</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">())</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Server</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<span class="n">manager</span> <span class="o">=</span> <span class="n">Manager</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">with_default_commands</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+
+<span class="n">server</span> <span class="o">=</span> <span class="n">Server</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)))</span>
+<span class="n">manager</span><span class="o">.</span><span class="n">add_command</span><span class="p">(</span><span class="s">&#39;server&#39;</span><span class="p">,</span> <span class="n">server</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This new <code>server</code> command should work just like the default one provided by Flask-Script out of the box,
+except that all your Jinja macro files will now be monitored for&nbsp;changes.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Like <a href="http://xion.io/post/code/flask-auto-error-pages.html">before</a>, I&#8217;m using the
+<a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a>, for which there is a
+<a href="https://pypi.python.org/pypi/pathlib/">backport</a> if you&#8217;re using Python 3.3 or older.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/memcached-purge-local.html#memcached-purge-local">Purging local&nbsp;Memcached</a></h2>
+    <p>
+      Posted on Sat 19 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/memcache.html">memcache</a>,      <a href="http://xion.io/tag/memcached.html">Memcached</a>,      <a href="http://xion.io/tag/expect.html">expect</a>,      <a href="http://xion.io/tag/caching.html">caching</a>,      <a href="http://xion.io/tag/scripting.html">scripting</a>,      <a href="http://xion.io/tag/tcl.html">Tcl</a>      &#8226; <a href="http://xion.io/post/code/memcached-purge-local.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://memcached.org/">Memcached</a> is a ubiquitous caching solution, most commonly used to speed things up
+in web application backends. You deploy it as a separate binary and have your application servers talk to it
+before querying a database, calling a third party <span class="caps">API</span> over <span class="caps">HTTP</span>, or performing some other time-consuming I/O operation.
+Since it stores data in memory, as its name obviously suggests, it can be orders of magnitude faster than anything
+that may have to hit a spinning disk (like a database) or an unreliable, external&nbsp;network.</p>
+<p>From the point of view of a developer, using Memcached is pretty simple.
+There exist <a href="https://code.google.com/p/memcached/wiki/Clients">numerous libraries</a> that wrap its protocol in a neat,
+language-appropriate <span class="caps">API</span>. It does put another requirement on the development environment, of course: you need to have
+a working memcached deamon in the background if you want the local server to hit code paths where it retrieves data
+from memcache<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Thankfully, it&#8217;s an extremely popular piece of software, present in basically all
+<a href="https://code.google.com/p/memcached/wiki/NewInstallFromPackage">package repositories</a>,
+so having it up and running is just one <code>apt-get install</code> or <code>brew install</code> away.</p>
+<h4>How to&nbsp;flush</h4>
+<p>It&#8217;s a little dated and finicky piece of software, too. Once you have its local instance used for a while,
+there comes a time when you&#8217;d like to purge all its contents and have your server(s) fill it up again.
+Rather than restarting the daemon (which is system-specific procedure that may require root privileges),
+you&#8217;d like to just issue the <code>flush_all</code> command to&nbsp;it.</p>
+<p>This <em>should</em> be easy. Unlike <a href="http://redis.io/">Redis</a>, however, memcached doesn&#8217;t come with a dedicated <span class="caps">CLI</span> client.
+In theory, it doesn&#8217;t have to, because you can talk to it over just <code>telnet</code>:</p>
+<div class="highlight"><pre><span class="nv">$ </span>telnet localhost 11211
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is <span class="s1">&#39;^]&#39;</span>.
+flush_all
+OK
+^<span class="o">]</span>
+
+telnet&gt; quit
+Connection closed.
+</pre></div>
+
+
+<p>But going through this rigmarole every time we want to flush memcache gets a bit tedious after a while.
+An obvious attempt at automating it will, however,&nbsp;fail:</p>
+<div class="highlight"><pre><span class="nv">$ </span><span class="nb">echo</span> <span class="s2">&quot;flush_all\n&quot;</span> <span class="p">|</span> telnet localhost 11211
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is <span class="s1">&#39;^]&#39;</span>.
+Connection closed by foreign host.
+</pre></div>
+
+
+<p>Turns out the you cannot just bombard memcached with <code>flush_all</code> (or any other command) while the connection
+is being established. You can of course try adding a <code>sleep</code> to allow it some time, but this is inherently unreliable,
+especially when connecting to remote&nbsp;servers.</p>
+<p>The most successful approach I&#8217;ve managed to find is to automate not the raw data exchange,
+but the <em>interactive <code>telnet</code> session itself</em>. By that I mean invoking a <code>telnet</code> command, observing its output
+and reacting to it &#8212; just like a human would do, but in a scripted, automated&nbsp;way.</p>
+<h4>Nobody expects the Telnet&nbsp;instrumentation</h4>
+<p>There is a dedicated Unix program for scripting just this kind of <span class="caps">CLI</span> interactions. It&#8217;s decidedly more obscure
+than mere <code>echo</code> or pipes, but should nonetheless be available for any modern (or ancient) Unix system,
+from Linuxes to <span class="caps">OSX</span>. Its name is <code>expect</code> and &#8212; if installed<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> &#8212; the usual place you can find it is
+<code>/usr/bin</code> or <code>/usr/local/bin</code>.</p>
+<p><code>expect</code> accepts commands and scripts written in <a href="https://en.wikipedia.org/wiki/Tcl">Tcl</a> &#8212; a scripting language
+whose syntax looks a bit like a mix of <span class="caps">PHP</span> and Objective-C. It&#8217;s a fully featured language with all the usual
+programming constructs you&#8217;d normally want but <code>expect</code> enhances it further with instructions dedicated to spawning
+external processes, reading their output, and sending input in&nbsp;response.</p>
+<p>In fact, the main commands of the <code>expect</code> program are <code>spawn</code>, <code>expect</code>, and <code>send</code>. Mashing them together,
+we can easily nail the crucial part of our memcache-purging&nbsp;script:</p>
+<div class="highlight"><pre><span class="c">#!/usr/bin/expect</span>
+
+<span class="nv">spawn</span> telnet localhost <span class="mi">11211</span><span class="k">;</span>
+<span class="nv">expect</span> <span class="s2">&quot;Connected to localhost&quot;</span><span class="k">;</span>
+<span class="nv">send</span> <span class="s2">&quot;flush_all\n&quot;</span><span class="k">;</span>
+</pre></div>
+
+
+<p>This performs the actual flush but the <code>telnet</code> session/process is kept open afterwards.
+Once the <code>expect</code> program ends (after finishing our script), that process may get orphaned and hog system resources.
+To prevent that, we should behave like a good Unix citizen and <em>wait</em> for our child processes to&nbsp;terminate:</p>
+<div class="highlight"><pre><span class="nv">wait</span><span class="k">;</span>
+</pre></div>
+
+
+<p>But obviously, this will never happen, because we&#8217;ve never instructed the <code>telnet</code> process to&nbsp;end!</p>
+<h4>Escape&nbsp;artist</h4>
+<p>Your first instinct may be to send <code>^C</code> (<span class="caps">SIGINT</span>) or <code>^D</code> (end-of-file) to the <code>telnet</code> process
+but this won&#8217;t work either. Everything we type inside an active Telnet session is sent to the remote server,
+and that includes those two key&nbsp;chords.</p>
+<p>Authors of the <code>telnet</code> program were of course aware of this problem. As a countermeasure, they introduced the concept
+of an <em>escape character</em> that allows the user to control the Telnet connection itself &#8212; including, but not limited to,
+its termination. When encountered in the input stream, the escape character causes <code>telnet</code> to temporally suspend
+its normal operation, &#8220;escaping&#8221; from the client-server session to a simple command shell of the <code>telnet</code> program itself.
+(This is indicated by the <code>telnet&gt;</code> prompt).</p>
+<p>The default escape character is <code>^]</code>, which can be easily typed on a keyboard using the key combination <em>Ctrl+]</em>.
+The <code>expect</code> program, however, only simulates typing real characters. Coupled with some syntactical quirks of the Tcl
+language, this makes the usage of <code>^]</code> as an escape character rather cumbersome, to say the&nbsp;least.</p>
+<p>Fortunately, this default can be changed rather easily with an <code>-e</code> flag to the <code>telnet</code> application.
+After setting it to something more common but still outside of the memcache protocol &#8212; such as the exclamation mark &#8212;
+we are now able to <code>send</code> it without an&nbsp;issue:</p>
+<div class="highlight"><pre><span class="c">#!/usr/bin/expect</span>
+
+<span class="k">set</span> escapechar <span class="o">!</span><span class="k">;</span>
+
+<span class="nv">spawn</span> telnet <span class="o">-</span>e <span class="nv">$escapechar</span> localhost <span class="mi">11211</span><span class="k">;</span>
+<span class="nv">expect</span> <span class="s2">&quot;Connected to localhost&quot;</span><span class="k">;</span>
+<span class="nv">send</span> <span class="s2">&quot;flush_all\n&quot;</span><span class="k">;</span>
+
+<span class="nv">send</span> <span class="nv">$escapechar</span><span class="k">;</span>
+<span class="nv">expect</span> <span class="s2">&quot;telnet&gt;&quot;</span><span class="k">;</span>
+<span class="nv">send</span> <span class="s2">&quot;quit\n&quot;</span><span class="k">;</span>
+<span class="nv">wait</span><span class="k">;</span>
+</pre></div>
+
+
+<p>The script will also terminate despite <code>wait</code>ing for the <code>telnet</code> process to finish, which means everything has been
+shut down&nbsp;gracefully.</p>
+<h4>Production-ready</h4>
+<p>As a final touch, it&#8217;d be nice to make our solution work with any memcache server and not just <em>localhost</em>.
+You can see it done in <a href="https://gist.github.com/Xion/624979b05e0411324eb1">this gist</a>: the script accepts
+two optional arguments (host <span class="amp">&amp;</span> port) and uses it when spawning the <code>telnet</code> process.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It probably goes without saying that any value in the memcache, as well as the entire memcached server (or servers),
+must be treated as potentially unavailable at any time. A properly written application server should still be able
+to service all requests &#8212; if only a little slower &#8212; without any (mem)caching at all.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>On all distros, as well as in Homebrew for <span class="caps">OSX</span>, it should be available as a package with a totally uncreative
+name of <code>expect</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/memcached-purge-local.html#memcached-purge-local">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">mailto: URLs in&nbsp;JavaScript</a></h2>
+    <p>
+      Posted on Tue 15 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/email.html">email</a>,      <a href="http://xion.io/tag/url.html">URL</a>      &#8226; <a href="http://xion.io/post/code/js-mailto-urls.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Though not as popular as back in the days, <code>mailto:</code> URLs are sometimes still the best way
+&#8212; and most certainly the easiest &#8212; to enable users to send emails from a web application. Typically, they are used
+in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com&quot;</span><span class="nt">&gt;</span>Send email<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>Depending on the operating system and browser settings, clicking on such a link could invoke a different mail client.
+In the past, this could cause much confusion if the user has never used its local email application (e.g. Outlook),
+but nowadays browsers are increasingly doing the right thing and presenting a choice of possible options.
+This includes the various web applications from popular email providers. User can thus choose &#8212; say &#8212; Gmail, and have
+all subsequent <code>mailto:</code> links take them to a <em>Compose Mail</em> view&nbsp;there.</p>
+<p>Given those developments, it&#8217;s possible that soon those URLs won&#8217;t be as quaint as they used to be ;)
+In any case, I think it&#8217;s worthwhile to have a few <code>mailto:</code> tricks up our sleeve for when they turn out to be
+an appropriate solution for the task at&nbsp;hand.</p>
+<h4>Triggering them in&nbsp;JavaScript</h4>
+<p>In the example above, I&#8217;ve used a <code>mailto:</code> <span class="caps">URL</span> directly in some <span class="caps">HTML</span> markup. For the most part, however, those URLs
+behave like any other and support a lot of the same functionality that <code>http://</code> URLs&nbsp;do:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">sendEmail</span><span class="p">(</span><span class="nx">address</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nx">address</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Predictably, calling this <code>sendEmail</code> function is equivalent to clicking on a <code>mailto:</code> link. This additional level
+of indirection, however, may be enough to fool some web crawlers that look for email addresses to spam. Its effectiveness
+depends largely on how radically we&#8217;re going to obfuscate the <code>address</code> argument in the actual&nbsp;invocation.</p>
+<p>More importantly, though, a function like that can be part of some more complicated logic. The only limitation is
+the same one that restricts where and when it&#8217;s possible to <code>window.open</code> another browser window. Namely, it has to be
+called in a direct response to a <span class="caps">UI</span> action triggered by the user (a button click would be a good&nbsp;example).</p>
+<h4>Customization</h4>
+<p>In their simplest form, <code>mailto:</code> URLs aren&#8217;t terribly interesting, since their only parameter is the address of a sole recipient. Fortunately, this isn&#8217;t where their capabilities end: it&#8217;s possible to customize other email fields as well,
+such as the subject or even body<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>Somewhat surprisingly, all this can be done in a manner that&#8217;s more typical for <code>http://</code> <span class="caps">URL</span>: with query string
+parameters. Right after the recipient&#8217;s address, we can drop a question mark and add some ampersand-separated
+key-value&nbsp;pairs:</p>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com?subject=Hi&amp;amp;body=Hello%20John!&quot;</span><span class="nt">&gt;</span>
+  Say hello to John!
+<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>A more programmatic approach is of course also possible. One thing we need to remember, though, is the proper escaping
+of input values in order to make them safe to put inside an <span class="caps">URL</span><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+The <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent"><code>encodeURIComponent</code> function</a> can be used for this&nbsp;purpose:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">getMailtoUrl</span><span class="p">(</span><span class="nx">to</span><span class="p">,</span> <span class="nx">subject</span><span class="p">,</span> <span class="nx">body</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="p">[];</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">subject</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;subject=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">subject</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">body</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;body=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">body</span><span class="p">))</span>
+    <span class="p">}</span>
+
+    <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">to</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">url</span> <span class="o">+=</span> <span class="s1">&#39;?&#39;</span> <span class="o">+</span> <span class="nx">args</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;&amp;&#39;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">url</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>In theory, almost any of the numerous <a href="https://en.wikipedia.org/wiki/Email#Header_fields">email headers</a> can be specified
+this way. However, support may vary across browsers, especially since some of the headers
+(like <a href="https://en.wikipedia.org/wiki/Blind_carbon_copy">the <code>Bcc:</code> one</a>) are subject to certain security
+or privacy considerations. Personally, I wouldn&#8217;t recommend relying on anything besides
+<code>subject=</code> and <code>body=</code>, with a possible addition of <code>cc=</code> for
+<a href="https://en.wikipedia.org/wiki/Carbon_copy">the <code>Cc:</code>header </a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>By <a href="http://www.ietf.org/rfc/rfc2368.txt"><span class="caps">RFC</span> 2368</a>, only <em>text/plain</em> email body can be specified this way.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Note that this is unrelated to the <em><span class="caps">HTML</span></em> escaping of <code>&amp;</code> character as <code>&amp;amp;</code> entity in the previous example.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">Continue reading</a>
+  </div>
+  <hr />
+</article>
 <article>
   <header>
     <h2><a href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Query string authentication in&nbsp;Requests</a></h2>
@@ -540,440 +1441,12 @@ along with its decorator chain, or the equivalent of such a call in any of the n
 <a href="https://corner.squareup.com/2014/05/evaluating-go-frameworks.html">Go web frameworks</a>.</p>
       <a class="btn" href="http://xion.io/post/code/go-decorated-functions.html#go-decorated-functions">Continue reading</a>
   </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/html-interruptive-fadeout.html#html-interruptive-fadeout">Interruptible fade-out of <span class="caps">DOM</span>&nbsp;elements</a></h2>
-    <p>
-      Posted on Sun 30 August 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/html.html">HTML</a>,      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/dom.html">DOM</a>,      <a href="http://xion.io/tag/jquery.html">jQuery</a>,      <a href="http://xion.io/tag/animation.html">animation</a>,      <a href="http://xion.io/tag/promises.html">promises</a>      &#8226; <a href="http://xion.io/post/code/html-interruptive-fadeout.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Here&#8217;s a nice animated effect you may have seen in some applications, quite often games.
-An ephemeral <span class="caps">UI</span> element is displayed, either in a corner or pretty prominently, and after a short while
-it slowly fades out to transparency over several&nbsp;seconds:</p>
-<p style="text-align: center">
-    <img src="http://xion.io/images/paragon-222.jpg" alt='"Ding" with full opacity'>
-    <br>
-    <img src="http://xion.io/images/paragon-222-faded.jpg" alt ='"Ding" after fading out'>
-</p>
-
-<p>If you hover your mouse over it, though, it turns opaque right away and stays like that
-until you move away with the cursor. It then tries to disappear again, lest you stop it once more
-and restore to full opacity &#8212; and so on. Leave it for a moment, though, and it eventually&nbsp;vanishes.</p>
-<p>Cool, eh? Wouldn&#8217;t it be nice to have a similar mechanism for, say, notifications displayed within a web app?
-Sure it would be! And it doesn&#8217;t even seem all that complicated, so let&#8217;s give it a&nbsp;try.</p>
-<h4>A promising <span class="caps">API</span></h4>
-<p>Before delving into implementation details, it&#8217;s a good practice think for a moment about an <span class="caps">API</span>
-that we&#8217;ll expose to the user. Since it looks like a relatively simple problem, we don&#8217;t need no classes or frameworks.
-All that&#8217;s necessary is a simple&nbsp;function:</p>
-<div class="highlight"><pre><span class="kd">function</span> <span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// ...</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>Surely, however, whoever calls it would like to be able to tell when the animation finishes (e.g. to remove the <code>element</code>
-they&#8217;ve passed from the <span class="caps">DOM</span> tree). Simply waiting a predefined number of seconds is not sufficient, because
-&#8212; as described above &#8212; the effect could be restarted arbitrary many times through mouse&nbsp;interaction.</p>
-<p>We could pass a callback, of course, but the modern JavaScript way of dealing with asynchronicity and concurrency
-is through <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise"><em>promises</em></a>.
-Following this pattern, our function shall return a promise that <em>resolves</em> when the effect ends.
-Disregarding the possible user interaction for now, a minimal implementation of the fade-out alone would simply use
-the <a href="http://api.jquery.com/fadeout/"><code>jQuery.fadeOut</code> method</a> and look something like&nbsp;this:</p>
-<div class="highlight"><pre><span class="kd">function</span> <span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">options</span><span class="p">)</span> <span class="p">{</span>
-    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">options</span> <span class="o">===</span> <span class="s1">&#39;number&#39;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">options</span> <span class="o">=</span> <span class="p">{</span><span class="nx">fadeOut</span><span class="o">:</span> <span class="nx">options</span><span class="p">};</span>
-    <span class="p">}</span>
-
-    <span class="nx">element</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="nx">element</span><span class="p">);</span>
-    <span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-            <span class="nx">resolve</span><span class="p">();</span>
-        <span class="p">});</span>
-    <span class="p">});</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>The constructor of <code>Promise</code> is admittedly a little weird, as it employs a level of abstraction and indirection
-that is indicative of (more) functional programming languages. You pass it a function that&#8217;s invoked <em>immediately</em>
-with an argument that itself is a function. (Actually two arguments, but we ignore the other one here).
-That input function, <code>resolve</code>, should be called whenever the new promise &#8220;completes&#8221;, in whatever sense
-it&#8217;s appropriate for the particular use&nbsp;case.</p>
-<p>Here, we&#8217;re resolving the promise when our animation ends. This enables callers to react to this
-in a very straightforward&nbsp;way:</p>
-<div class="highlight"><pre><span class="kd">var</span> <span class="nx">elem</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;#foo&#39;</span><span class="p">);</span>
-<span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">elem</span><span class="p">,</span> <span class="mi">400</span> <span class="cm">/* ms */</span><span class="p">).</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-    <span class="nx">elem</span><span class="p">.</span><span class="nx">remove</span><span class="p">();</span>
-<span class="p">});</span>
-</pre></div>
-
-
-<p>As a small aside, the <code>Promise</code> class is a ECMAScript 6 feature, which means it may not be available in all the browsers.
-The open-source <a href="https://github.com/kriskowal/q"><em>Q</em> library</a> is often used as a compatibility shim,
-among many other libraries implementing the <a href="https://promisesaplus.com/">Promises/A+ recommendation</a>.</p>
-<h4>Interaction&nbsp;handling</h4>
-<p>There&#8217;s little value in just wrapping an existing jQuery method, so let&#8217;s make it more interesting through mouse events.
-We want hovering on the element to pause the animation, while moving the cursor away should resume&nbsp;it:</p>
-<div class="highlight"><pre><span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
-    <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;mouseenter&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>  <span class="c1">// true == discard remaining animation stages</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">css</span><span class="p">(</span><span class="s1">&#39;opacity&#39;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
-    <span class="p">});</span>
-    <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;mouseleave&#39;</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-            <span class="nx">resolve</span><span class="p">();</span>
-        <span class="p">});</span>
-    <span class="p">});</span>
-
-    <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-        <span class="nx">resolve</span><span class="p">();</span>
-    <span class="p">});</span>
-<span class="p">});</span>
-</pre></div>
-
-
-<p>That will <em>mostly</em> work even with the above code, but there are several problems that need to be addressed&nbsp;immediately:</p>
-<ul>
-<li>The <code>mouseenter</code> and <code>mouseleave</code> event handlers are should only fire while the fade-out effect is being played.
-  Currently, they &#8220;leak&#8221;, and remain bound even after it finishes, interfering with given <span class="caps">DOM</span> element
-  for as long as it&nbsp;exists.</li>
-<li>The whole concept of <em>hovering</em> is contingent upon the user having a pointing device. In today&#8217;s mobile world,
-  this excludes a significant fraction of clients. We need an alternative interaction pattern for touchscreen devices,
-  and one possible option is restart the effect on&nbsp;click/tap.</li>
-<li>There is a fair amount of repetition here, and it will only get worse once the previous problems are dealt&nbsp;with.</li>
-</ul>
-<h4>Cleaning&nbsp;up</h4>
-<p>A correct (and cleaner) version is quite a bit longer, but shouldn&#8217;t be too hard to&nbsp;follow:</p>
-<div class="highlight"><pre><span class="k">return</span> <span class="k">new</span> <span class="nx">Promise</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">resolve</span><span class="p">)</span> <span class="p">{</span>
-    <span class="c1">// Event handlers used by the effect.</span>
-    <span class="kd">var</span> <span class="nx">events</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="nx">mouseenter</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">interruptAnimation</span><span class="p">();</span> <span class="p">},</span>
-        <span class="nx">mouseleave</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">delayedFadeOut</span><span class="p">();</span> <span class="p">},</span>
-        <span class="nx">click</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-            <span class="nx">interruptAnimation</span><span class="p">();</span>
-            <span class="nx">delayedFadeOut</span><span class="p">();</span>
-        <span class="p">},</span>
-    <span class="p">};</span>
-    <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">events</span><span class="p">).</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">events</span><span class="p">[</span><span class="nx">name</span><span class="p">]);</span>
-    <span class="p">});</span>
-
-    <span class="c1">// Helper functions.</span>
-    <span class="kd">var</span> <span class="nx">interruptAnimation</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">stop</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">css</span><span class="p">(</span><span class="s1">&#39;opacity&#39;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
-    <span class="p">};</span>
-    <span class="kd">var</span> <span class="nx">delayedFadeOut</span> <span class="o">=</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-        <span class="k">if</span> <span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">delay</span><span class="p">)</span> <span class="p">{</span>
-            <span class="nx">element</span><span class="p">.</span><span class="nx">delay</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">delay</span><span class="p">);</span>
-        <span class="p">}</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeOut</span><span class="p">,</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
-            <span class="nb">Object</span><span class="p">.</span><span class="nx">keys</span><span class="p">(</span><span class="nx">events</span><span class="p">).</span><span class="nx">forEach</span><span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">name</span><span class="p">)</span> <span class="p">{</span>
-                <span class="nx">element</span><span class="p">.</span><span class="nx">off</span><span class="p">(</span><span class="nx">name</span><span class="p">,</span> <span class="nx">events</span><span class="p">[</span><span class="nx">name</span><span class="p">]);</span>
-            <span class="p">});</span>
-            <span class="nx">resolve</span><span class="p">();</span>
-        <span class="p">});</span>
-    <span class="p">};</span>
-
-    <span class="c1">// Start the animation.</span>
-    <span class="k">if</span> <span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">element</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">(</span><span class="nx">options</span><span class="p">.</span><span class="nx">fadeIn</span><span class="p">);</span>
-    <span class="p">}</span>
-    <span class="nx">delayedFadeOut</span><span class="p">();</span>
-<span class="p">});</span>
-</pre></div>
-
-
-<p>The main part is of course the <code>delayedFadeOut</code> function. It is invoked right at the beginning, as well as whenever
-the animation has to be started&nbsp;again.</p>
-<p>We also put the event handlers in a &#8220;map&#8221; (JavaScript object). This makes it easy to initially bind them to the element, and &#8212; more importantly &#8212; unbind them when the effect&nbsp;ends.</p>
-<p>As a final touch, we also allow the caller to specify how long the element should remain at its full opacity
-before it starts to fade out (<code>delay</code>), and to optionally add a <code>fadeIn</code> stage at the very beginning to make everything
-look a little nicer. (I recommend no more than 300-400ms for that part,&nbsp;though).</p>
-<h4>Practical&nbsp;example</h4>
-<p>A complete code sample for the <code>interruptibleFadeOut</code> function can be seen in
-<a href="https://gist.github.com/Xion/0a9da59c44d5c9664a2c">this gist</a>. To use it in practice, you&#8217;d most likely need
-at least a little bit of <span class="caps">CSS</span> and additional JavaScript to position the element&nbsp;appropriately:</p>
-<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">id=</span><span class="s">&quot;toast&quot;</span><span class="nt">&gt;</span>Hello, world!<span class="nt">&lt;/div&gt;</span>
-</pre></div>
-
-
-<!---->
-
-<div class="highlight"><pre><span class="nf">#toast</span> <span class="p">{</span>
-    <span class="k">position</span><span class="o">:</span> <span class="k">fixed</span><span class="p">;</span>
-    <span class="k">display</span><span class="o">:</span> <span class="k">none</span><span class="p">;</span>
-
-    <span class="c">/* These are arbitrary */</span>
-    <span class="k">top</span><span class="o">:</span> <span class="m">100px</span><span class="p">;</span>
-    <span class="k">width</span><span class="o">:</span> <span class="m">80%</span><span class="p">;</span>
-    <span class="k">height</span><span class="o">:</span> <span class="m">50px</span><span class="p">;</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<!---->
-
-<div class="highlight"><pre><span class="kd">var</span> <span class="nx">toast</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="s1">&#39;#toast&#39;</span><span class="p">);</span>
-<span class="nx">toast</span><span class="p">.</span><span class="nx">offset</span><span class="p">({</span>
-    <span class="nx">left</span><span class="o">:</span> <span class="nb">Math</span><span class="p">.</span><span class="nx">round</span><span class="p">(</span><span class="nx">$</span><span class="p">(</span><span class="nb">window</span><span class="p">).</span><span class="nx">width</span><span class="p">()</span> <span class="o">-</span> <span class="nx">element</span><span class="p">.</span><span class="nx">outerWidth</span><span class="p">()</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span>
-<span class="p">});</span>
-<span class="nx">toast</span><span class="p">.</span><span class="nx">show</span><span class="p">();</span>
-<span class="nx">interruptibleFadeOut</span><span class="p">(</span><span class="nx">toast</span><span class="p">,</span> <span class="p">{</span> <span class="nx">fadeIn</span><span class="o">:</span> <span class="mi">200</span><span class="p">,</span> <span class="nx">delay</span><span class="o">:</span> <span class="mi">1000</span><span class="p">,</span> <span class="nx">fadeOut</span><span class="o">:</span> <span class="mi">3000</span> <span class="p">})</span>
-    <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="nx">toast</span><span class="p">.</span><span class="nx">remove</span><span class="p">()</span> <span class="p">});</span>
-</pre></div>
-
-
-<p>Styling it to look like a level-up ding is left as an exercise for the reader&nbsp;:)</p>
-      <a class="btn" href="http://xion.io/post/code/html-interruptive-fadeout.html#html-interruptive-fadeout">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/sqlalchemy-query-values.html#sqlalchemy-query-values">Querying multiple scalar values in&nbsp;SQLAlchemy</a></h2>
-    <p>
-      Posted on Wed 26 August 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>,      <a href="http://xion.io/tag/python.html">Python</a>      &#8226; <a href="http://xion.io/post/code/sqlalchemy-query-values.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://www.sqlalchemy.org/">SQLAlchemy</a> is probably the greatest
-<a href="https://en.wikipedia.org/wiki/Object-relational_mapping"><span class="caps">ORM</span></a> library ever invented &#8212; and not just for Python.
-Like everything, though, it could sometimes use an&nbsp;improvement.</p>
-<p>One typical pattern that I&#8217;ve seen repeated many times is querying for values of a single column from multiple rows.
-Almost always, the desired outcome is to have those values in a Python iterable. Unfortunately, when returning multiple
-rows, the <code>Query</code> class can only give them out as tuples, making it necessary to unpack them explicitly every&nbsp;time:</p>
-<div class="highlight"><pre><span class="n">active_users_ids</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="n">uid</span> <span class="k">for</span> <span class="p">(</span><span class="n">uid</span><span class="p">,)</span> <span class="ow">in</span> <span class="n">session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">is_active</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-<span class="p">]</span>
-</pre></div>
-
-
-<p>It&#8217;s worth noting that a very similar operation &#8212; retrieving a single column value from <em>one</em> row &#8212;
-is comparatively cleaner thanks to a
-<a href="http://docs.sqlalchemy.org/en/rel_1_0/orm/query.html#sqlalchemy.orm.query.Query.scalar">dedicated <code>Query.scalar</code></a>
-method. So why not have a similar one for the use case&nbsp;above?&#8230;</p>
-<p>Turns out that SQLAlchemy is so amazingly extensible that we can easily outfit <code>Query</code> with such a method&nbsp;ourselves.</p>
-<h4>Our own <code>Query</code></h4>
-<p>The officially ordained way to do something like that is to extend the original <code>sqlalchemy.orm.query.Query</code> class
-with any additional functionality we require. We can then introduce a method in the subclass &#8212; let&#8217;s call it <code>values</code> &#8212;
-that implements our&nbsp;logic:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.exc</span> <span class="kn">import</span> <span class="n">MultipleResultsFound</span>
-<span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
-
-
-<span class="k">class</span> <span class="nc">Query</span><span class="p">(</span><span class="n">_Query</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Custom SQLAlchemy query class.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">values</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Return an iterable of all scalar, singleton element values</span>
-<span class="sd">        from rows matched by this query.</span>
-
-<span class="sd">        :raise MultipleValuesFound: If result rows have more than one element</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="k">return</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="p">(</span><span class="n">x</span><span class="p">,)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">all</span><span class="p">()]</span>
-        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">MultipleValuesFound</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
-
-
-<span class="k">class</span> <span class="nc">MultipleValuesFound</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">MultipleResultsFound</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Exception raised by :meth:`Query.values`</span>
-<span class="sd">    when multiple values were found in a single result row.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-</pre></div>
-</td></tr></table>
-
-<p>There is a special erroneous condition that occurrs when the <code>Query</code> returns rows with more than one column value.
-It would be possible to detect it preemptively by inspecting certain attributes of the query object,
-but it&#8217;s simpler to just catch the exception caused by unsuccessful tuple&nbsp;unpacking.</p>
-<p>In any case, I recommend re-raising it as a custom exception to enable more robust error handling in the client&nbsp;code.</p>
-<h4>Wiring&nbsp;it</h4>
-<p>The last piece of the puzzle is to make <code>Session</code> objects in our application use the new <code>Query</code> class.
-It&#8217;s easy: we simply pass it as <code>query_cls</code> parameter to the <code>Session</code> constructor. In more realistic scenarios &#8212;
-such as web applications with per-request database sessions &#8212; it means giving it directly to the <code>sessionmaker</code>:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">create_engine</span>
-<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">scoped_session</span><span class="p">,</span> <span class="n">sessionmaker</span>
-
-<span class="kn">from</span> <span class="nn">myapp.ext.sqlalchemy</span> <span class="kn">import</span> <span class="n">Query</span>
-
-
-<span class="n">session</span> <span class="o">=</span> <span class="n">scoped_session</span><span class="p">(</span><span class="n">sessionmaker</span><span class="p">(</span><span class="n">bind</span><span class="o">=</span><span class="n">create_engine</span><span class="p">(</span><span class="n">DATABASE_URL</span><span class="p">),</span>
-                                      <span class="n">query_cls</span><span class="o">=</span><span class="n">Query</span><span class="p">))</span>
-</pre></div>
-
-
-<p>Of course, <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">actual session setup</a> in your app
-may differ in few details from the sample&nbsp;above.</p>
-<h4>Usage&nbsp;example</h4>
-<p>With the new <code>Query</code> class wired in, the <code>values</code> method becomes immediately&nbsp;usable:</p>
-<div class="highlight"><pre><span class="n">active_user_ids</span> <span class="o">=</span> <span class="n">session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">is_active</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-</pre></div>
-
-
-<p>and the ugly manual unpacking of row tuples is no longer&nbsp;necessary.</p>
-      <a class="btn" href="http://xion.io/post/code/sqlalchemy-query-values.html#sqlalchemy-query-values">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/jinja-custom-errors.html#jinja-custom-errors">Custom errors in Jinja&nbsp;templates</a></h2>
-    <p>
-      Posted on Sun 23 August 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/templates.html">templates</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/errors.html">errors</a>      &#8226; <a href="http://xion.io/post/code/jinja-custom-errors.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://jinja.pocoo.org">Jinja</a> is a pretty great templating engine for Python.
-Unlike the likes of <a href="https://mustache.github.io/">Mustache</a> or <a href="http://handlebarsjs.com/">Handlebars</a>,
-it doesn&#8217;t try to constrain overmuch the kind of logic that the programmer can put in their templates.
-Most Python expressions, for example, are supported, as are variables and functions (or <em>macros</em> in Jinja&#8217;s&nbsp;parlance).</p>
-<p>One conspicously absent feature is throwing exceptions directly from template code.
-(It&#8217;s obviously possible from custom filters or tags). If we had it, we could add some more robust error checking
-to the template input values or macro&nbsp;paramaters.</p>
-<h4>Example</h4>
-<p>Let&#8217;s say you have extracted a <code>{% macro %}</code> for rendering a button,
-like <a href="http://getbootstrap.com/css/#buttons">the one from Twitter Bootstrap</a>:</p>
-<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  &lt;button class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}</span><span class="x">&quot; type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;&gt;</span>
-<span class="x">    </span><span class="cp">{%</span> <span class="k">if</span> <span class="nv">text</span> <span class="k">is</span> <span class="k">not</span> <span class="nf">none</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">      </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
-<span class="x">    </span><span class="cp">{%</span> <span class="k">else</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">      </span><span class="cp">{{</span> <span class="nv">caller</span><span class="o">()</span> <span class="cp">}}</span><span class="x"></span>
-<span class="x">    </span><span class="cp">{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  &lt;/button&gt;</span>
-<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>The benefit of this conditional definition is the relative ease of creating buttons with either just a text&nbsp;label:</p>
-<div class="highlight"><pre><span class="cp">{{</span> <span class="nv">button</span><span class="o">(</span><span class="s2">&quot;Load More...&quot;</span><span class="o">)</span> <span class="cp">}}</span><span class="x"></span>
-</pre></div>
-
-
-<p>or some more complicated&nbsp;markup:</p>
-<div class="highlight"><pre><span class="cp">{%</span> <span class="k">call</span> <span class="nv">button</span><span class="o">(</span><span class="nv">style</span><span class="o">=</span><span class="s1">&#39;success&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;submit&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  &lt;i class=&quot;fa fa-check&quot;&gt;&lt;/i&gt;Finish</span>
-<span class="cp">{%</span> <span class="k">endcall</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>Supplying <em>both</em>, however, is an ambiguity that the macro currently &#8220;resolves&#8221; by preferring text
-over a <code>{% call %}</code> block. It should rather be an error&nbsp;instead:</p>
-<div class="highlight"><pre><span class="cp">{%</span> <span class="k">if</span> <span class="nv">caller</span> <span class="k">and</span> <span class="nv">caller</span> <span class="k">is</span> <span class="nf">defined</span> <span class="k">and</span> <span class="nv">text</span> <span class="k">is</span> <span class="k">not</span> <span class="nf">none</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  </span><span class="cp">{%</span> <span class="k">error</span> <span class="s2">&quot;Cannot supply text= parameter to button() when invoking it through {% call %}&quot;</span> <span class="cp">%}</span><span class="x"></span>
-<span class="cp">{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>But <code>{% error %}</code> isn&#8217;t a tag that Jinja supports by default. To make it available,
-we need to implement the logic&nbsp;ourselves.</p>
-<h4>Adding new Jinja&nbsp;tags</h4>
-<p>Don&#8217;t sweat, though! It won&#8217;t be necessary to fork Jinja itself and modify its core code.
-Custom tags may just as well be added with <em>extensions</em>,
-which is a <a href="jinja.pocoo.org/docs/extensions/#writing-extensions">dedicated Jinja mechanism</a>.</p>
-<p>An extension is just a Python class that declares <code>tags</code> it intends to support and implements a <code>parse</code> method:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">jinja2.ext</span> <span class="kn">import</span> <span class="n">Extension</span>
-
-<span class="k">class</span> <span class="nc">ErrorExtension</span><span class="p">(</span><span class="n">Extension</span><span class="p">):</span>
-    <span class="n">tags</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">([</span><span class="s">&#39;error&#39;</span><span class="p">])</span>
-
-    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parser</span><span class="p">):</span>
-        <span class="c"># ...</span>
-</pre></div>
-
-
-<p>What can be a little tricky is that <code>parse</code> method itself shouldn&#8217;t take any <em>direct</em> action. Instead, it shall return
-a piece of <span class="caps">AST</span> &#8212; <a href="https://en.wikipedia.org/wiki/Abstract_syntax_tree">abstract syntax tree</a> &#8212; that Jinja will include
-in the compiled template. All regular Jinja features are thus available, but the power of extensions doesn&#8217;t end&nbsp;here.</p>
-<h4>Handling the {% error %}&nbsp;tag</h4>
-<p>The argument to <code>parse</code> is a parser object, which we can use to extract tokens from the template source code.
-The <code>error</code> tag identifier is one such token, and the string following it is another. As it turns out,
-we are only tenuously interested in the former, but we definitely want to pick the latter, because it&#8217;s the error message
-we&#8217;ll raise an exception&nbsp;with:</p>
-<div class="highlight"><pre><span class="n">tag</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">stream</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
-<span class="n">message</span> <span class="o">=</span> <span class="n">parser</span><span class="o">.</span><span class="n">parse_expression</span><span class="p">()</span>
-</pre></div>
-
-
-<p>As it was mentioned previously, the <code>parse</code> method itself won&#8217;t be raising this exception immediately. If we did that,
-no template with the <code>{% error %}</code> tag would ever parse successfully! What we need instead is an <span class="caps">AST</span> node
-that throws the exception when it&#8217;s <em>evaluated</em>. This way, it will be deferred until the template
-is being rendered and its execution point reaches the <code>{% error "..." %}</code> stanza.</p>
-<p>Jinja already has a correct node type handy: it&#8217;s named <code>CallBlock</code>,
-and it represents a statement that <code>{% call %}</code>s given method of the <code>Extension</code> class:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">jinja2.nodes</span> <span class="kn">import</span> <span class="n">CallBlock</span><span class="p">,</span> <span class="n">Const</span>
-
-<span class="c"># (in ErrorExtension.parse)</span>
-<span class="n">node</span> <span class="o">=</span> <span class="n">CallBlock</span><span class="p">(</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">call_method</span><span class="p">(</span><span class="s">&#39;_exec_error&#39;</span><span class="p">,</span> <span class="p">[</span><span class="n">message</span><span class="p">,</span> <span class="n">Const</span><span class="p">(</span><span class="n">tag</span><span class="o">.</span><span class="n">lineno</span><span class="p">)]),</span>
-    <span class="p">[],</span> <span class="p">[],</span> <span class="p">[])</span>
-<span class="n">node</span><span class="o">.</span><span class="n">set_lineno</span><span class="p">(</span><span class="n">tag</span><span class="o">.</span><span class="n">lineno</span><span class="p">)</span>
-<span class="k">return</span> <span class="n">node</span>
-</pre></div>
-
-
-<p>This method, <code>_exec_error</code>, should do the crux of what this extension is about: raise an exception.
-Let&#8217;s define a distinct error class for it, to tell user errors apart from those thrown by Jinja&nbsp;itself:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">TemplateAssertionError</span>
-
-<span class="k">class</span> <span class="nc">ErrorExtension</span><span class="p">(</span><span class="n">Extension</span><span class="p">):</span>
-    <span class="c"># ...</span>
-    <span class="k">def</span> <span class="nf">_exec_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">lineno</span><span class="p">,</span> <span class="n">caller</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="n">TemplateUserError</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">lineno</span><span class="p">)</span>
-
-<span class="k">class</span> <span class="nc">TemplateUserError</span><span class="p">(</span><span class="n">TemplateAssertionError</span><span class="p">):</span>
-    <span class="k">pass</span>
-</pre></div>
-
-
-<h4>Using the&nbsp;extension</h4>
-<p>The last step is to tell Jinja to use our extension when compiling and rendering templates.
-For that, we simply add it to the <code>Environment</code>:</p>
-<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">add_extension</span><span class="p">(</span><span class="n">ErrorExtension</span><span class="p">)</span>
-</pre></div>
-
-
-<p>If you are using the <a href="http://flask.pocoo.org/">Flask</a> framework,
-<code>jinja_env</code> is an attribute on the <code>Flask</code> application&nbsp;object.</p>
-<p>To see the complete code sample for <code>ErrorExtension</code>,
-have a look at <a href="https://gist.github.com/Xion/47c85671cdfb481fd925">this gist</a>.</p>
-      <a class="btn" href="http://xion.io/post/code/jinja-custom-errors.html#jinja-custom-errors">Continue reading</a>
-  </div>
 </article>
 
   <div class="pagination">
+    <a class="btn" href="http://xion.io/category/code4.html">
+      <i class="fa fa-angle-left"></i> Older Posts
+    </a>
     <a class="btn float-right" href="http://xion.io/category/code2.html">
       Newer Posts <i class="fa fa-angle-right"></i>
     </a>
@@ -981,7 +1454,7 @@ have a look at <a href="https://gist.github.com/Xion/47c85671cdfb481fd925">this 
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

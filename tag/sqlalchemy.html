@@ -10,9 +10,7 @@
 
     <link href="http://xion.io/style.css" rel="stylesheet">
 
-    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
 
-    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
 
 
   <meta charset="utf-8" />
@@ -38,7 +36,7 @@
         <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
       </a>
       <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
-      <p>def code(tea):<br>return 42</p>
+      <p>fn(Tea) -> Code</p>
       <nav>
         <ul class="list">
           <li><a href="http://xion.io/page/about.html#about">About</a></li>
@@ -50,7 +48,7 @@
         <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
         <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
         <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
-        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
       </ul>
     </div>
   </aside>
@@ -61,8 +59,6 @@
       <a href="/categories.html">Categories</a>
       <a href="/tags.html">Tags</a>
       <a href="http://xion.org.pl/">Old blog</a>
-      <a href="http://xion.io/feeds/atom.xml">Atom</a>
-      <a href="http://xion.io/feeds/rss.xml">RSS</a>
     </nav>
 
 <article>
@@ -118,7 +114,7 @@ the <a href="docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.s
 is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of
 the database backends it supports. For our purposes, though, it can be treated as a completely opaque&nbsp;token.</p>
 <h4>Compile <span class="amp">&amp;</span>&nbsp;unwrap</h4>
-<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representatio of our <code>Query</code>.
+<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representation of our <code>Query</code>.
 Or, to be more precise, the compiled version of the query&#8217;s
 <a href="docs.sqlalchemy.org/en/latest/core/selectable.html#sqlalchemy.sql.expression.Select"><code>Select</code> statement</a></p>
 <div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="s">&#39;foo@example.com&#39;</span><span class="p">)</span>
@@ -134,7 +130,7 @@ the <a href="docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine
 As you can see, however, the actual <span class="caps">SQL</span> text is just its <code>__str__</code><span class="quo">&#8216;</span>ing representation, which we can <code>print</code> directly
 or obtain with <code>str()</code> or <code>unicode()</code>.</p>
 <h4><code>Query.to_sql</code></h4>
-<p>But obviously, we don&#8217;t want to type the above incantations everytime we need to take a peek at the generated <span class="caps">SQL</span>
+<p>But obviously, we don&#8217;t want to type the above incantations every time we need to take a peek at the generated <span class="caps">SQL</span>
 for an <span class="caps">ORM</span> query. Probably the best solution is to extend the <code>Query</code> class so that it offers this additional
 functionality under a new&nbsp;method:</p>
 <div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
@@ -152,7 +148,7 @@ functionality under a new&nbsp;method:</p>
 
 <p>This new <code>Query</code> class needs then be passed as
 <a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.params.query_cls"><code>query_cls</code> argument</a>
-to the constructor of <code>Session</code>. Details may vary a little bit dependening on how exactly your application is set up,
+to the constructor of <code>Session</code>. Details may vary a little bit depending on how exactly your application is set up,
 but in most cases, it should be <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">easy enough to figure out</a>.</p>
 <div class="footnote">
 <hr />
@@ -606,7 +602,7 @@ may differ in few details from the sample&nbsp;above.</p>
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

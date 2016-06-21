@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:type" content="blog"/>
+<meta property="og:title" content="Karol Kuczmarski's Blog"/>
+<meta property="og:description" content=""/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+
+  <title>Karol Kuczmarski's Blog &ndash; Tag: node.js</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/programming/package-management.html#package-management">Package managers&#8217; appreciation&nbsp;day</a></h2>
+    <p>
+      Posted on Sat 26 March 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/package-manager.html">package manager</a>,      <a href="http://xion.io/tag/nodejs.html">node.js</a>,      <a href="http://xion.io/tag/npm.html">npm</a>,      <a href="http://xion.io/tag/c.html">C++</a>      &#8226; <a href="http://xion.io/post/programming/package-management.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>By now you have probably heard about the infamous &#8220;npm-gate&#8221; that swept through the developer community
+over the last week. It has been
+<a href="https://medium.com/@azerbike/i-ve-just-liberated-my-modules-9045c06be67c#.hp7p1aolc">brought up</a>,
+<a href="https://medium.com/@mproberts/a-discussion-about-the-breaking-of-the-internet-3d4d2a83aa4d#.rlnh89inz">discussed</a>,
+<a href="http://www.theregister.co.uk/2016/03/23/npm_left_pad_chaos/">covered</a>,
+<a href="http://www.haneycodes.net/npm-left-pad-have-we-forgotten-how-to-program">meta-discussed</a>,
+<a href="http://left-pad.io/">satirized</a>, and even featured by
+<a href="http://www.businessinsider.com/npm-left-pad-controversy-explained-2016-3">some mainstream media</a>.
+Evidently the nerds have managed to stir up some serious trouble again, and it only took them 11 lines of
+that strange thing they call&nbsp;&#8220;code&#8221;.</p>
+<h4>No good things in small&nbsp;packages</h4>
+<p>When looking for a culprit, the one party that everyone pounced on immediately was of course
+the <a href="http://npmjs.com">npm</a> itself. With its myriad of packages that could each fit in a tweet, it invites to create
+the exact house of cards we&#8217;ve seen&nbsp;collapse.</p>
+<p>This serves as a good wake-up call, of course. But it also compels to throw the baby out with the bathwater,
+and draw a conclusion that may be a little too far-fetched. Like perhaps declaring the <em>entire idea</em> of
+managing dependencies &#8220;the npm way&#8221; suspect. If packages tend to degenerate into something as ludicrous as
+<a href="https://www.npmjs.com/package/isarray"><code>isArray</code></a> &#8212; to say nothing of
+<a href="https://www.npmjs.com/package/left-pad"><code>left-pad</code></a>, which started the whole debacle &#8212; then maybe this approach
+to software reusability has simply bankrupted&nbsp;itself?</p>
+<h4>A world without&nbsp;*pm</h4>
+<p>I&#8217;m right away responding to that with a resounding &#8220;No!&#8221;. Package management as a concept is not responsible for
+the poor decision making of one specific developer collective. And anyone who might think tools like npm do more
+harm than good I ask: have you recently written any&nbsp;C++?</p>
+<p>See, C++ is the odd one among languages that at least pretend to be keeping up with the times. It doesn&#8217;t present
+a package management story at all. That&#8217;s right &#8212; the C++ &#8220;ecosystem&#8221;, as it stands now,&nbsp;has:</p>
+<ul>
+<li>no package&nbsp;manager</li>
+<li>no repository of&nbsp;packages</li>
+<li>no unified way of managing&nbsp;dependencies</li>
+<li>no way to isolate development environments of different projects from one&nbsp;another</li>
+</ul>
+<p>Adding any kind of third-party dependency to a C++ project &#8212; especially a portable one, which is allegedly one of C++&#8217;s
+strengths &#8212; is a considerable pain, even when it doesn&#8217;t require any additional libraries by itself. And environment
+isolation? Some people are using Linux containers (!) for this, which is like dealing with a mosquito by shooting it
+with a&nbsp;howitzer.</p>
+<p style="text-align: center">
+    <img src="http://xion.io/images/carl-sagan.jpg" alt="Billions upon billions of lines"></br>
+    <small>To build a C++ binary, you must first build the userspace.</small>
+</p>
+
+<p>But hey, at least they can use <code>apt-get</code>,&nbsp;right?&#8230;</p>
+<p>So, string padding incidents aside, package managers are absolutely <em>essential</em>. Sure, we can and should discuss
+the merits of their particular flavors and implementation details &#8212;like whether it&#8217;s prudent to allow &#8220;delisting&#8221;
+of packages. As a whole, however, package managers deserve recognition as a crucial part of modern language tooling
+that we cannot really do&nbsp;without.</p>
+      <a class="btn" href="http://xion.io/post/programming/package-management.html#package-management">Continue reading</a>
+  </div>
+</article>
+
+  <div class="pagination">
+  </div>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " Karol Kuczmarski's Blog ",
+  "url" : "http://xion.io",
+  "image": "http://xion.io/logo.jpeg",
+  "description": ""
+}
+</script><script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

@@ -1,5 +1,141 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2015-12-28T21:26:00-08:00</updated><entry><title>You Don’t Have to Interview like Google</title><link href="http://xion.io/post/programming/dont-interview-like-google.html" rel="alternate"></link><updated>2015-12-28T21:26:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2015-12-28:post/programming/dont-interview-like-google.html</id><summary type="html">&lt;p&gt;If you look at discussion forums for people in the &lt;span class="caps"&gt;CS&lt;/span&gt; industry &amp;#8212;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-05-20T06:56:00-07:00</updated><entry><title>Please don’t use Click</title><link href="http://xion.io/post/programming/python-dont-use-click.html" rel="alternate"></link><updated>2016-05-20T06:56:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-05-20:post/programming/python-dont-use-click.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;not for standalone programs&amp;nbsp;anyway.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Chances are, you have written some command line programs in Python. This is quite probable even if you normally code
+in some other language. And if you have, it is not unlikely that you needed to parse the &lt;code&gt;argv&lt;/code&gt; of your program at one
+point or&amp;nbsp;another.&lt;/p&gt;
+&lt;p&gt;There are plenty of options here, both in the standard library as well as among third party packages. One does stand out,
+however, and it&amp;#8217;s mostly for how it is often overused. I&amp;#8217;m talking about &lt;a href="http://click.pocoo.org/"&gt;Click&lt;/a&gt;&amp;nbsp;here.&lt;/p&gt;
+&lt;p&gt;If you wanted to use it in your next Python program, I hereby urge you to&amp;nbsp;reconsider.&lt;/p&gt;
+&lt;h4&gt;What&amp;#8217;s the&amp;nbsp;fuss?&lt;/h4&gt;
+&lt;p&gt;&lt;img style="float:right; margin-left: 8px; margin: bottom: 7px" src="http://xion.io/images/click-logo.png" alt="click_"&gt;
+The somewhat bizarrely named Click library is described as a &amp;#8220;package for creating beautiful
+command line interfaces&amp;#8221;. Its main trick is the ability to create subcommands by adorning Python functions with the
+&lt;code&gt;@click.command()&lt;/code&gt; decorator&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;. It then makes them coalesce into an argument parser, equipped with the necessary
+dispatching&amp;nbsp;logic.&lt;/p&gt;
+&lt;p&gt;This idea isn&amp;#8217;t new, of course. Prior art goes back at least seven years to the now-abandoned
+&lt;a href="https://opster.readthedocs.io"&gt;opster&lt;/a&gt; package. Click, however, was the first one of its kind to garner noticeable
+popularity, which is easily attributed to &lt;a href="http://lucumr.pocoo.org/"&gt;whom it&amp;#8217;s been authored by&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;So while my arguments against using this kind of &lt;span class="caps"&gt;CLI&lt;/span&gt; framework would apply to any package implementing the paradigm,
+it just happens that Click is currently its most prominent example. Purely for the sake of convenience, I will therefore
+refer to it as if it was interchangeable with the whole concept. Because why not? Whatever you may say about
+the library&amp;#8217;s name, it&amp;#8217;s hard to imagine a more concise moniker than a simple &lt;em&gt;Click&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;What&amp;#8217;s wrong, then, with the way Click handles command line&amp;nbsp;interfaces?&lt;/p&gt;
+&lt;h4&gt;&lt;span class="caps"&gt;CLI&lt;/span&gt;: Little&amp;nbsp;Interfaces&lt;/h4&gt;
+&lt;p&gt;It&amp;#8217;s how it encourages to treat them as an &lt;em&gt;accidental afterthought&lt;/em&gt; rather than a deliberate design&amp;nbsp;decision.&lt;/p&gt;
+&lt;p&gt;For applications invoked repeatedly from a terminal, their command line arguments and flags are the primary means of
+user interaction&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;. It is how users communicate their intent to perform an action; provide the neccessary input data
+to carry it throgh; decide how they want to receive the output; and control many other aspects of the programs execution.
+Absent graphical components and widgets, the command line is virtually the only way to interact with a terminal&amp;nbsp;program.&lt;/p&gt;
+&lt;p&gt;In other words, it is &lt;strong&gt;the &lt;span class="caps"&gt;UI&lt;/span&gt;&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;And how important the &lt;span class="caps"&gt;UI&lt;/span&gt; is for &lt;em&gt;any&lt;/em&gt; application? It seems to be important enough that entire fields of study are devoted
+to reducing friction of human-computer interaction. In many projects, the emphasis on user interface design is on par
+with that of actual software engineering.&lt;br&gt;
+Like everything, of course, it is susceptible to trends and fads (such as the recent &amp;#8220;mobile/responsive everything!&amp;#8221;
+craze). But its significance remains undiminished. Quite the opposite: in the age of ubiquitous computing,
+user interfaces are probably more important than&amp;nbsp;ever.&lt;/p&gt;
+&lt;p&gt;Yes, this includes &lt;span class="caps"&gt;CLI&lt;/span&gt;. One of the main reasons we turn to the command line are &lt;em&gt;speed&lt;/em&gt; and &lt;em&gt;efficacy&lt;/em&gt;. Common tasks must
+utilize short and convenient syntax that is quick to integrate into user&amp;#8217;s muscle memory. Others should not only be
+possible, but &lt;em&gt;discoverable&lt;/em&gt; and &lt;em&gt;accessible&lt;/em&gt; without going through reams of &lt;code&gt;man&lt;/code&gt; pages.&lt;/p&gt;
+&lt;p&gt;Any terminal program intended for frequent use by humans should therefore strive to excel in those two qualities.
+But except for &lt;a href="http://linux.die.net/man/1/echo"&gt;the simplest of cases&lt;/a&gt;, it won&amp;#8217;t happen by itself.
+Designing an efficient &lt;span class="caps"&gt;CLI&lt;/span&gt; for any non-trivial application is a challenging and demanding&amp;nbsp;task.&lt;/p&gt;
+&lt;h4&gt;It doesn&amp;#8217;t&amp;nbsp;click&lt;/h4&gt;
+&lt;p&gt;With Click, however, we&amp;#8217;re encouraged to just wing&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;Click tells us to slap some decorators on our top-level functions and call it a day. Sure, you can dig deep enough
+and uncover the underlying layers of abstraction that may eventually allow you do things for which &lt;code&gt;argparse&lt;/code&gt; has
+a &lt;a href="https://docs.python.org/3/library/argparse.html#mutual-exclusion"&gt;first-class support&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;By default, however, Click shoehorns your programs into
+&lt;a href="http://click.pocoo.org/5/quickstart/#basic-concepts"&gt;predefined patterns&lt;/a&gt; that, incidentally, mirror those of some
+&lt;a href="http://click.pocoo.org/5/complex/#building-a-git-clone"&gt;least intuitive&lt;/a&gt; command-line tools in&amp;nbsp;existence.&lt;/p&gt;
+&lt;p&gt;Indeed, the whole idea of subdiving your program into several distinct is already suspect, for it appears at odds
+with the fundamental Unix philosophy of
+&lt;a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well"&gt;doing one thing well&lt;/a&gt;. While it is
+occasionally justified, it shouldn&amp;#8217;t be the first thing that comes to your mind. But that&amp;#8217;s completely at odds with the
+Click&amp;#8217;s approach, where &lt;em&gt;not&lt;/em&gt; ending up with multiple distinct commands is something you have to consciously&amp;nbsp;avoid.&lt;/p&gt;
+&lt;h4&gt;&amp;#8230;though it sometimes&amp;nbsp;might&lt;/h4&gt;
+&lt;p&gt;So, what &lt;em&gt;am&lt;/em&gt; I suggesting you use instead libraries such as Click?&amp;#8230; Nothing outrageous,&amp;nbsp;really.&lt;/p&gt;
+&lt;p&gt;If you care about your command line interface, consider just using
+&lt;a href="https://docs.python.org/3/library/argparse.html"&gt;the &lt;code&gt;argparse&lt;/code&gt; module&lt;/a&gt;. Yes, it will force you to create parser objects,
+add arguments &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; flags to it, and in general pay some attention to the whole business. When it comes to &lt;span class="caps"&gt;UI&lt;/span&gt;, it&amp;#8217;s always
+good to make it an explicit concern, maybe even sufficient to warrant
+&lt;a href="https://github.com/Xion/gisht/blob/e86af37388573f00a4d6f282feca76ead88725d8/gisht/args/parser.py"&gt;its own module&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Alternatively, the &lt;a href="https://github.com/docopt/docopt"&gt;&lt;code&gt;docopt&lt;/code&gt; library&lt;/a&gt; provides another take on the &lt;span class="caps"&gt;UI&lt;/span&gt;-first approach
+to &lt;span class="caps"&gt;CLI&lt;/span&gt;, though it is more limited in its capabilities&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Finally, I&amp;#8217;m not advocating to ditch Click in &lt;em&gt;all&lt;/em&gt; scenarios. There&amp;#8217;s plenty of situations when we&amp;#8217;re interested in
+getting &lt;em&gt;any&lt;/em&gt; &lt;span class="caps"&gt;CLI&lt;/span&gt; up and running, and not so much in making the most efficient and intuitive interface possible. The prime
+example is any kind of automation scripts that are ancillary to some bigger project, like &lt;em&gt;manage.py&lt;/em&gt; is in Django&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.
+The Python ecosystem doesn&amp;#8217;t really have dedicated task runners that are as featureful as &lt;a href="http://gruntjs.com"&gt;Grunt&lt;/a&gt;
+or &lt;a href="http://gulpjs.com/"&gt;Gulp&lt;/a&gt;, and that makes Click a viable and compelling option&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;But for standalone programs whose &lt;span class="caps"&gt;CLI&lt;/span&gt; is the main interface? Yeah, not&amp;nbsp;really.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Oddly enough, that pair of parentheses seems to be mandatory.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Environment variables and config files deserve a honorary mention, of course. But those are usually derivatives of
+the command line arguments, containing e.g. the default values for flags.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;Click&amp;#8217;s &lt;a href="http://click.pocoo.org/5/why/#why-not-docopt-etc"&gt;own documentation&lt;/a&gt; actually describes quite nicely
+how theirs and docopt&amp;#8217;s philosophies differ in a way that&amp;#8217;s consistent with this article.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;Incidentally, this appears to be a major motivation behind creating Click in the first place:
+to support web applications built upon on the &lt;a href="http://flask.pocoo.org/"&gt;Flask&lt;/a&gt; framework, and possibly obviate the need
+for extensions such as &lt;a href="http://flask-script.readthedocs.io/en/latest/"&gt;Flask-Script&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:5"&gt;
+&lt;p&gt;This saying, there are some task runners which offer similar experience, like &lt;a href="http://pyinvoke.org"&gt;Invoke&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Python"></category><category term="CLI"></category><category term="UI"></category><category term="Click"></category></entry><entry><title>Package managers’ appreciation day</title><link href="http://xion.io/post/programming/package-management.html" rel="alternate"></link><updated>2016-03-26T09:17:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-03-26:post/programming/package-management.html</id><summary type="html">&lt;p&gt;By now you have probably heard about the infamous &amp;#8220;npm-gate&amp;#8221; that swept through the developer community
+over the last week. It has been
+&lt;a href="https://medium.com/@azerbike/i-ve-just-liberated-my-modules-9045c06be67c#.hp7p1aolc"&gt;brought up&lt;/a&gt;,
+&lt;a href="https://medium.com/@mproberts/a-discussion-about-the-breaking-of-the-internet-3d4d2a83aa4d#.rlnh89inz"&gt;discussed&lt;/a&gt;,
+&lt;a href="http://www.theregister.co.uk/2016/03/23/npm_left_pad_chaos/"&gt;covered&lt;/a&gt;,
+&lt;a href="http://www.haneycodes.net/npm-left-pad-have-we-forgotten-how-to-program"&gt;meta-discussed&lt;/a&gt;,
+&lt;a href="http://left-pad.io/"&gt;satirized&lt;/a&gt;, and even featured by
+&lt;a href="http://www.businessinsider.com/npm-left-pad-controversy-explained-2016-3"&gt;some mainstream media&lt;/a&gt;.
+Evidently the nerds have managed to stir up some serious trouble again, and it only took them 11 lines of
+that strange thing they call&amp;nbsp;&amp;#8220;code&amp;#8221;.&lt;/p&gt;
+&lt;h4&gt;No good things in small&amp;nbsp;packages&lt;/h4&gt;
+&lt;p&gt;When looking for a culprit, the one party that everyone pounced on immediately was of course
+the &lt;a href="http://npmjs.com"&gt;npm&lt;/a&gt; itself. With its myriad of packages that could each fit in a tweet, it invites to create
+the exact house of cards we&amp;#8217;ve seen&amp;nbsp;collapse.&lt;/p&gt;
+&lt;p&gt;This serves as a good wake-up call, of course. But it also compels to throw the baby out with the bathwater,
+and draw a conclusion that may be a little too far-fetched. Like perhaps declaring the &lt;em&gt;entire idea&lt;/em&gt; of
+managing dependencies &amp;#8220;the npm way&amp;#8221; suspect. If packages tend to degenerate into something as ludicrous as
+&lt;a href="https://www.npmjs.com/package/isarray"&gt;&lt;code&gt;isArray&lt;/code&gt;&lt;/a&gt; &amp;#8212; to say nothing of
+&lt;a href="https://www.npmjs.com/package/left-pad"&gt;&lt;code&gt;left-pad&lt;/code&gt;&lt;/a&gt;, which started the whole debacle &amp;#8212; then maybe this approach
+to software reusability has simply bankrupted&amp;nbsp;itself?&lt;/p&gt;
+&lt;h4&gt;A world without&amp;nbsp;*pm&lt;/h4&gt;
+&lt;p&gt;I&amp;#8217;m right away responding to that with a resounding &amp;#8220;No!&amp;#8221;. Package management as a concept is not responsible for
+the poor decision making of one specific developer collective. And anyone who might think tools like npm do more
+harm than good I ask: have you recently written any&amp;nbsp;C++?&lt;/p&gt;
+&lt;p&gt;See, C++ is the odd one among languages that at least pretend to be keeping up with the times. It doesn&amp;#8217;t present
+a package management story at all. That&amp;#8217;s right &amp;#8212; the C++ &amp;#8220;ecosystem&amp;#8221;, as it stands now,&amp;nbsp;has:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;no package&amp;nbsp;manager&lt;/li&gt;
+&lt;li&gt;no repository of&amp;nbsp;packages&lt;/li&gt;
+&lt;li&gt;no unified way of managing&amp;nbsp;dependencies&lt;/li&gt;
+&lt;li&gt;no way to isolate development environments of different projects from one&amp;nbsp;another&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Adding any kind of third-party dependency to a C++ project &amp;#8212; especially a portable one, which is allegedly one of C++&amp;#8217;s
+strengths &amp;#8212; is a considerable pain, even when it doesn&amp;#8217;t require any additional libraries by itself. And environment
+isolation? Some people are using Linux containers (!) for this, which is like dealing with a mosquito by shooting it
+with a&amp;nbsp;howitzer.&lt;/p&gt;
+&lt;p style="text-align: center"&gt;
+    &lt;img src="http://xion.io/images/carl-sagan.jpg" alt="Billions upon billions of lines"&gt;&lt;/br&gt;
+    &lt;small&gt;To build a C++ binary, you must first build the userspace.&lt;/small&gt;
+&lt;/p&gt;
+
+&lt;p&gt;But hey, at least they can use &lt;code&gt;apt-get&lt;/code&gt;,&amp;nbsp;right?&amp;#8230;&lt;/p&gt;
+&lt;p&gt;So, string padding incidents aside, package managers are absolutely &lt;em&gt;essential&lt;/em&gt;. Sure, we can and should discuss
+the merits of their particular flavors and implementation details &amp;#8212;like whether it&amp;#8217;s prudent to allow &amp;#8220;delisting&amp;#8221;
+of packages. As a whole, however, package managers deserve recognition as a crucial part of modern language tooling
+that we cannot really do&amp;nbsp;without.&lt;/p&gt;</summary><category term="packages"></category><category term="package manager"></category><category term="node.js"></category><category term="npm"></category><category term="C++"></category></entry><entry><title>You Don’t Have to Interview like Google</title><link href="http://xion.io/post/programming/dont-interview-like-google.html" rel="alternate"></link><updated>2015-12-28T21:26:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2015-12-28:post/programming/dont-interview-like-google.html</id><summary type="html">&lt;p&gt;If you look at discussion forums for people in the &lt;span class="caps"&gt;CS&lt;/span&gt; industry &amp;#8212;
 like &lt;a href="https://www.reddit.com/r/cscareerquestions/"&gt;/r/cscareequestions&lt;/a&gt; or even just Hacker News &amp;#8212;
 you&amp;#8217;ll find lots of talk about the so called &lt;em&gt;Big Four&lt;/em&gt;&amp;nbsp;companies.&lt;/p&gt;
 &lt;p&gt;This is mostly in the context of applying to them, or going through their interview process.

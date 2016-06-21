@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Python’s mocking library is rather uncomplicated. Most of what it does is creating mock objects: veritable sponges that absorb every interaction with any code that we pass them to. This simplicity is also surfaced in the API, especially in the main part of it — the mock.Mock constructor: some_mock = mock.Mock(url=&#39;http://example.com&#39;) assert some_mock.url == &#39;http://example.com&#39; Any arguments that we pass there become attributes on the resulting mock object. This is really useful when patching, because it allows us to completely specify the replacement object within a @mock.patch decorator: @patch.object(requests, &#39;get&#39;, new=Mock(return_value=Mock(status_code=400))) def test_404(self): self.assertRaises(NotFoundError): do_stuff() You have to keep in mind, however, that the mock.Mock class also has some constructor arguments of its own. For this reason, there exists some potential for name collision: some of the Mock‘s own arguments may have the same names as the attributes we’d like to set on the mock object: some_mock = mock.Mock(name=&#34;John Doe&#34;) # doesn&#39;t set the `name` attribute assert some_mock.name == &#34;John Doe&#34; # blows up! Here, the name argument is inherent to the Mock class. Its constructor will interpret it in a special way, and so it won’t set a name attribute on the resulting mock. Other possible culprits include the spec and wraps parameters, both of which have relatively common names that we may want to use as object attributes1. Collision avoidance It’s trivial to fix the issue, of course: some_mock = mock.Mock() some_mock.name = &#34;John Doe&#34; assert sock_mock.name == &#34;John Doe&#34; but this approach has a downside. Creating and configuring a mock is no longer a single expression, which means we cannot use it with patchers as easily as before: @patch.object(foo, &#39;bar&#39;) def test_something(self, mock_bar): mock_bar.name = &#34;John Doe&#34; # (...rest of the test...) We can either configure the mock after patching, like above, or perhaps introduce some utility functions to be called inside the @patch decorator. The almost-there method In any case, this is somewhat disappointing. And it is even more so when we discover that there is a method called configure_mock which looks like it was designed to solve this very issue. Its arguments are always interpreted as attributes of the mock: it has no “special” or “reserved” names. Indeed, this method is what allows us to actually write the mock setup as a single expression: some_mock.configure_mock(name=&#34;John Doe&#34;) Problem is, this expression returns None. Yes, configure_mock returns nothing. Or in other words, it doesn’t return anything. In fact, it has no return statement whatsoever. Most importantly, it doesn’t have the return self line that’d enable us to write this: some_mock = mock.Mock().configure_mock(name=&#34;John Doe&#34;) Well, that is quite a let-down. Fixing it But hey, this is Python! Shortcomings like that don’t necessarily mean we have to fork whole libraries. Let’s just add the missing return, shall we? from mock import Mock as _Mock class Mock(_Mock): def configure_mock(self, **kwargs): super(Mock, self).configure_mock(**kwargs) return self # &lt;-- there! Whew, that was quick! …Alright, that’s actually the whole fix, but it’s close. To complete it, we need to apply the same treatment to three more Mock classes: MagicMock, NonCallableMock, and NonCallableMagicMock. A complete solution can be seen in this gist. Collision may also occur with mock.patch constructs. The most likely offender there is probably the new parameter. ↩" />
+<meta name="keywords" content="Python, mock, patching">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Mock.configure_mock fix for Python"/>
+<meta property="og:description" content="Python’s mocking library is rather uncomplicated. Most of what it does is creating mock objects: veritable sponges that absorb every interaction with any code that we pass them to. This simplicity is also surfaced in the API, especially in the main part of it — the mock.Mock constructor: some_mock = mock.Mock(url=&#39;http://example.com&#39;) assert some_mock.url == &#39;http://example.com&#39; Any arguments that we pass there become attributes on the resulting mock object. This is really useful when patching, because it allows us to completely specify the replacement object within a @mock.patch decorator: @patch.object(requests, &#39;get&#39;, new=Mock(return_value=Mock(status_code=400))) def test_404(self): self.assertRaises(NotFoundError): do_stuff() You have to keep in mind, however, that the mock.Mock class also has some constructor arguments of its own. For this reason, there exists some potential for name collision: some of the Mock‘s own arguments may have the same names as the attributes we’d like to set on the mock object: some_mock = mock.Mock(name=&#34;John Doe&#34;) # doesn&#39;t set the `name` attribute assert some_mock.name == &#34;John Doe&#34; # blows up! Here, the name argument is inherent to the Mock class. Its constructor will interpret it in a special way, and so it won’t set a name attribute on the resulting mock. Other possible culprits include the spec and wraps parameters, both of which have relatively common names that we may want to use as object attributes1. Collision avoidance It’s trivial to fix the issue, of course: some_mock = mock.Mock() some_mock.name = &#34;John Doe&#34; assert sock_mock.name == &#34;John Doe&#34; but this approach has a downside. Creating and configuring a mock is no longer a single expression, which means we cannot use it with patchers as easily as before: @patch.object(foo, &#39;bar&#39;) def test_something(self, mock_bar): mock_bar.name = &#34;John Doe&#34; # (...rest of the test...) We can either configure the mock after patching, like above, or perhaps introduce some utility functions to be called inside the @patch decorator. The almost-there method In any case, this is somewhat disappointing. And it is even more so when we discover that there is a method called configure_mock which looks like it was designed to solve this very issue. Its arguments are always interpreted as attributes of the mock: it has no “special” or “reserved” names. Indeed, this method is what allows us to actually write the mock setup as a single expression: some_mock.configure_mock(name=&#34;John Doe&#34;) Problem is, this expression returns None. Yes, configure_mock returns nothing. Or in other words, it doesn’t return anything. In fact, it has no return statement whatsoever. Most importantly, it doesn’t have the return self line that’d enable us to write this: some_mock = mock.Mock().configure_mock(name=&#34;John Doe&#34;) Well, that is quite a let-down. Fixing it But hey, this is Python! Shortcomings like that don’t necessarily mean we have to fork whole libraries. Let’s just add the missing return, shall we? from mock import Mock as _Mock class Mock(_Mock): def configure_mock(self, **kwargs): super(Mock, self).configure_mock(**kwargs) return self # &lt;-- there! Whew, that was quick! …Alright, that’s actually the whole fix, but it’s close. To complete it, we need to apply the same treatment to three more Mock classes: MagicMock, NonCallableMock, and NonCallableMagicMock. A complete solution can be seen in this gist. Collision may also occur with mock.patch constructs. The most likely offender there is probably the new parameter. ↩"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/python-mock-configure.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2016-05-07 17:12:00-07:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Python"/>
+<meta property="article:tag" content="mock"/>
+<meta property="article:tag" content="patching"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Mock.configure_mock fix for Python</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="python-mock-configure">Mock.configure_mock fix for&nbsp;Python</h1>
+    <p>Posted on Sat 07 May 2016 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Python&#8217;s <a href="https://docs.python.org/3/library/unittest.mock.html">mocking library</a> is rather uncomplicated.
+Most of what it does is creating <em>mock objects</em>: veritable sponges that absorb every interaction with any code
+that we pass them&nbsp;to.</p>
+<p>This simplicity is also surfaced in the <span class="caps">API</span>, especially in the main part of it &#8212; the <code>mock.Mock</code> constructor:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="s">&#39;http://example.com&#39;</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">some_mock</span><span class="o">.</span><span class="n">url</span> <span class="o">==</span> <span class="s">&#39;http://example.com&#39;</span>
+</pre></div>
+
+
+<p>Any arguments that we pass there become attributes on the resulting mock object. This is really useful when
+<a href="https://docs.python.org/3/library/unittest.mock.html#the-patchers">patching</a>, because it allows us to completely specify
+the replacement object within a <code>@mock.patch</code> decorator:</p>
+<div class="highlight"><pre><span class="nd">@patch.object</span><span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="s">&#39;get&#39;</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="n">Mock</span><span class="p">(</span><span class="n">return_value</span><span class="o">=</span><span class="n">Mock</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="mi">400</span><span class="p">)))</span>
+<span class="k">def</span> <span class="nf">test_404</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">assertRaises</span><span class="p">(</span><span class="n">NotFoundError</span><span class="p">):</span>
+        <span class="n">do_stuff</span><span class="p">()</span>
+</pre></div>
+
+
+<p>You have to keep in mind, however, that the <code>mock.Mock</code> class also has some
+<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock">constructor arguments</a> of its own.
+For this reason, there exists some potential for name collision: some of the <code>Mock</code><span class="quo">&#8216;</span>s own arguments may have the same
+names as the <em>attributes</em> we&#8217;d like to set on the mock&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>  <span class="c"># doesn&#39;t set the `name` attribute</span>
+<span class="k">assert</span> <span class="n">some_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s">&quot;John Doe&quot;</span>  <span class="c"># blows up!</span>
+</pre></div>
+
+
+<p>Here, the <code>name</code> argument is inherent to the <code>Mock</code> class. Its constructor will interpret it in a special way,
+and so it <em>won&#8217;t</em> set a <code>name</code> attribute on the resulting mock. Other possible culprits include the <code>spec</code> and <code>wraps</code>
+parameters, both of which have relatively common names that we may want to use as object attributes<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>Collision&nbsp;avoidance</h4>
+<p>It&#8217;s trivial to fix the issue, of&nbsp;course:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">()</span>
+<span class="n">some_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;John Doe&quot;</span>
+<span class="k">assert</span> <span class="n">sock_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s">&quot;John Doe&quot;</span>
+</pre></div>
+
+
+<p>but this approach has a downside. Creating and configuring a mock is no longer a single expression, which means we cannot
+use it with patchers as easily as&nbsp;before:</p>
+<div class="highlight"><pre><span class="nd">@patch.object</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="s">&#39;bar&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">test_something</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_bar</span><span class="p">):</span>
+    <span class="n">mock_bar</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;John Doe&quot;</span>
+    <span class="c"># (...rest of the test...)</span>
+</pre></div>
+
+
+<p>We can either configure the mock after patching, like above, or perhaps introduce some utility functions to be called
+inside the <code>@patch</code> decorator.</p>
+<h4>The almost-there&nbsp;method</h4>
+<p>In any case, this is somewhat disappointing. And it is even more so when we discover that there is
+<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock.configure_mock">a method called <code>configure_mock</code></a>
+which <em>looks</em> like it was designed to solve this very issue. Its arguments are always interpreted as attributes
+of the mock: it has no &#8220;special&#8221; or &#8220;reserved&#8221; names. Indeed, this method is what allows us to actually
+write the mock setup as a single&nbsp;expression:</p>
+<div class="highlight"><pre><span class="n">some_mock</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Problem is, this expression returns <code>None</code>.</p>
+<p>Yes, <code>configure_mock</code> returns nothing.<br>
+Or in other words, it doesn&#8217;t return anything.<br>
+In fact, it has <a href="https://github.com/testing-cabal/mock/blob/286792b2cd5b5baa8338260538ed207391280e34/mock/mock.py#L671">no <code>return</code> statement</a>&nbsp;whatsoever.</p>
+<p>Most importantly, it doesn&#8217;t have the <code>return self</code> line that&#8217;d enable us to write&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">()</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Well, that is <em>quite</em> a&nbsp;let-down.</p>
+<h4>Fixing&nbsp;it</h4>
+<p>But hey, this is Python! Shortcomings like that don&#8217;t necessarily mean we have to fork whole libraries.
+Let&#8217;s just add the missing <code>return</code>, shall&nbsp;we?</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">mock</span> <span class="kn">import</span> <span class="n">Mock</span> <span class="k">as</span> <span class="n">_Mock</span>
+
+<span class="k">class</span> <span class="nc">Mock</span><span class="p">(</span><span class="n">_Mock</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">configure_mock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Mock</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>  <span class="c"># &lt;-- there!</span>
+</pre></div>
+
+
+<p>Whew, that was&nbsp;quick!</p>
+<p>&#8230;Alright, that&#8217;s actually the <em>whole</em> fix, but it&#8217;s close. To complete it, we need to apply the same treatment to
+three more <code>Mock</code> classes: <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.MagicMock"><code>MagicMock</code></a>,
+<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMock"><code>NonCallableMock</code></a>,
+and <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMagicMock"><code>NonCallableMagicMock</code></a>.</p>
+<p>A complete solution can be seen in <a href="https://gist.github.com/Xion/8b98733d4b6be354be0ebae815ebd22d">this gist</a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Collision may also occur with <code>mock.patch</code> constructs. The most likely offender there is probably
+the <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.patch"><code>new</code> parameter</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/python.html">Python</a>
+      <a href="http://xion.io/tag/mock.html">mock</a>
+      <a href="http://xion.io/tag/patching.html">patching</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Mock.configure_mock fix for Python",
+  "headline": "Mock.configure_mock fix for Python",
+  "datePublished": "2016-05-07 17:12:00-07:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/python-mock-configure.html",
+  "description": "Python’s mocking library is rather uncomplicated. Most of what it does is creating mock objects: veritable sponges that absorb every interaction with any code that we pass them to. This simplicity is also surfaced in the API, especially in the main part of it — the mock.Mock constructor: some_mock = mock.Mock(url='http://example.com') assert some_mock.url == 'http://example.com' Any arguments that we pass there become attributes on the resulting mock object. This is really useful when patching, because it allows us to completely specify the replacement object within a @mock.patch decorator: @patch.object(requests, 'get', new=Mock(return_value=Mock(status_code=400))) def test_404(self): self.assertRaises(NotFoundError): do_stuff() You have to keep in mind, however, that the mock.Mock class also has some constructor arguments of its own. For this reason, there exists some potential for name collision: some of the Mock‘s own arguments may have the same names as the attributes we’d like to set on the mock object: some_mock = mock.Mock(name="John Doe") # doesn't set the `name` attribute assert some_mock.name == "John Doe" # blows up! Here, the name argument is inherent to the Mock class. Its constructor will interpret it in a special way, and so it won’t set a name attribute on the resulting mock. Other possible culprits include the spec and wraps parameters, both of which have relatively common names that we may want to use as object attributes1. Collision avoidance It’s trivial to fix the issue, of course: some_mock = mock.Mock() some_mock.name = "John Doe" assert sock_mock.name == "John Doe" but this approach has a downside. Creating and configuring a mock is no longer a single expression, which means we cannot use it with patchers as easily as before: @patch.object(foo, 'bar') def test_something(self, mock_bar): mock_bar.name = "John Doe" # (...rest of the test...) We can either configure the mock after patching, like above, or perhaps introduce some utility functions to be called inside the @patch decorator. The almost-there method In any case, this is somewhat disappointing. And it is even more so when we discover that there is a method called configure_mock which looks like it was designed to solve this very issue. Its arguments are always interpreted as attributes of the mock: it has no “special” or “reserved” names. Indeed, this method is what allows us to actually write the mock setup as a single expression: some_mock.configure_mock(name="John Doe") Problem is, this expression returns None. Yes, configure_mock returns nothing. Or in other words, it doesn’t return anything. In fact, it has no return statement whatsoever. Most importantly, it doesn’t have the return self line that’d enable us to write this: some_mock = mock.Mock().configure_mock(name="John Doe") Well, that is quite a let-down. Fixing it But hey, this is Python! Shortcomings like that don’t necessarily mean we have to fork whole libraries. Let’s just add the missing return, shall we? from mock import Mock as _Mock class Mock(_Mock): def configure_mock(self, **kwargs): super(Mock, self).configure_mock(**kwargs) return self # <-- there! Whew, that was quick! …Alright, that’s actually the whole fix, but it’s close. To complete it, we need to apply the same treatment to three more Mock classes: MagicMock, NonCallableMock, and NonCallableMagicMock. A complete solution can be seen in this gist. Collision may also occur with mock.patch constructs. The most likely offender there is probably the new parameter. ↩"
+}
+</script></body>
+</html>

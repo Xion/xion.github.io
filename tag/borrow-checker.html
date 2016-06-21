@@ -10,9 +10,7 @@
 
     <link href="http://xion.io/style.css" rel="stylesheet">
 
-    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
 
-    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
 
 
   <meta charset="utf-8" />
@@ -38,7 +36,7 @@
         <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
       </a>
       <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
-      <p>def code(tea):<br>return 42</p>
+      <p>fn(Tea) -> Code</p>
       <nav>
         <ul class="list">
           <li><a href="http://xion.io/page/about.html#about">About</a></li>
@@ -50,7 +48,7 @@
         <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
         <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
         <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
-        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
       </ul>
     </div>
   </aside>
@@ -61,8 +59,6 @@
       <a href="/categories.html">Categories</a>
       <a href="/tags.html">Tags</a>
       <a href="http://xion.org.pl/">Old blog</a>
-      <a href="http://xion.io/feeds/atom.xml">Atom</a>
-      <a href="http://xion.io/feeds/rss.xml">RSS</a>
     </nav>
 
 <article>
@@ -89,7 +85,7 @@ Before that happens, though, you can use some tricks to make the transition a li
 <p>Ideally, we&#8217;d want our code to be both correct <em>and</em> fast. But if we cannot quite get to the &#8220;correctness&#8221; part yet &#8212;
 because our program doesn&#8217;t, you know, <em>compile</em> &#8212; then how about paying for it with a small (and refundable)
 performance&nbsp;hit?</p>
-<p>This is where the <code>clone</code> methods comes in handy. Many problems with the borrow checker stem from trying to spread
+<p>This is where the <code>clone</code> method comes in handy. Many problems with the borrow checker stem from trying to spread
 object ownership too thin. It is a precious resource and it&#8217;s not very cheap to &#8220;produce&#8221;, which is why good Rust code
 often deals with just immutable or mutable&nbsp;references.</p>
 <p>But if that proves difficult, then &#8220;making more objects&#8221; is a great intermediate solution. Incidentally, this is what
@@ -192,20 +188,20 @@ on them through&nbsp;references.</p>
 has to be copiously sprinkled with <code>&amp;</code> and <code>&amp;mut</code>, and may sometimes require explicit lifetime annotations. All these
 have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
 of the program&#8217;s&nbsp;logic.</p>
-<p>Therefore it is generally preferable, if at all possible, to expose <span class="caps">API</span> that deals with data directly
+<p>Therefore it is generally preferable, if at all possible, to deal with data directly
 and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
 stages of our algorithms. It turns out it&#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
 of producing a moved&nbsp;value.</p>
 <p>Take our first example. The intuitively named <code>Vec::iter</code> method produces an iterator that we can <code>map</code> over, but does
-it really go over the actual <em>items</em> in the vector? Nope! It gives use a <em>reference</em> to each one &#8212; a borrow, if you will
-&#8212; which exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
+it really go over the actual <em>items</em> in the vector? Nope! It gives us a <em>reference</em> to each one &#8212; a borrow, if you will
+&#8212; which is exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
 <p>Instead, why not just get the elements themselves, by moving them out of the vector? <code>Vec::into_iter</code> allows to do exactly&nbsp;this:</p>
 <div class="highlight"><pre><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
 </pre></div>
 
 
-<p>and enables us to remove the <code>clone()</code> call. The family of <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
-on to work like that at least in the standard library. They are also part of a more-or-less official
+<p>and enables us to remove the <code>clone()</code> call. The family of similar <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
+on at least in the standard library. They are also part of a more-or-less official
 <a href="https://aturon.github.io/style/naming.html#conversions">naming convention</a> that you should also follow in your own&nbsp;code.</p>
 <div class="footnote">
 <hr />
@@ -270,7 +266,8 @@ a legal <code>String</code>: its internal pointer could&#8217;ve been invalidate
 <p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
 there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
 it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
-the program is inarguably correct: Rust&#8217;s borrow checker is just incapable of ascertaining&nbsp;it.</p>
+the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
+by the borrow&nbsp;checker.</p>
 <h4>Pointers to the&nbsp;rescue?</h4>
 <p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
 As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
@@ -289,7 +286,7 @@ solely through&nbsp;references:</p>
 
 
 <p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
-pointers instead of actual objects<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
+pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
 the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
 In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
 the call stacks and abstraction&nbsp;layers.</p>
@@ -372,8 +369,14 @@ if it&#8217;s cheap to&nbsp;obtain.</p>
 <p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
 </li>
 <li id="fn:2">
+<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
+on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the languag itself,
+it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
+is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
 <p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
-instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
@@ -386,7 +389,7 @@ instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnr
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

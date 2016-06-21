@@ -10,9 +10,7 @@
 
     <link href="http://xion.io/style.css" rel="stylesheet">
 
-    <link href="http://xion.io/feeds/atom.xml" type="application/atom+xml" rel="alternate" title="Karol Kuczmarski's Blog Atom">
 
-    <link href="http://xion.io/feeds/rss.xml" type="application/rss+xml" rel="alternate" title="Karol Kuczmarski's Blog RSS">
 
 
   <meta charset="utf-8" />
@@ -38,7 +36,7 @@
         <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
       </a>
       <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
-      <p>def code(tea):<br>return 42</p>
+      <p>fn(Tea) -> Code</p>
       <nav>
         <ul class="list">
           <li><a href="http://xion.io/page/about.html#about">About</a></li>
@@ -50,7 +48,7 @@
         <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
         <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
         <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
-        <li><a class="sc-rss" href="/feeds/rss.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
       </ul>
     </div>
   </aside>
@@ -61,10 +59,211 @@
       <a href="/categories.html">Categories</a>
       <a href="/tags.html">Tags</a>
       <a href="http://xion.org.pl/">Old blog</a>
-      <a href="http://xion.io/feeds/atom.xml">Atom</a>
-      <a href="http://xion.io/feeds/rss.xml">RSS</a>
     </nav>
 
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-patterns-ref.html#rust-patterns-ref">& vs. ref in Rust&nbsp;patterns</a></h2>
+    <p>
+      Posted on Thu 02 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/pattern-matching.html">pattern matching</a>,      <a href="http://xion.io/tag/borrowing.html">borrowing</a>,      <a href="http://xion.io/tag/references.html">references</a>      &#8226; <a href="http://xion.io/post/code/rust-patterns-ref.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Rust is one of those nice languages with <em>pattern matching</em>.
+If you don&#8217;t know, it can be thought of as a generalization of the <code>switch</code> statement:
+comparing objects not just by value (or overloaded equality operator, etc.)
+but by <em>structure</em>:</p>
+<div class="highlight"><pre><span class="k">match</span><span class="w"> </span><span class="n">hashmap</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="o">&amp;</span><span class="n">key</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">do_something_with</span><span class="p">(</span><span class="n">value</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="nb">None</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">panic</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Oh noes!&quot;</span><span class="p">);</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>It doesn&#8217;t end here. As you can see above, objects can also be
+<em>destructured</em> during the match (<code>Some(value)</code>),
+their parts assigned to <em>bindings</em> (<code>value</code>),
+and those bindings can subsequently be used in the <code>match</code> branch.</p>
+<p>Neat? Definitely.
+In Rust, pattern matching is bread-and-butter of not only the <code>match</code> statement,
+but also <code>for</code>, (<code>if</code>)<code>let</code>, and even ordinary function&nbsp;arguments.</p>
+<h4>Mixing in Rust&nbsp;semantics</h4>
+<p>For a long time, however, I was somewhat confused as to what happens
+when references and borrowing is involved in matching.
+The two &#8220;operators&#8221; that often occur there are <code>&amp;</code> (ampersand) and <code>ref</code>.</p>
+<p>You should readily recognize the first one,
+as it is used pervasively in Rust to create references (and reference types).
+The second one quite obviously hints towards references as well.
+Yet those two constructs serve <em>very</em> different purposes when used within a&nbsp;pattern.</p>
+<p>To add to the confusion, they are quite often encountered&nbsp;together:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">hyper</span><span class="o">::</span><span class="n">Url</span><span class="p">;</span><span class="w"></span>
+
+<span class="c1">// print query string params of some URL</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Url</span><span class="o">::</span><span class="n">parse</span><span class="p">(</span><span class="n">some_url</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">query_params</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="p">(</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">url</span><span class="p">.</span><span class="n">query_pairs</span><span class="p">().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[]);</span><span class="w"></span>
+<span class="k">for</span><span class="w"> </span><span class="o">&amp;</span><span class="p">(</span><span class="k">ref</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">query_params</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}={}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Lack of one or the other will be (at best) pointed out to you by the compiler,
+along with a suggestion where to add it.
+But addressing problems in this manner can only go so far.
+So how about we delve deeper and see what it&#8217;s really&nbsp;about?</p>
+<h4>Part of the reference, part of the&nbsp;pattern</h4>
+<p>Rust is very flexible as to what value can be a subject of pattern matching.
+You would be very hard pressed to find anything that <em>cannot</em> be used within a <code>match</code> statement, really.
+Both actual objects and references to objects are perfectly&nbsp;allowed:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Foo</span><span class="p">(</span><span class="kt">i32</span><span class="p">);</span><span class="w"></span>
+<span class="c1">// ...</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">foo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Foo</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
+<span class="k">match</span><span class="w"> </span><span class="n">foo</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Matched!&quot;</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>In the latter case, however, we aren&#8217;t typically interested in the reference itself (like above).
+Instead, we want to determine some facts about the object it <em>points</em>&nbsp;to:</p>
+<div class="highlight"><pre><span class="k">match</span><span class="w"> </span><span class="n">foo</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">Foo</span><span class="p">(</span><span class="n">num</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Matched with number {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">num</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you can see, this is where the ampersand comes into play.
+Just like a type constructor (<code>Some</code>, <code>Ok</code>, or <code>Foo</code> above),
+the <code>&amp;</code> operator informs the Rust compiler what kind of value we&#8217;re expecting from the match.
+When it sees the ampersand, it knows we&#8217;re looking for <em>references</em> to certain objects,
+and not for the objects&nbsp;themselves.</p>
+<p>Why is the distinction between an object and its reference important, though?
+In many other places, Rust is perfectly happy to blur the gap between references and actual objects<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> &#8212;
+for example when calling most of their&nbsp;methods.</p>
+<p>Pattern matching, however,
+due to its ability to unpack values into their constituent parts,
+is a <em>destructive</em> operation. Anything we apply <code>match</code> (or similar construct) to
+will be <em>moved</em> into the block by&nbsp;default:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">maybe_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Alice&quot;</span><span class="p">));</span><span class="w"></span>
+<span class="c1">// ...</span>
+<span class="k">match</span><span class="w"> </span><span class="n">maybe_name</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{},</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+<span class="n">do_something_with</span><span class="p">(</span><span class="n">maybe_name</span><span class="p">)</span><span class="w"></span>
+</pre></div>
+
+
+<p>Following the typical <a href="https://doc.rust-lang.org/book/ownership.html">ownership semantics</a>,
+this will prevent any subsequent moves and essentially consume the&nbsp;value:</p>
+<div class="highlight"><pre>error: use of partially moved value: `maybe_name` [E0382]
+    do_something_with(maybe_name);
+                      ^~~~~~~~~~
+</pre></div>
+
+
+<p>So just like the aforementioned type constructors (<code>Some</code>, etc.),
+the ampersand operator is simply <em>part of the pattern</em> that we match against.
+And just like with <code>Some</code> and friends, there is an obvious symmetry here:
+if <code>&amp;</code> was used to create the value, it needs to be used when unpacking&nbsp;it.</p>
+<blockquote>
+<p>The syntax used in a pattern that destructures an object
+is analogous to one used by the expression which created&nbsp;it.</p>
+</blockquote>
+<h4>Preventing the&nbsp;move</h4>
+<p>Errors like the one above often contain helpful&nbsp;notes:</p>
+<div class="highlight"><pre>note: `(maybe_name:core::option::Option::Some).0` moved here because it has type `collections::string::String`, which is moved by default
+         Some(n) =&gt; println!(&quot;Hello, {}&quot;, n),
+              ^
+</pre></div>
+
+
+<p>as well as hints for resolving&nbsp;them:</p>
+<div class="highlight"><pre>help: if you would like to borrow the value instead, use a `ref` binding as shown:
+        Some(ref n) =&gt; println!(&quot;Hello, {}&quot;, n),
+</pre></div>
+
+
+<p>Here&#8217;s where <code>ref</code> enters the&nbsp;scene.</p>
+<p>The message tells us that if we add a <code>ref</code> keyword in the suggested spot,
+we will switch from moving to <em>borrowing</em> for the <code>match</code> binding that follows (here, <code>n</code>).
+It will still capture its value exactly as before,
+but it will no longer assume <em>ownership</em> of&nbsp;it.</p>
+<p>This is the crucial&nbsp;difference.</p>
+<p>Unlike the ampersand, <code>ref</code> is <strong>not</strong> something we match against.
+It doesn&#8217;t affect what values match the pattern it&#8217;s in, and what values don&#8217;t<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<p>The only thing it changes is how parts of the matched value
+are <em>captured</em> by the pattern&#8217;s&nbsp;bindings:</p>
+<ul>
+<li>by default, without <code>ref</code>, they are <em>moved</em> into the <code>match</code> arms</li>
+<li>with <code>ref</code>, they are <em>borrowed</em> instead and represented as&nbsp;references</li>
+</ul>
+<p>Looking at our example, the <code>n</code> binding in <code>Some(n)</code> is of type <code>String</code>:
+the actual field type from the matched structure.
+By contrast, the other <code>n</code> in <code>Some(ref n)</code> is a <code>&amp;String</code> &#8212;
+that is, a <em>reference</em> to the&nbsp;field.</p>
+<p>One is a move, the other one is a&nbsp;borrow.</p>
+<blockquote>
+<p><code>ref</code> annotates pattern bindings to make them borrow rather than move.
+It is <em>not</em> a part of the pattern as far as matching is&nbsp;concerned.</p>
+</blockquote>
+<h4>Used&nbsp;together</h4>
+<p>To finish off, let&#8217;s untangle the confusing example from the beginning of this&nbsp;post:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="o">&amp;</span><span class="p">(</span><span class="k">ref</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">query_params</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}={}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Since we know <code>ref</code> doesn&#8217;t affect whether or not the pattern matches,
+we could just as well have something like <code>&amp;(a, b)</code>.
+And this should be quite a bit easier to read:
+it clearly denotes we expect a reference to a 2-tuple of simple objects.
+Not coincidentally,
+such tuples are items from the vector we&#8217;re iterating&nbsp;over.</p>
+<p>Problem is,
+without the <code>ref</code>s we will attempt to <em>move</em> those items into the loop scope.
+But due to the way the vector is iterated over (<code>&amp;query_params</code>),
+we&#8217;re only <em>borrowing</em> each item, so this is actually impossible.
+In fact, it would be a classic attempt to move out of a borrowed&nbsp;context.</p>
+<p>It is also wholly unnecessary.
+The only thing this loop does is printing the items out,
+so accessing them through references is perfectly&nbsp;fine.</p>
+<p>And this is exactly what the <code>ref</code> operator gives us.
+Adding the keyword back,
+we will switch from moving the values to just borrowing them&nbsp;instead.</p>
+<h4>To sum&nbsp;up</h4>
+<ul>
+<li>
+<p><code>&amp;</code> denotes that your pattern <strong>expects a reference</strong> to an object.
+Hence <code>&amp;</code> is a part of said pattern:
+<code>&amp;Foo</code> matches <em>different</em> objects than <code>Foo</code> does.</p>
+</li>
+<li>
+<p><code>ref</code> indicates that you want a <strong>reference to an unpacked value</strong>.
+It is <em>not</em> matched against:
+<code>Foo(ref foo)</code> matches <em>the same</em> objects as <code>Foo(foo)</code>. </p>
+</li>
+</ul>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The technical term for this is
+a <a href="https://doc.rust-lang.org/book/deref-coercions.html"><em><code>Deref</code> coercion</em></a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>We can say that it doesn&#8217;t affect the <em>satisfiability</em>
+(or conversely, <em>refutability</em>) of the pattern.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-patterns-ref.html#rust-patterns-ref">Continue reading</a>
+  </div>
+  <hr />
+</article>
 <article>
   <header>
     <h2><a href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Moving out of a container in&nbsp;Rust</a></h2>
@@ -109,7 +308,8 @@ a legal <code>String</code>: its internal pointer could&#8217;ve been invalidate
 <p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
 there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
 it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
-the program is inarguably correct: Rust&#8217;s borrow checker is just incapable of ascertaining&nbsp;it.</p>
+the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
+by the borrow&nbsp;checker.</p>
 <h4>Pointers to the&nbsp;rescue?</h4>
 <p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
 As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
@@ -128,7 +328,7 @@ solely through&nbsp;references:</p>
 
 
 <p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
-pointers instead of actual objects<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
+pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
 the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
 In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
 the call stacks and abstraction&nbsp;layers.</p>
@@ -211,8 +411,14 @@ if it&#8217;s cheap to&nbsp;obtain.</p>
 <p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
 </li>
 <li id="fn:2">
+<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
+on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the languag itself,
+it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
+is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
 <p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
-instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
@@ -225,7 +431,7 @@ instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnr
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2015 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

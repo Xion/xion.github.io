@@ -1,5 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/news.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2015-08-22T13:20:00-07:00</updated><entry><title>Hi!</title><link href="http://xion.io/post/news/hi.html" rel="alternate"></link><updated>2015-08-22T13:20:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2015-08-22:post/news/hi.html</id><summary type="html">&lt;p&gt;My name is &lt;a href="http://xion.io/page/about.html"&gt;Karol Kuczmarski&lt;/a&gt;, and this is my personal&amp;nbsp;blog.&lt;/p&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/news.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-03-20T20:15:00-07:00</updated><entry><title>Introducing callee: matchers for unittest.mock</title><link href="http://xion.io/post/news/callee-intro.html" rel="alternate"></link><updated>2016-03-20T20:15:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-03-20:post/news/callee-intro.html</id><summary type="html">&lt;p&gt;Combined with dynamic typing, the lax object model of Python makes it pretty easy to write unit tests that involve
+&lt;em&gt;mocking&lt;/em&gt; some parts of the tested code. Still, there&amp;#8217;s plenty of third party libraries &amp;#8212; usually with &amp;#8220;mock&amp;#8221; somewhere
+in the name &amp;#8212; which promise to make it even shorter and simpler. There&amp;#8217;s evidently been a need here that the standard
+library didn&amp;#8217;t address&amp;nbsp;adequately.&lt;/p&gt;
+&lt;p&gt;It changed, however, with Python 3.3. This version introduced a new
+&lt;a href="https://docs.python.org/3/library/unittest.mock.html"&gt;&lt;code&gt;unittest.mock&lt;/code&gt; module&lt;/a&gt; which essentially obsoleted
+all the other, third party solutions. The module, available also as a &lt;a href="https://pypi.python.org/pypi/mock"&gt;backport&lt;/a&gt;
+for Python 2.6 and above, is flexible, easy to use, and offers most if not all of the requisite&amp;nbsp;functionality.&lt;/p&gt;
+&lt;h4&gt;Called it,&amp;nbsp;maybe?&lt;/h4&gt;
+&lt;p&gt;Well, with one notable exception. If we mock a function, or any other callable&amp;nbsp;object:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c"&gt;# (production code)&lt;/span&gt;
+&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;ProductionClass&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;florb&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;...&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="c"&gt;# (test code)&lt;/span&gt;
+&lt;span class="n"&gt;something&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;ProductionClass&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;span class="n"&gt;something&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;florb&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;we have very limited capabilities when it comes to verifying &lt;em&gt;how&lt;/em&gt; they were called. Sure, we can be extremely&amp;nbsp;specific:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;something&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;florb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assert_called_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;this particular string&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;or very&amp;nbsp;lenient:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;something&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;florb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assert_called_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ANY&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;  &lt;span class="c"&gt;# works for _any_ argument&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;but there is virtually nothing in between. Suppose we don&amp;#8217;t care too much what &lt;em&gt;exact&lt;/em&gt; string the method was called with,
+only that it was &lt;em&gt;some&lt;/em&gt; string that&amp;#8217;s long enough? Things get awkward &lt;em&gt;very&lt;/em&gt; fast&amp;nbsp;then:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;posargs&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;kwargs&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;something&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;florb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;call_args_list&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="n"&gt;arg&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;posargs&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assertIsInstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;arg&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assertGreaterEqual&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;arg&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;break&lt;/span&gt;
+&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;fail&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;required call to &lt;/span&gt;&lt;span class="si"&gt;%r&lt;/span&gt;&lt;span class="s"&gt; not found&amp;#39;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;something&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;florb&lt;/span&gt;&lt;span class="p"&gt;,))&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Yes, this is what&amp;#8217;s required: an actual loop through all the mock&amp;#8217;s calls&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;; unpacking tuples of positional and keyword
+arguments; and manual assertions that won&amp;#8217;t even emit useful error messages when they&amp;nbsp;fail.&lt;/p&gt;
+&lt;p&gt;Eww! Surely Python can do better than&amp;nbsp;that?&lt;/p&gt;
+&lt;h4&gt;Meet &lt;code&gt;callee&lt;/code&gt;&lt;/h4&gt;
+&lt;p&gt;Why, of course it can! Today, I&amp;#8217;m releasing &lt;a href="https://callee.readthedocs.org"&gt;&lt;em&gt;callee&lt;/em&gt;&lt;/a&gt;: a library of &lt;strong&gt;argument matchers&lt;/strong&gt;
+compatible with &lt;code&gt;unittest.mock&lt;/code&gt;. It enables you to write much simpler, more readable,
+and delightfully declarative&amp;nbsp;assertions:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;callee&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;LongerOrEqual&lt;/span&gt;
+&lt;span class="n"&gt;something&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;florb&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assert_called_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt; &lt;span class="n"&gt;LongerOrEqual&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;16&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The wide array of matchers offered by &lt;em&gt;callee&lt;/em&gt; includes
+&lt;a href="https://callee.readthedocs.org/en/latest/reference/numbers.html"&gt;numeric&lt;/a&gt;,
+&lt;a href="https://callee.readthedocs.org/en/latest/reference/strings.html"&gt;string&lt;/a&gt;,
+and &lt;a href="https://callee.readthedocs.org/en/latest/reference/collections.html"&gt;collection&lt;/a&gt; ones.
+And if none suits your particular needs,
+it&amp;#8217;s a trivial matter to &lt;a href="https://callee.readthedocs.org/en/latest/guide/custom-matchers.html"&gt;implement a custom one&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Check the library&amp;#8217;s documentation for &lt;a href="https://callee.readthedocs.org/en/latest/guide/usage.html#example"&gt;more examples&lt;/a&gt;,
+or jump right in to the &lt;a href="https://callee.readthedocs.org/en/latest/guide/installing.html"&gt;installation guide&lt;/a&gt;
+or a &lt;a href="https://callee.readthedocs.org/#api-reference"&gt;full matcher reference&lt;/a&gt;.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;A loop is not necessary if we simulate &lt;code&gt;assert_called_once_with&lt;/code&gt; rather than &lt;code&gt;assert_called_with&lt;/code&gt;,
+but we still have to dig into &lt;code&gt;mock.call&lt;/code&gt; objects to eke out the arguments.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Python"></category><category term="testing"></category><category term="mock"></category><category term="argument matchers"></category></entry><entry><title>Hi!</title><link href="http://xion.io/post/news/hi.html" rel="alternate"></link><updated>2015-08-22T13:20:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2015-08-22:post/news/hi.html</id><summary type="html">&lt;p&gt;My name is &lt;a href="http://xion.io/page/about.html"&gt;Karol Kuczmarski&lt;/a&gt;, and this is my personal&amp;nbsp;blog.&lt;/p&gt;
 &lt;p&gt;It&amp;#8217;s built using &lt;a href="http://www.python.org"&gt;Python&lt;/a&gt; and &lt;a href="http://www.getpelican.com"&gt;Pelican&lt;/a&gt;
 &amp;#8212; a static site generator &amp;#8212; with a little help from &lt;a href="http://www.fabfile.org"&gt;Fabric&lt;/a&gt; and &lt;a href="http://www.git-scm.com"&gt;Git&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;I&amp;#8217;ll be using it mostly to talk about programming, technologies I work with, and projects I&amp;#8217;m hacking&amp;nbsp;on.&lt;/p&gt;</summary></entry></feed>

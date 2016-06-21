@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:type" content="blog"/>
+<meta property="og:title" content="Karol Kuczmarski's Blog"/>
+<meta property="og:description" content=""/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+
+  <title>Karol Kuczmarski's Blog &ndash; Tag: UI</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/programming/python-dont-use-click.html#python-dont-use-click">Please don&#8217;t use&nbsp;Click</a></h2>
+    <p>
+      Posted on Fri 20 May 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/cli.html">CLI</a>,      <a href="http://xion.io/tag/ui.html">UI</a>,      <a href="http://xion.io/tag/click.html">Click</a>      &#8226; <a href="http://xion.io/post/programming/python-dont-use-click.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>&#8230;not for standalone programs&nbsp;anyway.</em></p>
+<p>Chances are, you have written some command line programs in Python. This is quite probable even if you normally code
+in some other language. And if you have, it is not unlikely that you needed to parse the <code>argv</code> of your program at one
+point or&nbsp;another.</p>
+<p>There are plenty of options here, both in the standard library as well as among third party packages. One does stand out,
+however, and it&#8217;s mostly for how it is often overused. I&#8217;m talking about <a href="http://click.pocoo.org/">Click</a>&nbsp;here.</p>
+<p>If you wanted to use it in your next Python program, I hereby urge you to&nbsp;reconsider.</p>
+<h4>What&#8217;s the&nbsp;fuss?</h4>
+<p><img style="float:right; margin-left: 8px; margin: bottom: 7px" src="http://xion.io/images/click-logo.png" alt="click_">
+The somewhat bizarrely named Click library is described as a &#8220;package for creating beautiful
+command line interfaces&#8221;. Its main trick is the ability to create subcommands by adorning Python functions with the
+<code>@click.command()</code> decorator<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. It then makes them coalesce into an argument parser, equipped with the necessary
+dispatching&nbsp;logic.</p>
+<p>This idea isn&#8217;t new, of course. Prior art goes back at least seven years to the now-abandoned
+<a href="https://opster.readthedocs.io">opster</a> package. Click, however, was the first one of its kind to garner noticeable
+popularity, which is easily attributed to <a href="http://lucumr.pocoo.org/">whom it&#8217;s been authored by</a>.</p>
+<p>So while my arguments against using this kind of <span class="caps">CLI</span> framework would apply to any package implementing the paradigm,
+it just happens that Click is currently its most prominent example. Purely for the sake of convenience, I will therefore
+refer to it as if it was interchangeable with the whole concept. Because why not? Whatever you may say about
+the library&#8217;s name, it&#8217;s hard to imagine a more concise moniker than a simple <em>Click</em>.</p>
+<p>What&#8217;s wrong, then, with the way Click handles command line&nbsp;interfaces?</p>
+<h4><span class="caps">CLI</span>: Little&nbsp;Interfaces</h4>
+<p>It&#8217;s how it encourages to treat them as an <em>accidental afterthought</em> rather than a deliberate design&nbsp;decision.</p>
+<p>For applications invoked repeatedly from a terminal, their command line arguments and flags are the primary means of
+user interaction<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. It is how users communicate their intent to perform an action; provide the neccessary input data
+to carry it throgh; decide how they want to receive the output; and control many other aspects of the programs execution.
+Absent graphical components and widgets, the command line is virtually the only way to interact with a terminal&nbsp;program.</p>
+<p>In other words, it is <strong>the <span class="caps">UI</span></strong>.</p>
+<p>And how important the <span class="caps">UI</span> is for <em>any</em> application? It seems to be important enough that entire fields of study are devoted
+to reducing friction of human-computer interaction. In many projects, the emphasis on user interface design is on par
+with that of actual software engineering.<br>
+Like everything, of course, it is susceptible to trends and fads (such as the recent &#8220;mobile/responsive everything!&#8221;
+craze). But its significance remains undiminished. Quite the opposite: in the age of ubiquitous computing,
+user interfaces are probably more important than&nbsp;ever.</p>
+<p>Yes, this includes <span class="caps">CLI</span>. One of the main reasons we turn to the command line are <em>speed</em> and <em>efficacy</em>. Common tasks must
+utilize short and convenient syntax that is quick to integrate into user&#8217;s muscle memory. Others should not only be
+possible, but <em>discoverable</em> and <em>accessible</em> without going through reams of <code>man</code> pages.</p>
+<p>Any terminal program intended for frequent use by humans should therefore strive to excel in those two qualities.
+But except for <a href="http://linux.die.net/man/1/echo">the simplest of cases</a>, it won&#8217;t happen by itself.
+Designing an efficient <span class="caps">CLI</span> for any non-trivial application is a challenging and demanding&nbsp;task.</p>
+<h4>It doesn&#8217;t&nbsp;click</h4>
+<p>With Click, however, we&#8217;re encouraged to just wing&nbsp;it.</p>
+<p>Click tells us to slap some decorators on our top-level functions and call it a day. Sure, you can dig deep enough
+and uncover the underlying layers of abstraction that may eventually allow you do things for which <code>argparse</code> has
+a <a href="https://docs.python.org/3/library/argparse.html#mutual-exclusion">first-class support</a>.</p>
+<p>By default, however, Click shoehorns your programs into
+<a href="http://click.pocoo.org/5/quickstart/#basic-concepts">predefined patterns</a> that, incidentally, mirror those of some
+<a href="http://click.pocoo.org/5/complex/#building-a-git-clone">least intuitive</a> command-line tools in&nbsp;existence.</p>
+<p>Indeed, the whole idea of subdiving your program into several distinct is already suspect, for it appears at odds
+with the fundamental Unix philosophy of
+<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">doing one thing well</a>. While it is
+occasionally justified, it shouldn&#8217;t be the first thing that comes to your mind. But that&#8217;s completely at odds with the
+Click&#8217;s approach, where <em>not</em> ending up with multiple distinct commands is something you have to consciously&nbsp;avoid.</p>
+<h4>&#8230;though it sometimes&nbsp;might</h4>
+<p>So, what <em>am</em> I suggesting you use instead libraries such as Click?&#8230; Nothing outrageous,&nbsp;really.</p>
+<p>If you care about your command line interface, consider just using
+<a href="https://docs.python.org/3/library/argparse.html">the <code>argparse</code> module</a>. Yes, it will force you to create parser objects,
+add arguments <span class="amp">&amp;</span> flags to it, and in general pay some attention to the whole business. When it comes to <span class="caps">UI</span>, it&#8217;s always
+good to make it an explicit concern, maybe even sufficient to warrant
+<a href="https://github.com/Xion/gisht/blob/e86af37388573f00a4d6f282feca76ead88725d8/gisht/args/parser.py">its own module</a>.</p>
+<p>Alternatively, the <a href="https://github.com/docopt/docopt"><code>docopt</code> library</a> provides another take on the <span class="caps">UI</span>-first approach
+to <span class="caps">CLI</span>, though it is more limited in its capabilities<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Finally, I&#8217;m not advocating to ditch Click in <em>all</em> scenarios. There&#8217;s plenty of situations when we&#8217;re interested in
+getting <em>any</em> <span class="caps">CLI</span> up and running, and not so much in making the most efficient and intuitive interface possible. The prime
+example is any kind of automation scripts that are ancillary to some bigger project, like <em>manage.py</em> is in Django<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+The Python ecosystem doesn&#8217;t really have dedicated task runners that are as featureful as <a href="http://gruntjs.com">Grunt</a>
+or <a href="http://gulpjs.com/">Gulp</a>, and that makes Click a viable and compelling option<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.</p>
+<p>But for standalone programs whose <span class="caps">CLI</span> is the main interface? Yeah, not&nbsp;really.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Oddly enough, that pair of parentheses seems to be mandatory.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Environment variables and config files deserve a honorary mention, of course. But those are usually derivatives of
+the command line arguments, containing e.g. the default values for flags.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Click&#8217;s <a href="http://click.pocoo.org/5/why/#why-not-docopt-etc">own documentation</a> actually describes quite nicely
+how theirs and docopt&#8217;s philosophies differ in a way that&#8217;s consistent with this article.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Incidentally, this appears to be a major motivation behind creating Click in the first place:
+to support web applications built upon on the <a href="http://flask.pocoo.org/">Flask</a> framework, and possibly obviate the need
+for extensions such as <a href="http://flask-script.readthedocs.io/en/latest/">Flask-Script</a>.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>This saying, there are some task runners which offer similar experience, like <a href="http://pyinvoke.org">Invoke</a>.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/programming/python-dont-use-click.html#python-dont-use-click">Continue reading</a>
+  </div>
+</article>
+
+  <div class="pagination">
+  </div>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " Karol Kuczmarski's Blog ",
+  "url" : "http://xion.io",
+  "image": "http://xion.io/logo.jpeg",
+  "description": ""
+}
+</script><script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>
