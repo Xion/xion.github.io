@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Today’s announcement of Rust 1.12 contains, among other things, this innocous little tidbit: Option implements From for its contained type If you’re not very familiar with it, From is a basic converstion trait which any Rust type can implement. By doing so, it defines how to create its values from some other type — hence its name. Perhaps the most widespread application of this trait (and its from method) is allocating owned String objects from literal str values: let hello = String::from(&#34;Hello, world!&#34;); What the change above means is that we can do similar thing with the Option type: let maybe_int = Option::from(42); At a first glance, this doesn’t look like a big deal at all. For one, this syntax is much more wordy than the traditional Some(42), so it’s not very clear what benefits it offers. But this first impression is rather deceptive. In many cases, this change can actually reduce the number of times we have to type Some(x), allowing us to replace it with just x. That’s because this new impl brings Rust quite a bit closer to having optional function arguments as a first class feature in the language. Until now, a function defined like this: fn maybe_plus_5(x: Option&lt;i32&gt;) -&gt; i32 { x.unwrap_or(0) + 5 } was the closest Rust had to default argument values. While this works perfectly — and is bolstered by compile-time checks! — callers are unfortunately required to build the Option objects manually: let _ = maybe_plus_5(Some(42)); // OK let _ = maybe_plus_5(None); // OK let _ = maybe_plus_5(42); // error! After Option&lt;T&gt; implements From&lt;T&gt;, however, this can change for the better. Much better, in fact, for the last line above can be made valid. All that is necessary is to take advantage of this new impl in the function definition: fn maybe_plus_5&lt;T&gt;(x: T) -&gt; i32 where Option&lt;i32&gt;: From&lt;T&gt; { Option::from(x).unwrap_or(0) + 5 } Unfortunately, this results in quite a bit of complexity, up to and including the where clause: a telltale sign of convoluted, generic code. Still, this trade-off may be well worth it, as a function defined once can be called many times throughout the code base, and possibly across multiple crates if it’s a part of the public API. But we can do better than this. Indeed, using the From trait to constrain argument types is just complicating things for no good reason. What we should so instead is use the symmetrical trait, Into, and take advantage of its standard impl: impl&lt;T, U&gt; Into&lt;U&gt; for T where U: From&lt;T&gt; Once we translate it to the Option case (now that Option&lt;T&gt; implements From&lt;T&gt;), we can switch the trait bounds around and get rid of the where clause completely: fn maybe_plus_5&lt;T: Into&lt;Option&lt;i32&gt;&gt;&gt;(x: T) -&gt; i32 { x.into().unwrap_or(0) + 5 } As a small bonus, the function body has also gotten a little simpler. So, should you go wild and change all your functions taking Optionals to look like this?… Well, technically you can, although the benefits may not outweigh the downsides for small, private functions that are called infrequently. On the other hand, if you can afford to only support Rust 1.12 and up, this technique can make it much more pleasant to use the external API of your crates. What’s best is the full backward compatibility with any callers that still pass Some(x): for them, the old syntax will continue to work exactly like before. Also note that the Rust compiler is smart about eliding the no-op conversion calls like the Into::into above, so you shouldn’t observe any changes in the performance department either. And who knows, maybe at some point Rust makes the final leap, and allows skipping the Nones?…" />
+<meta name="keywords" content="Rust, arguments, parameters, functions">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Optional arguments in Rust 1.12"/>
+<meta property="og:description" content="Today’s announcement of Rust 1.12 contains, among other things, this innocous little tidbit: Option implements From for its contained type If you’re not very familiar with it, From is a basic converstion trait which any Rust type can implement. By doing so, it defines how to create its values from some other type — hence its name. Perhaps the most widespread application of this trait (and its from method) is allocating owned String objects from literal str values: let hello = String::from(&#34;Hello, world!&#34;); What the change above means is that we can do similar thing with the Option type: let maybe_int = Option::from(42); At a first glance, this doesn’t look like a big deal at all. For one, this syntax is much more wordy than the traditional Some(42), so it’s not very clear what benefits it offers. But this first impression is rather deceptive. In many cases, this change can actually reduce the number of times we have to type Some(x), allowing us to replace it with just x. That’s because this new impl brings Rust quite a bit closer to having optional function arguments as a first class feature in the language. Until now, a function defined like this: fn maybe_plus_5(x: Option&lt;i32&gt;) -&gt; i32 { x.unwrap_or(0) + 5 } was the closest Rust had to default argument values. While this works perfectly — and is bolstered by compile-time checks! — callers are unfortunately required to build the Option objects manually: let _ = maybe_plus_5(Some(42)); // OK let _ = maybe_plus_5(None); // OK let _ = maybe_plus_5(42); // error! After Option&lt;T&gt; implements From&lt;T&gt;, however, this can change for the better. Much better, in fact, for the last line above can be made valid. All that is necessary is to take advantage of this new impl in the function definition: fn maybe_plus_5&lt;T&gt;(x: T) -&gt; i32 where Option&lt;i32&gt;: From&lt;T&gt; { Option::from(x).unwrap_or(0) + 5 } Unfortunately, this results in quite a bit of complexity, up to and including the where clause: a telltale sign of convoluted, generic code. Still, this trade-off may be well worth it, as a function defined once can be called many times throughout the code base, and possibly across multiple crates if it’s a part of the public API. But we can do better than this. Indeed, using the From trait to constrain argument types is just complicating things for no good reason. What we should so instead is use the symmetrical trait, Into, and take advantage of its standard impl: impl&lt;T, U&gt; Into&lt;U&gt; for T where U: From&lt;T&gt; Once we translate it to the Option case (now that Option&lt;T&gt; implements From&lt;T&gt;), we can switch the trait bounds around and get rid of the where clause completely: fn maybe_plus_5&lt;T: Into&lt;Option&lt;i32&gt;&gt;&gt;(x: T) -&gt; i32 { x.into().unwrap_or(0) + 5 } As a small bonus, the function body has also gotten a little simpler. So, should you go wild and change all your functions taking Optionals to look like this?… Well, technically you can, although the benefits may not outweigh the downsides for small, private functions that are called infrequently. On the other hand, if you can afford to only support Rust 1.12 and up, this technique can make it much more pleasant to use the external API of your crates. What’s best is the full backward compatibility with any callers that still pass Some(x): for them, the old syntax will continue to work exactly like before. Also note that the Rust compiler is smart about eliding the no-op conversion calls like the Into::into above, so you shouldn’t observe any changes in the performance department either. And who knows, maybe at some point Rust makes the final leap, and allows skipping the Nones?…"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/rust-optional-args.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2016-09-29 19:51:00-07:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Rust"/>
+<meta property="article:tag" content="arguments"/>
+<meta property="article:tag" content="parameters"/>
+<meta property="article:tag" content="functions"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Optional arguments in Rust 1.12</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="rust-optional-args">Optional arguments in Rust&nbsp;1.12</h1>
+    <p>Posted on Thu 29 September 2016 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Today&#8217;s <a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html">announcement of Rust 1.12</a> contains,
+among other things, this innocous little&nbsp;tidbit:</p>
+<blockquote>
+<p><code>Option</code> implements <code>From</code> for its contained&nbsp;type</p>
+</blockquote>
+<p>If you&#8217;re not very familiar with it,
+<code>From</code> is a basic <a href="https://doc.rust-lang.org/std/convert/trait.From.html">converstion trait</a>
+which any Rust type can implement.
+By doing so, it defines how to create its values <em>from</em> some other type &#8212; hence its&nbsp;name.</p>
+<p>Perhaps the most widespread application of this trait (and its <code>from</code> method)
+is allocating owned <code>String</code> objects from literal <code>str</code> values:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">hello</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Hello, world!&quot;</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>What the change above means is that we can do similar thing with the <code>Option</code> type:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">maybe_int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>At a first glance, this doesn&#8217;t look like a big deal at all.
+For one, this syntax is much more wordy than the traditional <code>Some(42)</code>,
+so it&#8217;s not very clear what benefits it&nbsp;offers.</p>
+<p>But this first impression is rather deceptive.
+In many cases, this change can actually <em>reduce</em> the number of times we have to type <code>Some(x)</code>,
+allowing us to replace it with just <code>x</code>.
+That&#8217;s because this new <code>impl</code> brings Rust quite a bit closer to having <em>optional function arguments</em>
+as a first class feature in the&nbsp;language.</p>
+<p>Until now, a function defined like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>was the closest Rust had to default argument values.
+While this works perfectly &#8212; and is bolstered by compile-time checks! &#8212;
+callers are unfortunately required to build the <code>Option</code> objects&nbsp;manually:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="mi">42</span><span class="p">));</span><span class="w">  </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">None</span><span class="p">);</span><span class="w">      </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w">        </span><span class="c1">// error!</span>
+</pre></div>
+
+
+<p>After <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>, however, this can change for the better.
+<em>Much</em> better, in fact, for the last line above can be made valid.
+All that is necessary is to take advantage of this new <code>impl</code> in the function&nbsp;definition:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="n">x</span><span class="p">).</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Unfortunately, this results in quite a bit of complexity,
+up to and including the <code>where</code> clause: a telltale sign of convoluted, generic code.
+Still, this trade-off may be well worth it,
+as a function defined once can be called many times throughout the code base,
+and possibly across multiple crates if it&#8217;s a part of the public <span class="caps">API</span>.</p>
+<p>But we can do better than this.
+Indeed, using the <code>From</code> trait to constrain argument types is just complicating things for no good reason.
+What we should so instead is use the symmetrical trait, <a href="https://doc.rust-lang.org/std/convert/trait.Into.html"><code>Into</code></a>,
+and take advantage of its standard <code>impl</code>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="n">U</span><span class="o">:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Once we translate it to the <code>Option</code> case (now that <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>),
+we can switch the trait bounds around and get rid of the <code>where</code> clause&nbsp;completely:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;&gt;&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">into</span><span class="p">().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As a small bonus, the function body has also gotten a little&nbsp;simpler.</p>
+<hr />
+<p>So, should you go wild and change all your functions taking <code>Option</code>als to look like this?&#8230;
+Well, technically you can, although the benefits may not outweigh the downsides
+for small, private functions that are called&nbsp;infrequently.</p>
+<p>On the other hand, if you can afford to only support Rust 1.12 and up,
+this technique can make it much more pleasant to use the external <span class="caps">API</span> of your&nbsp;crates.</p>
+<p>What&#8217;s best is the <em>full backward compatibility</em> with any callers that still pass <code>Some(x)</code>:
+for them, the old syntax will continue to work exactly like before.
+Also note that the Rust compiler is smart about eliding the no-op conversion calls like the <code>Into::into</code> above,
+so you shouldn&#8217;t observe any changes in the performance department&nbsp;either.</p>
+<p>And who knows, maybe at some point Rust makes the final leap, and allows skipping the <code>None</code>s?&#8230;</p>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/rust.html">Rust</a>
+      <a href="http://xion.io/tag/arguments.html">arguments</a>
+      <a href="http://xion.io/tag/parameters.html">parameters</a>
+      <a href="http://xion.io/tag/functions.html">functions</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Optional arguments in Rust 1.12",
+  "headline": "Optional arguments in Rust 1.12",
+  "datePublished": "2016-09-29 19:51:00-07:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/rust-optional-args.html",
+  "description": "Today’s announcement of Rust 1.12 contains, among other things, this innocous little tidbit: Option implements From for its contained type If you’re not very familiar with it, From is a basic converstion trait which any Rust type can implement. By doing so, it defines how to create its values from some other type — hence its name. Perhaps the most widespread application of this trait (and its from method) is allocating owned String objects from literal str values: let hello = String::from("Hello, world!"); What the change above means is that we can do similar thing with the Option type: let maybe_int = Option::from(42); At a first glance, this doesn’t look like a big deal at all. For one, this syntax is much more wordy than the traditional Some(42), so it’s not very clear what benefits it offers. But this first impression is rather deceptive. In many cases, this change can actually reduce the number of times we have to type Some(x), allowing us to replace it with just x. That’s because this new impl brings Rust quite a bit closer to having optional function arguments as a first class feature in the language. Until now, a function defined like this: fn maybe_plus_5(x: Option<i32>) -> i32 { x.unwrap_or(0) + 5 } was the closest Rust had to default argument values. While this works perfectly — and is bolstered by compile-time checks! — callers are unfortunately required to build the Option objects manually: let _ = maybe_plus_5(Some(42)); // OK let _ = maybe_plus_5(None); // OK let _ = maybe_plus_5(42); // error! After Option<T> implements From<T>, however, this can change for the better. Much better, in fact, for the last line above can be made valid. All that is necessary is to take advantage of this new impl in the function definition: fn maybe_plus_5<T>(x: T) -> i32 where Option<i32>: From<T> { Option::from(x).unwrap_or(0) + 5 } Unfortunately, this results in quite a bit of complexity, up to and including the where clause: a telltale sign of convoluted, generic code. Still, this trade-off may be well worth it, as a function defined once can be called many times throughout the code base, and possibly across multiple crates if it’s a part of the public API. But we can do better than this. Indeed, using the From trait to constrain argument types is just complicating things for no good reason. What we should so instead is use the symmetrical trait, Into, and take advantage of its standard impl: impl<T, U> Into<U> for T where U: From<T> Once we translate it to the Option case (now that Option<T> implements From<T>), we can switch the trait bounds around and get rid of the where clause completely: fn maybe_plus_5<T: Into<Option<i32>>>(x: T) -> i32 { x.into().unwrap_or(0) + 5 } As a small bonus, the function body has also gotten a little simpler. So, should you go wild and change all your functions taking Optionals to look like this?… Well, technically you can, although the benefits may not outweigh the downsides for small, private functions that are called infrequently. On the other hand, if you can afford to only support Rust 1.12 and up, this technique can make it much more pleasant to use the external API of your crates. What’s best is the full backward compatibility with any callers that still pass Some(x): for them, the old syntax will continue to work exactly like before. Also note that the Rust compiler is smart about eliding the no-op conversion calls like the Into::into above, so you shouldn’t observe any changes in the performance department either. And who knows, maybe at some point Rust makes the final leap, and allows skipping the Nones?…"
+}
+</script></body>
+</html>

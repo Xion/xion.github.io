@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:type" content="blog"/>
+<meta property="og:title" content="Karol Kuczmarski's Blog"/>
+<meta property="og:description" content=""/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+
+  <title>Karol Kuczmarski's Blog &ndash; Tag: iterables</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
+    <p>
+      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
+<p>For a long time, I resisted the appeal of various incremental improvements
+that early 3.x releases offered.
+And the world agreed with me:
+a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
+<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
+<p>As if to compensate for years of &#8220;good enough&#8221;,
+Python 3 development team has given in to a steadily accelerating feature creep.
+Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
+(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
+but it nevertheless causes an increasingly wide functional gap
+between the 2.x and 3.x&nbsp;series.</p>
+<p>Starting from around Python 3.5, this gap becomes really noticeable,
+even when partially bridged with many excellent backports.
+The ecosystem support is also mostly there,
+at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
+<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
+<p>Given all those portents,
+even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
+For better or for worse, 3.x is how Python will look like in the coming years and decades.
+Might as well prepare for&nbsp;it.</p>
+<p>In this post, I will discuss some important issues
+one should be aware of before trying to switch from Python 2 to 3.
+I won&#8217;t be talking about all the minute changes and additions,
+but cover the more significant, broader concepts
+that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
+<p>The two concepts I&#8217;ll be mentioning here are
+<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
+<h4>Unicode&nbsp;handling</h4>
+<p>You have probably heard it before.
+Python 3 was going to solve your Unicode problems once and for all.
+You haven&#8217;t believed it, of course,
+like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
+<p>Still, it may be rather surprising to learn
+that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
+<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
+<p>In any case, either version of Python gets the most important thing about Unicode right.
+They both distinguish, at the type level,
+between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
+The type that holds the latter is called <code>bytes</code> in both versions,
+while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
+<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
+where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
+<p>But where Python 2 does poorly is in the choice of defaults.
+You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
+That <code>str</code> is a fully functional string type,
+even though it can only contain <span class="caps">ASCII</span> characters.
+Moreover, it is also the <em>default</em>:
+quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
+<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
+<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
+If you already deal with Unicode correctly in your programs
+&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
+your main benefit will be not having to write that <code>u""</code> quotes anymore.
+Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
+rather than letting you write &#8220;working&#8221; programs
+that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
+<h4>Laziness by&nbsp;default</h4>
+<p>The second major change that Python 3 brings is of similar nature.
+It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
+<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
+are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
+Included in these are functions like <code>map</code> or <code>filter</code>,
+as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
+<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
+<ul>
+<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
+<li><code>xrange</code> is now just <code>range</code></li>
+<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
+</ul>
+<p>and so&nbsp;on.</p>
+<p>In some cases, this is exactly what happens.
+For example, there is virtually no downside to the new implementation of <code>range</code>,
+especially considering the way it is used most&nbsp;often.</p>
+<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
+Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
+their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
+i.e. the most simplistic and limited flavor of Python iterables.
+Working with them is trickier and more error-prone than with lists,
+which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
+that generators expose us&nbsp;to.</p>
+<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
+by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
+and using its functions in place of the built-ins.
+What you could gain in return was increased performance, and a lesser memory footprint.
+All those benefits came from making the computations <em>lazy</em>
+and refraining from storage of the intermediate&nbsp;results.</p>
+<p>In Python 3, however, laziness is <em>preordained</em>.
+Even if we don&#8217;t need or care about the aforementioned perks,
+we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
+<p>One option is to embrace lazy evaluation fully,
+and adapt to handling unspecified iterables throughout our code bases.<br>
+The risk is an increased frequency of bugs stemming from generator misuse &#8212;
+including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
+deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
+<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
+wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
+in order to &#8220;sanitize&#8221; them for later (re)use.<br>
+Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
+</pre></div>
+
+
+<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
+    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
+    <span class="c"># ...the rest of a long function...</span>
+</pre></div>
+
+
+<p>Even if you choose the first path, and somehow use lazy generators everywhere,
+conversions are still required at the serialization&nbsp;boundaries:</p>
+<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
+</pre></div>
+
+
+<p>At least in this case, the lazy iterable will vocally fail with an exception,
+rather than silently doing nothing (in case of repeated iteration)
+or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
+<h4>from __future__ import&nbsp;doubts</h4>
+<p>So, here they are: the highlights of Python 3.
+If you are disappointed they all turned out to be mixed blessings,
+don&#8217;t worry: you are
+<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
+<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
+<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
+<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
+<p>The truth is that Python 3 is more finnicky, less forgiving,
+and much less beginner-friendly than its predecessor.
+Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
+by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
+<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
+Perhaps it&#8217;s not a coincidence
+that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
+has passed between the first public version of Python (0.9)
+and the release of Python 3.0.
+By no conceivable means it is a toy language anymore,
+and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
+<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
+<p>It&#8217;s becoming harder to claim the language favors simplicity
+over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
+It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
+is the <em>obvious</em> way to do it.<br>
+It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
+and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
+<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
+The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
+But who knows? Maybe after two decades,
+a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
+<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
+are about to get&nbsp;in!</p>
+      <a class="btn" href="http://xion.io/post/code/python3-primer.html#python3-primer">Continue reading</a>
+  </div>
+</article>
+
+  <div class="pagination">
+  </div>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " Karol Kuczmarski's Blog ",
+  "url" : "http://xion.io",
+  "image": "http://xion.io/logo.jpeg",
+  "description": ""
+}
+</script><script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

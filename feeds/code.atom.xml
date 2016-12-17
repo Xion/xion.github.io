@@ -1,5 +1,883 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-06-20T22:07:00-07:00</updated><entry><title>…or lambda?</title><link href="http://xion.io/post/code/python-or-lambda.html" rel="alternate"></link><updated>2016-06-20T22:07:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-06-20:post/code/python-or-lambda.html</id><summary type="html">&lt;p&gt;&lt;em&gt;a.k.a. Curious Facts about Python&amp;nbsp;Syntax&lt;/em&gt;&lt;/p&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-09-29T19:51:00-07:00</updated><entry><title>Optional arguments in Rust 1.12</title><link href="http://xion.io/post/code/rust-optional-args.html" rel="alternate"></link><updated>2016-09-29T19:51:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-09-29:post/code/rust-optional-args.html</id><summary type="html">&lt;p&gt;Today&amp;#8217;s &lt;a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html"&gt;announcement of Rust 1.12&lt;/a&gt; contains,
+among other things, this innocous little&amp;nbsp;tidbit:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;Option&lt;/code&gt; implements &lt;code&gt;From&lt;/code&gt; for its contained&amp;nbsp;type&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;If you&amp;#8217;re not very familiar with it,
+&lt;code&gt;From&lt;/code&gt; is a basic &lt;a href="https://doc.rust-lang.org/std/convert/trait.From.html"&gt;converstion trait&lt;/a&gt;
+which any Rust type can implement.
+By doing so, it defines how to create its values &lt;em&gt;from&lt;/em&gt; some other type &amp;#8212; hence its&amp;nbsp;name.&lt;/p&gt;
+&lt;p&gt;Perhaps the most widespread application of this trait (and its &lt;code&gt;from&lt;/code&gt; method)
+is allocating owned &lt;code&gt;String&lt;/code&gt; objects from literal &lt;code&gt;str&lt;/code&gt; values:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello, world!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;What the change above means is that we can do similar thing with the &lt;code&gt;Option&lt;/code&gt; type:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_int&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;At a first glance, this doesn&amp;#8217;t look like a big deal at all.
+For one, this syntax is much more wordy than the traditional &lt;code&gt;Some(42)&lt;/code&gt;,
+so it&amp;#8217;s not very clear what benefits it&amp;nbsp;offers.&lt;/p&gt;
+&lt;p&gt;But this first impression is rather deceptive.
+In many cases, this change can actually &lt;em&gt;reduce&lt;/em&gt; the number of times we have to type &lt;code&gt;Some(x)&lt;/code&gt;,
+allowing us to replace it with just &lt;code&gt;x&lt;/code&gt;.
+That&amp;#8217;s because this new &lt;code&gt;impl&lt;/code&gt; brings Rust quite a bit closer to having &lt;em&gt;optional function arguments&lt;/em&gt;
+as a first class feature in the&amp;nbsp;language.&lt;/p&gt;
+&lt;p&gt;Until now, a function defined like&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;was the closest Rust had to default argument values.
+While this works perfectly &amp;#8212; and is bolstered by compile-time checks! &amp;#8212;
+callers are unfortunately required to build the &lt;code&gt;Option&lt;/code&gt; objects&amp;nbsp;manually:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;// OK&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="c1"&gt;// OK&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="c1"&gt;// error!&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;After &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt; implements &lt;code&gt;From&amp;lt;T&amp;gt;&lt;/code&gt;, however, this can change for the better.
+&lt;em&gt;Much&lt;/em&gt; better, in fact, for the last line above can be made valid.
+All that is necessary is to take advantage of this new &lt;code&gt;impl&lt;/code&gt; in the function&amp;nbsp;definition:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;where&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;From&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Unfortunately, this results in quite a bit of complexity,
+up to and including the &lt;code&gt;where&lt;/code&gt; clause: a telltale sign of convoluted, generic code.
+Still, this trade-off may be well worth it,
+as a function defined once can be called many times throughout the code base,
+and possibly across multiple crates if it&amp;#8217;s a part of the public &lt;span class="caps"&gt;API&lt;/span&gt;.&lt;/p&gt;
+&lt;p&gt;But we can do better than this.
+Indeed, using the &lt;code&gt;From&lt;/code&gt; trait to constrain argument types is just complicating things for no good reason.
+What we should so instead is use the symmetrical trait, &lt;a href="https://doc.rust-lang.org/std/convert/trait.Into.html"&gt;&lt;code&gt;Into&lt;/code&gt;&lt;/a&gt;,
+and take advantage of its standard &lt;code&gt;impl&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Into&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;where&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;From&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Once we translate it to the &lt;code&gt;Option&lt;/code&gt; case (now that &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt; implements &lt;code&gt;From&amp;lt;T&amp;gt;&lt;/code&gt;),
+we can switch the trait bounds around and get rid of the &lt;code&gt;where&lt;/code&gt; clause&amp;nbsp;completely:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Into&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As a small bonus, the function body has also gotten a little&amp;nbsp;simpler.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;So, should you go wild and change all your functions taking &lt;code&gt;Option&lt;/code&gt;als to look like this?&amp;#8230;
+Well, technically you can, although the benefits may not outweigh the downsides
+for small, private functions that are called&amp;nbsp;infrequently.&lt;/p&gt;
+&lt;p&gt;On the other hand, if you can afford to only support Rust 1.12 and up,
+this technique can make it much more pleasant to use the external &lt;span class="caps"&gt;API&lt;/span&gt; of your&amp;nbsp;crates.&lt;/p&gt;
+&lt;p&gt;What&amp;#8217;s best is the &lt;em&gt;full backward compatibility&lt;/em&gt; with any callers that still pass &lt;code&gt;Some(x)&lt;/code&gt;:
+for them, the old syntax will continue to work exactly like before.
+Also note that the Rust compiler is smart about eliding the no-op conversion calls like the &lt;code&gt;Into::into&lt;/code&gt; above,
+so you shouldn&amp;#8217;t observe any changes in the performance department&amp;nbsp;either.&lt;/p&gt;
+&lt;p&gt;And who knows, maybe at some point Rust makes the final leap, and allows skipping the &lt;code&gt;None&lt;/code&gt;s?&amp;#8230;&lt;/p&gt;</summary><category term="Rust"></category><category term="arguments"></category><category term="parameters"></category><category term="functions"></category></entry><entry><title>Flappy Bird in 1234 bytes of Bash</title><link href="http://xion.io/post/code/bash-flappy-bird.html" rel="alternate"></link><updated>2016-08-25T22:07:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-08-25:post/code/bash-flappy-bird.html</id><summary type="html">&lt;p&gt;Contrary to an infamous opinion from a bygone era,
+&lt;span class="caps"&gt;640KB&lt;/span&gt; is not really sufficient for anyone anymore.
+A typical website exceeds that easily,
+and executable programs are usually measured in&amp;nbsp;megabytes.&lt;/p&gt;
+&lt;p&gt;But what if you only had 1234 &lt;em&gt;bytes&lt;/em&gt; to work&amp;nbsp;with?&amp;#8230;&lt;/p&gt;
+&lt;p&gt;A friend of mine, &lt;a href="http://gynvael.coldwind.pl/?blog=1&amp;amp;lang=en"&gt;Gynvael Coldwind&lt;/a&gt;,
+organized a game programming compo&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt; that had precisely this limitation.
+Unlike most demoscene ones, however, the size limit here
+applies to either the final binary &lt;em&gt;or&lt;/em&gt; its source code.
+This can be chosen at the participant&amp;#8217;s&amp;nbsp;discretion.&lt;/p&gt;
+&lt;p&gt;Since my currently favorite compiled language produces
+&lt;a href="https://lifthrasiir.github.io/rustlog/why-is-a-rust-executable-large.html"&gt;the exact opposite of small binaries&lt;/a&gt;,
+I was quite intrigued by the source code option.
+But as the rules say, the final game must run
+on a &lt;em&gt;clean&lt;/em&gt; installation (only standard packages) of either Windows or Ubuntu Linux.
+The choice of viable languages and technologies was therefore rather&amp;nbsp;limited.&lt;/p&gt;
+&lt;p&gt;It was time to get &lt;em&gt;a little&lt;/em&gt;&amp;nbsp;creative.&lt;/p&gt;
+&lt;h4&gt;Game&amp;nbsp;theory&lt;/h4&gt;
+&lt;p&gt;What must an environment provide to be a suitable platform for game development?
+Not much, really. We only need to be able&amp;nbsp;to:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;put stuff on the&amp;nbsp;screen&lt;/li&gt;
+&lt;li&gt;react to user&amp;nbsp;input&lt;/li&gt;
+&lt;li&gt;execute time-dependent&amp;nbsp;logic&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;You could arguably get away without the last one,
+but the kind of games you would end up with
+had gone out of fashion about &lt;a href="https://en.wikipedia.org/wiki/Zork"&gt;half a century ago&lt;/a&gt;.
+For the &amp;#8220;real&amp;#8221; arcade games, we really ought to run our code at least a dozen times per&amp;nbsp;second.&lt;/p&gt;
+&lt;p&gt;There&amp;#8217;s only a handful of standard technologies that allow all of this out of the&amp;nbsp;box.&lt;/p&gt;
+&lt;p&gt;I&amp;#8217;m a wee bit out of touch with Windows these days
+but on Linux, there&amp;#8217;s one thing that I really wanted to take for a serious spin.
+And luckily for me, it also has one extremely terse language to go hand in hand&amp;nbsp;with.&lt;/p&gt;
+&lt;p&gt;I&amp;#8217;m talking, of course, about the &lt;strong&gt;&lt;span class="caps"&gt;ANSI&lt;/span&gt; terminal&lt;/strong&gt; that can be scripted in Bash.
+If there ever was anything that worked anywhere by default,
+then this got to be it&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;h4&gt;&amp;#8230;put into&amp;nbsp;practice&lt;/h4&gt;
+&lt;p&gt;Note that I&amp;#8217;ve stressed the &amp;#8220;terminal&amp;#8221; part.
+The shell itself is a neat instrument,
+but (perhaps surprisingly) it doesn&amp;#8217;t actually concern itself
+with displaying anything on the&amp;nbsp;screen.&lt;/p&gt;
+&lt;p&gt;This has traditionally been the job of a &lt;em&gt;terminal emulator&lt;/em&gt;.
+To this end, it has a couple of &lt;a href="http://wiki.bash-hackers.org/scripting/terminalcodes"&gt;special codes&lt;/a&gt;
+that are undoubtedly useful for an aspiring indie shell game developer.
+They are what allows us to display things in a specific position on the screen,
+complete with chosen color, background color, and (text)&amp;nbsp;style.&lt;/p&gt;
+&lt;p&gt;So this nails down our first requisite&amp;nbsp;feature.&lt;/p&gt;
+&lt;p&gt;As for the second one, the vanilla &lt;a href="http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_08_02.html"&gt;&lt;code&gt;read&lt;/code&gt; command&lt;/a&gt;
+supports everything we may need for handling user input.
+The only real &amp;#8220;trick&amp;#8221; is passing the &lt;code&gt;-n&lt;/code&gt; flag
+which makes it wait for a specific number of characters (e.g. one)
+rather than a whole line ending with &lt;em&gt;Enter&lt;/em&gt;.
+Add a few more flags &amp;#8212; like the one that prevents text from being echoed back to the console &amp;#8212;
+and you can make a rudimentary input&amp;nbsp;loop:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nv"&gt;KEY&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;\0&amp;#39;&lt;/span&gt;
+&lt;span class="k"&gt;while&lt;/span&gt; :&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+    &lt;span class="nb"&gt;read&lt;/span&gt; -rsn &lt;span class="m"&gt;1&lt;/span&gt; KEY
+&lt;span class="k"&gt;done&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;I can imagine, however, that you&amp;#8217;d want to do other things besides just waiting for input.
+Stuff like &amp;#8220;updating the game state&amp;#8221; and &amp;#8220;drawing the next frame&amp;#8221;
+is generally considered pretty important in&amp;nbsp;games.&lt;/p&gt;
+&lt;p&gt;Normally, we would deal with those things in between checking for input events,
+leading to a particular structure of the so-called &lt;a href="http://gameprogrammingpatterns.com/game-loop.html"&gt;real-time loop&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;But the shell doesn&amp;#8217;t really handle input via &amp;#8220;events&amp;#8221;.
+Instead, you just ask for some text and wait until you get it.
+There is no &amp;#8220;peek mode&amp;#8221; that&amp;#8217;d allow to squeeze in some rendering logic before the next key&amp;nbsp;press.&lt;/p&gt;
+&lt;p&gt;What do we do, then, with a tight loop that leaves us no wiggle&amp;nbsp;room?&amp;#8230;&lt;/p&gt;
+&lt;p&gt;Why, we take a crowbar and pry it&amp;nbsp;open!&lt;/p&gt;
+&lt;h5&gt;(Don&amp;#8217;t) be&amp;nbsp;alarmed&lt;/h5&gt;
+&lt;p&gt;Let&amp;#8217;s start by noticing that to run some code whenever there is nothing else to do
+has a rough equivalent of running it &lt;em&gt;periodically&lt;/em&gt;.
+This isn&amp;#8217;t an exactly new observation:
+the &lt;a href="https://developer.mozilla.org/en-US/docs/Web/API/WindowTimers/setTimeout"&gt;&lt;code&gt;setTimeout&lt;/code&gt; function&lt;/a&gt; in JavaScript
+has been the basis of &amp;#8220;real-time&amp;#8221; animation
+since the 90s era of falling snowflakes, and up to the contemporary browser games&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Neither does the shell nor the hosting terminal support anything like &lt;code&gt;setTimeout&lt;/code&gt;, though.
+But fortunately, they don&amp;#8217;t need to: Linux itself does.
+And it accomplishes it quite effortlessly, due to the sole fact of &lt;em&gt;being an operating system&lt;/em&gt;.
+All we have to do is access some of its capabilities directly from the shell&amp;nbsp;script:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nv"&gt;KEY&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;\0&amp;#39;&lt;/span&gt;
+&lt;span class="nv"&gt;DT&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;0.05  &lt;span class="c"&gt;# timeout value in seconds&lt;/span&gt;
+
+tick&lt;span class="o"&gt;()&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt;
+    &lt;span class="c"&gt;# .. do stuff ...&lt;/span&gt;
+    &lt;span class="o"&gt;(&lt;/span&gt; sleep &lt;span class="nv"&gt;$DT&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nb"&gt;kill &lt;/span&gt;ALRM &lt;span class="nv"&gt;$$&lt;/span&gt; &lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="p"&gt;&amp;amp;&lt;/span&gt;
+&lt;span class="o"&gt;}&lt;/span&gt;
+
+&lt;span class="nb"&gt;trap &lt;/span&gt;tick ALRM
+tick
+&lt;span class="k"&gt;while&lt;/span&gt; :&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
+    &lt;span class="nb"&gt;read&lt;/span&gt; -rsn &lt;span class="m"&gt;1&lt;/span&gt; KEY
+&lt;span class="k"&gt;done&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;What we&amp;#8217;re doing here is set up the &lt;code&gt;tick&lt;/code&gt; function to be
+a &lt;em&gt;&lt;a href="https://en.wikipedia.org/wiki/Unix_signal"&gt;signal&lt;/a&gt; handler&lt;/em&gt;.
+A callback, if you&amp;nbsp;will.&lt;/p&gt;
+&lt;p&gt;Inside of this callback, we can do all the state updates and drawing we need,
+as long as we follow it with &amp;#8220;scheduling&amp;#8221; of the next &lt;code&gt;tick&lt;/code&gt; call.
+As a direct equivalent of a &lt;code&gt;setTimeout&lt;/code&gt; invocation, this can be done&amp;nbsp;by:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;starting a subshell to run in the background (with &lt;code&gt;&amp;amp;&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;letting it sleep for however long we want to delay the next&amp;nbsp;update&lt;/li&gt;
+&lt;li&gt;sending a signal to the main script (&lt;code&gt;kill $$&lt;/code&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The signal we chose is of course &lt;code&gt;SIGALRM&lt;/code&gt;&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.
+Technically, however, it can be anything,
+as long as we can set up a &lt;code&gt;trap&lt;/code&gt; to actually handle&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;In any case, success! Bash is officially a game programming&amp;nbsp;platform!&lt;/p&gt;
+&lt;h4&gt;Integration in&amp;nbsp;parts&lt;/h4&gt;
+&lt;p&gt;And so having figured out the technicalities,
+I was faced with the crucial dilemma: &lt;em&gt;what&lt;/em&gt; game could I actually&amp;nbsp;write?&lt;/p&gt;
+&lt;p&gt;Nothing too complicated, that&amp;#8217;s for sure.
+After the initial scaffolding has used up about 1/4 of the harsh size limit,
+I knew that radical simplicity was the order of the&amp;nbsp;day.&lt;/p&gt;
+&lt;p&gt;And so I went for possibly &lt;a href="https://en.wikipedia.org/wiki/Flappy_Bird"&gt;the most trivial game ever&lt;/a&gt;.&lt;/p&gt;
+&lt;p style="text-align: center"&gt;
+    &lt;img src="https://upload.wikimedia.org/wikipedia/en/5/52/Flappy_Bird_gameplay.png" alt="flap flap"&gt;&lt;/br&gt;
+    &lt;small&gt;Sorry, Pong!&lt;/small&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Then, after hours of (&lt;em&gt;ahem&lt;/em&gt;) &lt;a href="https://www.flappybird.com/"&gt;meticulous research&lt;/a&gt;,
+I managed to reverse-engineer the core&amp;nbsp;mechanic:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;let the bird fall down with a constant&amp;nbsp;acceleration&lt;/li&gt;
+&lt;li&gt;to jump, give it some upwards-facing&amp;nbsp;velocity&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Actually &lt;a href="https://github.com/Xion/flappybash/blob/0372ef9173c921ff79c64553974cea0b02c2bb3f/flappybash.sh"&gt;coding this&lt;/a&gt;
+in Bash was mostly a matter of finding out how to perform floating-point calculations.
+Rather unsurprisingly, this is done through
+&lt;a href="https://en.wikipedia.org/wiki/Bc_(programming_language)#Using_bc_in_shell_scripts"&gt;an external program&lt;/a&gt;,
+while truncating of the fractional part involves &amp;#8212; wait for it &amp;#8212;
+&lt;a href="http://unix.stackexchange.com/a/167059"&gt;&lt;em&gt;string formatting&lt;/em&gt;&lt;/a&gt;.&lt;/p&gt;
+&lt;h4&gt;Pipe&amp;nbsp;dream&lt;/h4&gt;
+&lt;p&gt;Based on the above nuggets of Stack Overflow wisdom,
+you&amp;#8217;ve probably figured out that Bash isn&amp;#8217;t exactly what you would call &lt;em&gt;a programming language&lt;/em&gt;.
+With a little bit of perseverance, however, we can make it do our bidding&amp;#8230;
+&lt;em&gt;some&lt;/em&gt; fraction of the&amp;nbsp;time.&lt;/p&gt;
+&lt;p&gt;So far, I had the player character &amp;#8212; a beautiful red rectangle &amp;#8212;
+fall down under the constant force of gravity, and maybe ascend if the Space key has been pressed.
+But a heroic protagonist necessitates the presence of formidable adversaries,
+so my next step was to figure out how to implement this crucial gameplay&amp;nbsp;mechanic.&lt;/p&gt;
+&lt;p&gt;Which one?&amp;#8230; Pipes, of&amp;nbsp;course.&lt;/p&gt;
+&lt;p&gt;Pipes in &lt;em&gt;Bash&lt;/em&gt;.&lt;/p&gt;
+&lt;p style="text-align: center"&gt;
+    &lt;img src="http://xion.io/images/irony-sign.jpg" alt="...ahem"&gt;
+&lt;/p&gt;
+
+&lt;p&gt;It was pretty evident I&amp;#8217;m gonna need to represent them somehow,
+and Bash isn&amp;#8217;t exactly known for its strong repertoire of data structures.
+Starting from version 4.0, it does however have &lt;a href="http://tldp.org/LDP/abs/html/arrays.html"&gt;arrays&lt;/a&gt;,
+so there is at least something we can work&amp;nbsp;with.&lt;/p&gt;
+&lt;p&gt;Let&amp;#8217;s not get &lt;em&gt;too&lt;/em&gt; carried away, though.
+The somewhat obvious idea of mirroring the entire game field in a (pseudo) 2D array
+of pipe/not-pipe turned out to be completely unworkable.
+The fill rate of most (all?) terminal emulators is nowhere near sufficient
+to permit redrawing of the whole screen &lt;em&gt;and&lt;/em&gt; maintaining &lt;span class="caps"&gt;FPS&lt;/span&gt; value above the slideshow&amp;nbsp;threshold.&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://github.com/Xion/flappybash/commit/467fe6429fa8dcc7005f5324278804243204ec9a"&gt;What I went with instead&lt;/a&gt;
+was a 1D array for the pipe itself, and a separate variable to denote its horizontal position.
+Working from there, it wasn&amp;#8217;t too hard to
+&lt;a href="https://github.com/Xion/flappybash/commit/5e3281e408767eab2ade2fa2f9299fee60681bdc"&gt;make it move&lt;/a&gt;,
+and eventually to check for its collision with the player&amp;nbsp;object.&lt;/p&gt;
+&lt;h4&gt;Fitting&amp;nbsp;in&lt;/h4&gt;
+&lt;p&gt;That, of course,
+was &lt;a href="https://github.com/Xion/flappybash/commit/ff3260e1dd5fa61695310578091ff922acf06e71"&gt;the most important milestone&lt;/a&gt;.
+&lt;br/&gt;
+I added &lt;em&gt;an objective&lt;/em&gt;.&lt;/br&gt;
+It was &lt;em&gt;an actual game&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;And I still had about 100 bytes&amp;nbsp;left!&lt;/p&gt;
+&lt;p&gt;Speaking of size, this is probably a good moment
+to talk about making the most of those meager 1234 bytes.
+It&amp;#8217;s not exactly surprising that it was possible mostly thanks to &lt;em&gt;minification&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;While it&amp;#8217;s extremely popular for JavaScript,
+the same abundance of minification utilities cannot be expected when it comes of shell scripts.
+Still, &amp;#8220;bash minification&amp;#8221; does return some useful search results,
+and &lt;a href="http://bash-minifier.appspot.com/"&gt;one of them&lt;/a&gt; is what I used to shrink the final&amp;nbsp;script.&lt;/p&gt;
+&lt;p&gt;Obviously, it didn&amp;#8217;t go without some trouble.
+Since the minifier does little more than to swap newlines for semicolons,
+it got a few bugs that had to be ironed out.
+No big deal, really:
+a small batch of
+&lt;a href="https://github.com/Xion/flappybash/commit/a9556bbef8245bd1ce849e1bffd175412934ef9d"&gt;handcrafted, artisanal Python&lt;/a&gt;
+was enough to paper over the&amp;nbsp;issues.&lt;/p&gt;
+&lt;p&gt;The other technique you can use to slim down is &lt;em&gt;obfuscation&lt;/em&gt;, i.e.
+&lt;a href="https://github.com/Xion/flappybash/commit/f2683785a8049fc385e5c6705f66dbb835ad84bc"&gt;shortening of the identifiers&lt;/a&gt;.
+As the minifier didn&amp;#8217;t offer this feature natively, I had to take care of it&amp;nbsp;myself.&lt;/p&gt;
+&lt;p&gt;This lead to adding such interesting assignments as this &lt;code&gt;p&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nv"&gt;p&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;printf&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;which absolutely shouldn&amp;#8217;t be confused with &lt;em&gt;this&lt;/em&gt; &lt;code&gt;p&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c"&gt;# put text at given position: p $x $y $text&lt;/span&gt;
+p&lt;span class="o"&gt;()&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt; &lt;span class="nb"&gt;echo&lt;/span&gt; -en &lt;span class="s2"&gt;&amp;quot;\e[&lt;/span&gt;&lt;span class="nv"&gt;$2&lt;/span&gt;&lt;span class="s2"&gt;;&lt;/span&gt;&lt;span class="si"&gt;${&lt;/span&gt;&lt;span class="nv"&gt;1&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;f&lt;/span&gt;&lt;span class="nv"&gt;$3&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="o"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The reason it works is that in &lt;span class="caps"&gt;POSIX&lt;/span&gt; shells,
+variables and functions effectively form two separate namespaces.
+Their members are thus referred to in two different&amp;nbsp;ways:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;p &lt;span class="nv"&gt;$X&lt;/span&gt; &lt;span class="nv"&gt;$Y&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;\e[1;37;41mB&amp;quot;&lt;/span&gt;  &lt;span class="c"&gt;# call the p() function&lt;/span&gt;
+&lt;span class="nv"&gt;$p&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;\e[?25l&amp;quot;&lt;/span&gt;  &lt;span class="c"&gt;# expand the p variable (i.e. call `printf`)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Notice how functions have longer definitions but shorter usage,
+while the opposite is true for variables.
+Who can now say that Bash doesn&amp;#8217;t find balance in all&amp;nbsp;things?&lt;/p&gt;
+&lt;h4&gt;Auditory&amp;nbsp;sensations&lt;/h4&gt;
+&lt;p&gt;Like I mentioned before, thanks to those and similar tricks
+I had managed to carve out about a hundred or so bytes of free&amp;nbsp;space.&lt;/p&gt;
+&lt;p&gt;Now, what could you possibly do with such a staggering&amp;nbsp;amount?&lt;/p&gt;
+&lt;p style="text-align: center"&gt;
+    &lt;img src="http://xion.io/images/lawrence-office-space.jpg" alt="Two tweets at the same time!"&gt;&lt;/br&gt;
+    &lt;small&gt;&amp;#8230;no, that won&amp;#8217;t even be &lt;em&gt;one&lt;/em&gt; tweet.&lt;/small&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Well, let&amp;#8217;s add some &lt;em&gt;sound effects&lt;/em&gt;, shall&amp;nbsp;we?&lt;/p&gt;
+&lt;p&gt;Before you think that&amp;#8217;s preposterous, remember the &lt;a href="https://en.wikipedia.org/wiki/Bell_character"&gt;terminal bell&lt;/a&gt;.
+Sounding the bell is as simple as printing the &lt;code&gt;"\a"&lt;/code&gt; character (&lt;span class="caps"&gt;ASCII&lt;/span&gt; 7),
+which for this reason is also known as &lt;code&gt;BEL&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nb"&gt;echo&lt;/span&gt; -e &lt;span class="s2"&gt;&amp;quot;\a&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Unfortunately, most terminal emulators silence the actual sound,
+and replace it with a visual indicator &amp;#8212; typically a bell &lt;em&gt;icon&lt;/em&gt;.
+If we want to make speakers reliably emit audible phenomena,
+we sadly have to look&amp;nbsp;elsewhere.&lt;/p&gt;
+&lt;p&gt;Fortunately, modern Linux systems handle the sound card somewhat better
+than you may have remembered from a few years ago.
+This is usually thanks to &lt;a href="https://en.wikipedia.org/wiki/Advanced_Linux_Sound_Architecture"&gt;&lt;span class="caps"&gt;ALSA&lt;/span&gt;&lt;/a&gt;,
+a dedicated subsystem in the Linux kernel, and its numerous userspace&amp;nbsp;complements.&lt;/p&gt;
+&lt;p&gt;One of them is the inconspicuous &lt;code&gt;speaker-test&lt;/code&gt; binary
+which, well, does exactly what it says on the&amp;nbsp;can:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;speaker-test  &lt;span class="c"&gt;# play some noise through the speakers&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;You can make it play a &lt;span class="caps"&gt;WAV&lt;/span&gt; file, too,
+but the most interesting option is to synthesize a &lt;em&gt;sine wave&lt;/em&gt;.
+By adjusting its frequency, it&amp;#8217;s easy to play higher and lower tones,
+forming the building blocks for more complex&amp;nbsp;sounds.&lt;/p&gt;
+&lt;p&gt;What you cannot control is the tone&amp;#8217;s duration.
+That&amp;#8217;s not a big problem, though, since we can run &lt;code&gt;speaker-test&lt;/code&gt; in a separate process
+and then just &lt;em&gt;&lt;code&gt;kill&lt;/code&gt; it dead&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c"&gt;# play a sine wave (requires ALSA): s $frequency $duration&lt;/span&gt;
+s&lt;span class="o"&gt;()&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt; &lt;span class="o"&gt;(&lt;/span&gt; speaker-test &amp;gt;&lt;span class="nv"&gt;$n&lt;/span&gt; -t sine -f &lt;span class="nv"&gt;$1&lt;/span&gt; &lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="p"&gt;&amp;amp;&lt;/span&gt; &lt;span class="nv"&gt;_p&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nv"&gt;$!&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; sleep &lt;span class="nv"&gt;$2&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nb"&gt;kill&lt;/span&gt; -9 &lt;span class="nv"&gt;$_p&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="o"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;a href="https://github.com/Xion/flappybash/commit/3f259418f3d6167492b7d849c659dfcee0c6aa3d"&gt;I&amp;#8217;ve used this approach&lt;/a&gt;
+to play a simple, two-tone sound
+whenever the player successfully overcomes a pipe obstacle.
+And I would&amp;#8217;ve probably taken it further if &amp;#8220;&lt;code&gt;speaker_test&lt;/code&gt;&amp;#8221; wasn&amp;#8217;t such a damn &lt;em&gt;long&lt;/em&gt; string.
+Unfortunately, it was one identifier I couldn&amp;#8217;t afford to shorten,
+and this had put a stop to my ambitious plan of improvising &lt;a href="https://www.sadtrombone.com/"&gt;a sad trombone&lt;/a&gt;
+upon player&amp;#8217;s failure&amp;nbsp;:(&lt;/p&gt;
+&lt;h4&gt;;&amp;nbsp;done&lt;/h4&gt;
+&lt;p&gt;It wouldn&amp;#8217;t be right to say I wasn&amp;#8217;t very happy with &lt;a href="https://github.com/Xion/flappybash"&gt;the results&lt;/a&gt;, though.
+All in all, it was &lt;a href="https://github.com/Xion/flappybash/commits/master"&gt;the most fun&lt;/a&gt;
+I had with coding in quite some time,
+and definitely the most amusing Bash script I&amp;#8217;ve ever&amp;nbsp;written.&lt;/p&gt;
+&lt;p style="text-align: center"&gt;
+    &lt;img src="http://xion.io/images/flappybash.jpg" alt="FLAPPY BASH"&gt;
+&lt;/p&gt;
+
+&lt;p&gt;It also got me curious what other games people have implemented purely as shell scripts.
+To my disappointment, there hadn&amp;#8217;t been all that many.
+Of those I could find, this &lt;a href="http://bruxy.regnet.cz/web/linux/EN/housenka-bash-game/"&gt;Snake clone&lt;/a&gt;
+in about &lt;span class="caps"&gt;7KB&lt;/span&gt; of (unobfuscated) Bash
+is probably the most polished&amp;nbsp;one.&lt;/p&gt;
+&lt;p&gt;As you can see then, this is clearly an under-appreciated platform
+that evidently displays a lot of potential!
+If you want to create games that are both very portable
+and &lt;em&gt;extremely&lt;/em&gt; space-efficient,
+Bash is definitely a technology you should have a closer look at&amp;nbsp;;-)&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Here&amp;#8217;s the original announcement post &lt;a href="http://gynvael.coldwind.pl/?lang=pl&amp;amp;id=624"&gt;in Polish&lt;/a&gt;
+and its somewhat understandable
+&lt;a href="https://translate.google.com/translate?sl=auto&amp;amp;tl=en&amp;amp;js=y&amp;amp;prev=_t&amp;amp;hl=en&amp;amp;ie=UTF-8&amp;amp;u=http%3A%2F%2Fgynvael.coldwind.pl%2F%3Flang%3Dpl%26id%3D624&amp;amp;edit-text=&amp;amp;act=url"&gt;Google-translated version&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Yes, I&amp;#8217;m ignoring the elephant in the room which is the web browser.
+It&amp;#8217;s probably because a pile of minified JavaScript doesn&amp;#8217;t strike me as very interesting anymore :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;Nowadays, though,
+the &lt;a href="https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame"&gt;&lt;code&gt;requestAnimationFrame&lt;/code&gt; function&lt;/a&gt;
+is closer to the actual continuous processing in the background.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;Regular programs could simply call &lt;a href="http://man7.org/linux/man-pages/man2/alarm.2.html"&gt;the &lt;code&gt;alarm&lt;/code&gt; function&lt;/a&gt;
+instead of forking a subprocess. But then again, regular programs could just run a normal game loop.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Bash"></category><category term="shell scripting"></category><category term="game programming"></category><category term="Flappy Bird"></category></entry><entry><title>The brave “new” world of Python 3</title><link href="http://xion.io/post/code/python3-primer.html" rel="alternate"></link><updated>2016-08-15T22:35:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-08-15:post/code/python3-primer.html</id><summary type="html">&lt;p&gt;I&amp;#8217;ll blurt it straight up: I&amp;#8217;m not a big fan of Python&amp;nbsp;3.&lt;/p&gt;
+&lt;p&gt;For a long time, I resisted the appeal of various incremental improvements
+that early 3.x releases offered.
+And the world agreed with me:
+a mere two years ago, Python 3 wasn&amp;#8217;t even &lt;a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/"&gt;a blip on the PyPI radar&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Lately, however, things seem to be picking up some&amp;nbsp;steam.&lt;/p&gt;
+&lt;p&gt;As if to compensate for years of &amp;#8220;good enough&amp;#8221;,
+Python 3 development team has given in to a steadily accelerating feature creep.
+Sure, some of it results in &lt;a href="https://www.python.org/dev/peps/pep-0498/"&gt;bad ideas&lt;/a&gt;
+(or even &lt;a href="https://www.python.org/dev/peps/pep-0628/"&gt;ideas you&amp;#8217;d hope are jokes&lt;/a&gt;),
+but it nevertheless causes an increasingly wide functional gap
+between the 2.x and 3.x&amp;nbsp;series.&lt;/p&gt;
+&lt;p&gt;Starting from around Python 3.5, this gap becomes really noticeable,
+even when partially bridged with many excellent backports.
+The ecosystem support is also mostly there,
+at least insofar as &amp;#8220;not breaking horribly when a package is used in Python&amp;nbsp;3&amp;#8221;.&lt;/p&gt;
+&lt;p&gt;And then, of course, there is &lt;a href="https://hg.python.org/peps/rev/76d43e52d978"&gt;the 2.7 EoL date&lt;/a&gt; looming ever&amp;nbsp;closer.&lt;/p&gt;
+&lt;p&gt;Given all those portents,
+even old curmudg&amp;#8230; ahem&amp;#8230; &lt;em&gt;seasoned developers&lt;/em&gt; cannot really ignore Python 3 anymore.
+For better or for worse, 3.x is how Python will look like in the coming years and decades.
+Might as well prepare for&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;In this post, I will discuss some important issues
+one should be aware of before trying to switch from Python 2 to 3.
+I won&amp;#8217;t be talking about all the minute changes and additions,
+but cover the more significant, broader concepts
+that mark the divide between the 2.x and 3.x&amp;nbsp;generations.&lt;/p&gt;
+&lt;p&gt;The two concepts I&amp;#8217;ll be mentioning here are
+&lt;em&gt;Unicode&lt;/em&gt; (obviously) and &lt;em&gt;lazy vs. eager computation&lt;/em&gt;.&lt;/p&gt;
+&lt;h4&gt;Unicode&amp;nbsp;handling&lt;/h4&gt;
+&lt;p&gt;You have probably heard it before.
+Python 3 was going to solve your Unicode problems once and for all.
+You haven&amp;#8217;t believed it, of course,
+like you wouldn&amp;#8217;t believe in any other silver&amp;nbsp;bullet.&lt;/p&gt;
+&lt;p&gt;Still, it may be rather surprising to learn
+that in Python 3, you&amp;#8217;ll actually see much &lt;em&gt;more&lt;/em&gt; Unicode-related&amp;nbsp;errors.&lt;/p&gt;
+&lt;p&gt;And strange as it may sound, it is  a &lt;em&gt;good&lt;/em&gt;&amp;nbsp;thing.&lt;/p&gt;
+&lt;p&gt;In any case, either version of Python gets the most important thing about Unicode right.
+They both distinguish, at the type level,
+between &lt;em&gt;strings&lt;/em&gt; (of Unicode codepoints) and their &lt;em&gt;encodings&lt;/em&gt; (sequences of bytes).
+The type that holds the latter is called &lt;code&gt;bytes&lt;/code&gt; in both versions,
+while strings are stored within the &lt;code&gt;str&lt;/code&gt; type in Python 3 and &lt;code&gt;unicode&lt;/code&gt; in Python&amp;nbsp;2.&lt;/p&gt;
+&lt;p&gt;It is from this crucial distinction &amp;#8212; or rather, failing to account for it &amp;#8212;
+where all the dreaded Unicode errors ultimately&amp;nbsp;stem.&lt;/p&gt;
+&lt;p&gt;But where Python 2 does poorly is in the choice of defaults.
+You probably know all too well that &lt;code&gt;bytes&lt;/code&gt; there is just an alias for &lt;code&gt;str&lt;/code&gt;.
+That &lt;code&gt;str&lt;/code&gt; is a fully functional string type,
+even though it can only contain &lt;span class="caps"&gt;ASCII&lt;/span&gt; characters.
+Moreover, it is also the &lt;em&gt;default&lt;/em&gt;:
+quoted string literals, for example, will be of this type unless specially&amp;nbsp;marked.&lt;/p&gt;
+&lt;p&gt;This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&amp;nbsp;programs.&lt;/p&gt;
+&lt;p&gt;What Python 3 does here is to help &lt;em&gt;expose those bugs&lt;/em&gt; sooner.
+If you already deal with Unicode correctly in your programs
+&amp;#8212; maybe because you watched &lt;a href="https://www.youtube.com/watch?v=sgHbC6udIqc"&gt;this excellent talk by Ned Batchelder&lt;/a&gt; &amp;#8212;
+your main benefit will be not having to write that &lt;code&gt;u""&lt;/code&gt; quotes anymore.
+Otherwise, it&amp;#8217;ll force you to consider the issue from the very beginning,
+rather than letting you write &amp;#8220;working&amp;#8221; programs
+that crash the moment they have to process some non-&lt;span class="caps"&gt;ASCII&lt;/span&gt;&amp;nbsp;input.&lt;/p&gt;
+&lt;h4&gt;Laziness by&amp;nbsp;default&lt;/h4&gt;
+&lt;p&gt;The second major change that Python 3 brings is of similar nature.
+It is also a change of &lt;em&gt;defaults&lt;/em&gt;, but the impetus for it is much less&amp;nbsp;evident.&lt;/p&gt;
+&lt;p&gt;What&amp;#8217;s different in Python 3 is that many built-in functions and methods which used to return &lt;code&gt;list&lt;/code&gt;s
+are now giving out bespoke objects that only &lt;em&gt;mostly&lt;/em&gt; behave like &lt;code&gt;list&lt;/code&gt;s.
+Included in these are functions like &lt;code&gt;map&lt;/code&gt; or &lt;code&gt;filter&lt;/code&gt;,
+as well as common &lt;code&gt;dict&lt;/code&gt;ionary methods such as &lt;code&gt;keys&lt;/code&gt; or &lt;code&gt;values&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;This change is usually presented as removal of unnecessary&amp;nbsp;cruft:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;itertools.ifilter&lt;/code&gt; is now just &lt;code&gt;filter&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;xrange&lt;/code&gt; is now just &lt;code&gt;range&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;dict.iteritems&lt;/code&gt; is now just &lt;code&gt;dict.items&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;and so&amp;nbsp;on.&lt;/p&gt;
+&lt;p&gt;In some cases, this is exactly what happens.
+For example, there is virtually no downside to the new implementation of &lt;code&gt;range&lt;/code&gt;,
+especially considering the way it is used most&amp;nbsp;often.&lt;/p&gt;
+&lt;p&gt;But not every built-in managed to preserve all the functionality of &lt;code&gt;list&lt;/code&gt;s.
+Indeed, many have &lt;a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map"&gt;downgraded&lt;/a&gt;
+their &lt;span class="caps"&gt;API&lt;/span&gt; guaratees to those of mere &lt;em&gt;generators&lt;/em&gt;,
+i.e. the most simplistic and limited flavor of Python iterables.
+Working with them is trickier and more error-prone than with lists,
+which is due to &lt;a href="http://xion.org.pl/2012/02/08/generator-pitfalls/"&gt;various pitfalls&lt;/a&gt;
+that generators expose us&amp;nbsp;to.&lt;/p&gt;
+&lt;p&gt;Navigating around those gotchas used to be something that Python code had to opt-in to,
+by explicitly importing &lt;a href="https://docs.python.org/2.7/library/itertools.html"&gt;the &lt;code&gt;itertools&lt;/code&gt; module&lt;/a&gt;
+and using its functions in place of the built-ins.
+What you could gain in return was increased performance, and a lesser memory footprint.
+All those benefits came from making the computations &lt;em&gt;lazy&lt;/em&gt;
+and refraining from storage of the intermediate&amp;nbsp;results.&lt;/p&gt;
+&lt;p&gt;In Python 3, however, laziness is &lt;em&gt;preordained&lt;/em&gt;.
+Even if we don&amp;#8217;t need or care about the aforementioned perks,
+we have to devise some way of dealing with the pervasive&amp;nbsp;generators.&lt;/p&gt;
+&lt;p&gt;One option is to embrace lazy evaluation fully,
+and adapt to handling unspecified iterables throughout our code bases.&lt;br&gt;
+The risk is an increased frequency of bugs stemming from generator misuse &amp;#8212;
+including a common mistake of trying to iterate over lazy &lt;code&gt;foos&lt;/code&gt; the second time,
+deeper down a long function, after it&amp;#8217;s been already&amp;nbsp;exhausted.&lt;/p&gt;
+&lt;p&gt;The alternative is to engage in a lot of &amp;#8220;defensive &lt;code&gt;list&lt;/code&gt;ing&amp;#8221;:
+wrapping of unknown (or known-but-lazy) iterables in &lt;code&gt;list()&lt;/code&gt; calls
+in order to &amp;#8220;sanitize&amp;#8221; them for later (re)use.&lt;br&gt;
+Examples include immediate &lt;code&gt;list&lt;/code&gt;ification of a generator&amp;nbsp;object:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;primes&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;is_prime&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1000&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;or preemptive conversion of an incoming iterable&amp;nbsp;argument:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;do_something&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;foos&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;foos&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;foos&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="c"&gt;# ...the rest of a long function...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Even if you choose the first path, and somehow use lazy generators everywhere,
+conversions are still required at the serialization&amp;nbsp;boundaries:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;d&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;foo&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;dumps&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;keys&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;d&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;keys&lt;/span&gt;&lt;span class="p"&gt;()})&lt;/span&gt;  &lt;span class="c"&gt;# TypeError: dict_keys([&amp;#39;foo&amp;#39;]) is not JSON serializable&lt;/span&gt;
+&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;dumps&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;keys&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;d&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;keys&lt;/span&gt;&lt;span class="p"&gt;())})&lt;/span&gt;  &lt;span class="c"&gt;# works&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;At least in this case, the lazy iterable will vocally fail with an exception,
+rather than silently doing nothing (in case of repeated iteration)
+or always posing as truthy even when it&amp;#8217;s empty (in &lt;code&gt;if iterable:&lt;/code&gt; checks).&lt;/p&gt;
+&lt;h4&gt;from __future__ import&amp;nbsp;doubts&lt;/h4&gt;
+&lt;p&gt;So, here they are: the highlights of Python 3.
+If you are disappointed they all turned out to be mixed blessings,
+don&amp;#8217;t worry: you are
+&lt;a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/"&gt;in&lt;/a&gt;
+&lt;a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/"&gt;a&lt;/a&gt;
+&lt;a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/"&gt;good&lt;/a&gt;
+&lt;a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/"&gt;company&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The truth is that Python 3 is more finnicky, less forgiving,
+and much less beginner-friendly than its predecessor.
+Its various &lt;a href="https://www.python.org/dev/peps/pep-0237/"&gt;superficial simplifications&lt;/a&gt; are almost squarely balanced
+by many new concerns that are thrust upon an unsuspecting programmer from the very&amp;nbsp;beginning.&lt;/p&gt;
+&lt;p&gt;In one possible view, this is simply a sign that the language has &lt;em&gt;matured&lt;/em&gt;.
+Perhaps it&amp;#8217;s not a coincidence
+that almost exactly &lt;a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html"&gt;18 years&lt;/a&gt;
+has passed between the first public version of Python (0.9)
+and the release of Python 3.0.
+By no conceivable means it is a toy language anymore,
+and it&amp;#8217;s adequately equipped to tackle challenges presented by the computing world of&amp;nbsp;today.&lt;/p&gt;
+&lt;p&gt;But on the other hand, it&amp;#8217;s clear something is being gradually lost in the&amp;nbsp;process.&lt;/p&gt;
+&lt;p&gt;It&amp;#8217;s becoming harder to claim the language favors simplicity
+over &lt;a href="https://www.python.org/dev/peps/pep-0492/"&gt;complexity&lt;/a&gt;.&lt;br&gt;
+It is no longer so easy to pick &lt;a href="https://www.python.org/dev/peps/pep-3101/"&gt;which way&lt;/a&gt;
+is the &lt;em&gt;obvious&lt;/em&gt; way to do it.&lt;br&gt;
+It is increasingly often that &lt;a href="https://www.python.org/dev/peps/pep-3113/"&gt;ugly replaces beautiful&lt;/a&gt;
+and &lt;a href="https://www.python.org/dev/peps/pep-3108/"&gt;nested replaces flat&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Little by little, Python itself is becoming less and less &lt;em&gt;pythonic&lt;/em&gt;.
+The pace isn&amp;#8217;t breakneck, but it&amp;#8217;s definitely noticeable.
+But who knows? Maybe after two decades,
+a wholesale redefinition of the language&amp;#8217;s core principles really &lt;em&gt;is&lt;/em&gt; in&amp;nbsp;order.&lt;/p&gt;
+&lt;p&gt;&amp;#8230;Well, certainly that&amp;#8217;s necessary if some of the &lt;a href="https://www.python.org/dev/peps/pep-0526/"&gt;latest ideas&lt;/a&gt;
+are about to get&amp;nbsp;in!&lt;/p&gt;</summary><category term="Python"></category><category term="Python 3"></category><category term="Unicode"></category><category term="lazy evaluation"></category><category term="iterables"></category></entry><entry><title>for loops in Rust</title><link href="http://xion.io/post/code/rust-for-loop.html" rel="alternate"></link><updated>2016-07-26T21:50:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-07-26:post/code/rust-for-loop.html</id><summary type="html">&lt;p&gt;In this post, I&amp;#8217;m going to talk about the &lt;code&gt;for&lt;/code&gt; loop construct in &lt;a href="https://rust-lang.org"&gt;Rust&lt;/a&gt;,
+as well as the related concepts of &lt;em&gt;iterators&lt;/em&gt; and&amp;nbsp;&amp;#8220;iterables&amp;#8221;.&lt;/p&gt;
+&lt;p&gt;Depending on your programming language background,
+they may seem somewhat familiar in terms of syntax &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; semantics,
+or rather mysterious and surprising.
+Their closest analogues exist in Python,
+but programmers of Java, C#, or (modern) C++ should recognize many relevant features and ideas as&amp;nbsp;well.&lt;/p&gt;
+&lt;h4&gt;Basics&lt;/h4&gt;
+&lt;p&gt;The syntax of a &lt;code&gt;for&lt;/code&gt; loop is so modest it&amp;#8217;s almost spartan&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;1&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;2&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;3&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;];&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As you would expect, &lt;a href="https://is.gd/qtxqLD"&gt;this prints three lines&lt;/a&gt; with &lt;code&gt;1&lt;/code&gt;, &lt;code&gt;2&lt;/code&gt;, &lt;code&gt;3&lt;/code&gt;.
+What is probably not as obvious is that
+over the course of this loop the &lt;code&gt;v&lt;/code&gt; vector was &lt;em&gt;expended&lt;/em&gt;.
+Trying to &lt;a href="https://is.gd/1mv7RV"&gt;use it&lt;/a&gt; after the iteration,
+we&amp;#8217;ll get a borrow checker&amp;nbsp;error:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&amp;lt;anon&amp;gt;:6:22: 6:23 error: use of moved value: `v` [E0382]
+&amp;lt;anon&amp;gt;:4         println!(&amp;quot;{}&amp;quot;, x);
+&amp;lt;anon&amp;gt;:5     }
+&amp;lt;anon&amp;gt;:6     println!(&amp;quot;{:?}&amp;quot;, v);
+                              ^
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;In Rust jargon, the vector has been &lt;strong&gt;moved&lt;/strong&gt; into the loop.
+Its ownership &amp;#8212; and that of its individual elements &amp;#8212; has been transfered there permanently.
+While definitely surprising when compared to other languages,
+this behavior is consistent with Rust&amp;#8217;s ubiquitous policy of moving values by&amp;nbsp;default.&lt;/p&gt;
+&lt;p&gt;Still, you may not expect it here
+because moving ownership is mostly seen at the function call boundaries.
+For most intents and purposes, however,
+you can picture a &lt;code&gt;for_each&lt;/code&gt; function like this to be the equivalent of the &lt;code&gt;for&lt;/code&gt; loop&amp;nbsp;above:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;for_each&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This also gives us a hint on how we could prevent the move from happening.
+Rather than taking the vector itself,
+the function could accept only a reference to&amp;nbsp;it:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;for_each_ref&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;After we translate this &lt;a href="https://is.gd/Zrq0JL"&gt;back to the looping syntax&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{:?}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;we won&amp;#8217;t get any more objections from the&amp;nbsp;compiler.&lt;/p&gt;
+&lt;h4&gt;Iterators and &amp;#8220;iterables&amp;#8221; in&amp;nbsp;Rust&lt;/h4&gt;
+&lt;p&gt;It is important to emphasize that this new ampersand symbol (&lt;code&gt;&amp;amp;&lt;/code&gt;)
+is by no means a part of the syntax of the &lt;code&gt;for&lt;/code&gt; loop itself.
+We have actually changed &lt;em&gt;what object&lt;/em&gt; we&amp;#8217;re iterating here.
+It is no longer &lt;code&gt;Vec&amp;lt;T&amp;gt;&lt;/code&gt; &amp;#8212; a vector itself &amp;#8212; but &lt;code&gt;&amp;amp;Vec&amp;lt;T&amp;gt;&lt;/code&gt;, an immutable reference to it.
+As a consequence, &lt;code&gt;x&lt;/code&gt; is not a &lt;code&gt;T&lt;/code&gt; (the element type) anymore,
+but a &lt;code&gt;&amp;amp;T&lt;/code&gt; &amp;#8212; a &lt;em&gt;reference&lt;/em&gt; to an element&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;So it seems that in Rust, both &lt;code&gt;Vec&amp;lt;T&amp;gt;&lt;/code&gt; and &lt;code&gt;&amp;amp;Vec&amp;lt;T&amp;gt;&lt;/code&gt; are what we would call &amp;#8220;iterables&amp;#8221;:
+collections (or other objects) that we can get iterate over.
+The usual way this is implemented in various programming languages
+is by introducing an &lt;em&gt;iterator&lt;/em&gt;&amp;nbsp;object.&lt;/p&gt;
+&lt;p&gt;The iterator keeps track of what element it&amp;#8217;s currently pointing to
+and supports at least the following basic&amp;nbsp;operations:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;getting the current&amp;nbsp;element&lt;/li&gt;
+&lt;li&gt;advancing to the next&amp;nbsp;element&lt;/li&gt;
+&lt;li&gt;signaling when no more elements are&amp;nbsp;available&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Some languages provide separate iterator methods for each of those tasks,
+but Rust chooses to combine them all into one.
+You can see that when looking at the &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"&gt;&lt;code&gt;Iterator&lt;/code&gt; trait&lt;/a&gt;:
+&lt;code&gt;next&lt;/code&gt; is the only method to be provided by its&amp;nbsp;implementations.&lt;/p&gt;
+&lt;h4&gt;Desugaring with&amp;nbsp;into-iterators&lt;/h4&gt;
+&lt;p&gt;How is the iterator object created,&amp;nbsp;though?&lt;/p&gt;
+&lt;p&gt;In a typical Rust manner, this job is delegated to another trait.
+This one is called &lt;code&gt;IntoIterator&lt;/code&gt;,
+and it roughly corresponds to the &amp;#8220;iterable&amp;#8221; concept I&amp;#8217;ve alluded to&amp;nbsp;earlier:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// (simplified)&lt;/span&gt;
+&lt;span class="k"&gt;trait&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;IntoIterator&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Iterator&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;What is uniquely Rusty is the fact that &lt;code&gt;into_iter&lt;/code&gt; &amp;#8212; the sole method of this trait &amp;#8212;
+doesn&amp;#8217;t just create a new iterator for the collection.
+Instead, it effectively &lt;em&gt;consumes&lt;/em&gt; the whole thing,
+leaving the new iterator as its only remnant and the only way to access the items&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;This, of course, is a direct manifestation of the Rust&amp;#8217;s move-by-default policy.
+In this case, it protects us from the common problem of &lt;strong&gt;iterator invalidation&lt;/strong&gt;
+which is probably all-too-familiar to C++ programmers.
+Because the collection is essentially &amp;#8220;converted&amp;#8221; to an iterator here, it is&amp;nbsp;impossible:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;for more than one iterator to exist at a&amp;nbsp;time&lt;/li&gt;
+&lt;li&gt;to modify the collection while any iterators are in&amp;nbsp;scope&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Doesn&amp;#8217;t all this &amp;#8220;moving&amp;#8221; and &amp;#8220;consuming&amp;#8221; sound familiar, by the way?
+I&amp;#8217;ve mentioned earlier that when we iterate over a vector with a &lt;code&gt;for&lt;/code&gt; loop,
+we essentially move it &amp;#8220;into the&amp;nbsp;loop&amp;#8221;.&lt;/p&gt;
+&lt;p&gt;As you can probably deduce by now,
+what really happens is that &lt;code&gt;IntoIterator::into_iter&lt;/code&gt; is invoked on the vector.
+Its result &amp;#8212; the iterator object &amp;#8212; is then repeatedly &lt;code&gt;next&lt;/code&gt;&lt;span class="quo"&gt;&amp;#8216;&lt;/span&gt;ed until it returns &lt;code&gt;None&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;In a way, a &lt;code&gt;for&lt;/code&gt; loop like&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// body&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;is therefore nothing else but a syntactic sugar for the following expanded&amp;nbsp;version:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;IntoIterator&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;loop&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;next&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="c1"&gt;// body&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;break&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;You can see quite clearly that &lt;code&gt;v&lt;/code&gt; is unusable not only after the loop ends,
+but before it even &lt;em&gt;begins&lt;/em&gt;.
+This is because it has been moved into &lt;code&gt;iter&lt;/code&gt; &amp;#8212; into an iterator &amp;#8212;
+through an &lt;code&gt;into_iter&lt;/code&gt; method&amp;#8230; of &lt;code&gt;IntoIterator&lt;/code&gt;!&lt;/p&gt;
+&lt;p&gt;Simple, huh?&amp;nbsp;:)&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;for&lt;/code&gt; loop is just a syntactic sugar for an &lt;code&gt;IntoIterator::into_iter&lt;/code&gt; invocation,
+followed by repeated calling of &lt;code&gt;Iterator::next&lt;/code&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h4&gt;The&amp;nbsp;ampersand&lt;/h4&gt;
+&lt;p&gt;On a more serious note, this move isn&amp;#8217;t something that we&amp;#8217;d always want to happen.
+Fortunately, we know a way to prevent it.
+Rather than iterating over the vector itself, use a &lt;em&gt;reference&lt;/em&gt; to&amp;nbsp;it:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// body&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The great thing about this syntax is that everything said above still applies,
+up to and including the desugaring procedure.
+The &lt;code&gt;into_iter&lt;/code&gt; method is still being invoked,
+except that this time it is done on the &lt;em&gt;reference to the collection&lt;/em&gt; &amp;#8212;
+&lt;code&gt;&amp;amp;Vec&amp;lt;T&amp;gt;&lt;/code&gt; rather than &lt;code&gt;Vec&amp;lt;T&amp;gt;&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// (simplified)&lt;/span&gt;
+&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;IntoIterator&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Iterator&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Item&lt;/span&gt;&lt;span class="o"&gt;=&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;...&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The result is therefore an iterator that yields &lt;em&gt;references&lt;/em&gt; to the elements (&lt;code&gt;&amp;amp;T&lt;/code&gt;),
+rather than elements themselves (&lt;code&gt;T&lt;/code&gt;).
+And because &lt;code&gt;self&lt;/code&gt; above is also a reference,
+the collection isn&amp;#8217;t really moved anywhere,
+which is why we can freely access it after the loop&amp;nbsp;ends.&lt;/p&gt;
+&lt;p&gt;The exact same thing happens when looping over a &lt;em&gt;mutable&lt;/em&gt;&amp;nbsp;reference:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// body&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;except that this time &lt;code&gt;into_iter&lt;/code&gt; is called for &lt;code&gt;&amp;amp;mut Vec&amp;lt;T&amp;gt;&lt;/code&gt;.
+Result is therefore of type &lt;code&gt;Iterator&amp;lt;Item=&amp;amp;mut T&amp;gt;&lt;/code&gt;,
+enabling us to modify the elements as we go through&amp;nbsp;them.&lt;/p&gt;
+&lt;p&gt;No further compiler machinery is required to support those two cases,
+because everything is already handled by the same&amp;nbsp;trait.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The &lt;code&gt;IntoIterator&lt;/code&gt; desugaring works the same way for collections
+&lt;em&gt;and&lt;/em&gt; both immutable and mutable references to&amp;nbsp;them.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h4&gt;What about the iter()&amp;nbsp;method?&lt;/h4&gt;
+&lt;p&gt;So far, we&amp;#8217;ve talked about regular &lt;code&gt;for&lt;/code&gt; loops,
+and the very imperative style of computation they&amp;nbsp;represent.&lt;/p&gt;
+&lt;p&gt;If you are more inclined towards functional programming, though,
+you may have seen and written rather different constructs,
+combining various &amp;#8220;fluent&amp;#8221; methods into expressions such as this&amp;nbsp;one:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;doubled_odds&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;numbers&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;%&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;!=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Methods like &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"&gt;&lt;code&gt;map&lt;/code&gt;&lt;/a&gt;
+and &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"&gt;&lt;code&gt;filter&lt;/code&gt;&lt;/a&gt; here
+are called &lt;em&gt;iterator adapters&lt;/em&gt;,
+and they are all defined on the &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"&gt;&lt;code&gt;Iterator&lt;/code&gt; trait&lt;/a&gt;.
+Not only are they very powerful and numerous,
+but they can also be supplemented through several &lt;a href="https://crates.io/crates/itertools"&gt;third-party crates&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;In order to take advantage of the adapters, however,
+we need to obtain an iterator for our collection first.
+We know that &lt;code&gt;into_iter&lt;/code&gt; is the way loops normally do it,
+so in principle we could follow the same approach&amp;nbsp;here:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;doubled_odds&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;IntoIterator&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;numbers&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;%&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;!=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;To spare us the verbosity of this explicit syntax,
+collections normally offer an &lt;code&gt;iter&lt;/code&gt; method which is exactly equivalent&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.
+This method is what you will normally see in chained expressions like the one&amp;nbsp;above.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;&lt;code&gt;v.iter()&lt;/code&gt; is just a shorthand for &lt;code&gt;IntoIterator::into_iter(&amp;amp;v)&lt;/code&gt;.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h4&gt;Why not&amp;nbsp;both?&lt;/h4&gt;
+&lt;p&gt;The last thing to note is that Rust mandates neither loops nor iterator adapters
+when writing code that operates on collections of elements.
+When optimizations are turned on in the &lt;a href="http://doc.crates.io/manifest.html#the-profile-sections"&gt;release mode&lt;/a&gt;,
+both versions should compile to equally efficient machine code,
+with closures inlined and loops unrolled where&amp;nbsp;necessary.&lt;/p&gt;
+&lt;p&gt;Choosing one style over the other is therefore a matter of convention and style.
+Sometimes the right choice may actually be a &lt;em&gt;mix&lt;/em&gt; of both approaches,
+and Rust allows it without any&amp;nbsp;complaints:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;print_prime_numbers_upto&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Prime numbers lower than {}:&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mf"&gt;2.&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;is_prime&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Like before, this is possible through the same &lt;code&gt;for&lt;/code&gt; loop desugaring
+that involves the &lt;code&gt;IntoIterator&lt;/code&gt; trait.
+In this case, Rust will simply use a
+&lt;a href="https://github.com/rust-lang/rust/blob/bbfcb471db0799a7d92d62e66cf44bbd68051675/src/libcore/iter/traits.rs#L253"&gt;no-op implementation&lt;/a&gt;
+of this trait, &amp;#8220;converting&amp;#8221; any existing &lt;code&gt;Iterator&lt;/code&gt; &lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;into&amp;#8221;&amp;nbsp;itself.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Iterators themselves are also &amp;#8220;iterables&amp;#8221;,
+implementing &lt;code&gt;IntoIterator::into_iter&lt;/code&gt; as a&amp;nbsp;pass-through.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h4&gt;Looping&amp;nbsp;around&lt;/h4&gt;
+&lt;p&gt;If you want to know even more about iterators and loops in Rust,
+the best source at this point is probably just
+&lt;a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator"&gt;the official documentation&lt;/a&gt;.
+And although mastering all the iterator adapters is of course not necessary to write effective Rust code,
+taking a careful look at least at
+&lt;a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator"&gt;the &lt;code&gt;collect&lt;/code&gt; method&lt;/a&gt;
+(and the associated &lt;a href="https://doc.rust-lang.org/std/iter/trait.FromIterator.html"&gt;&lt;code&gt;FromIterator&lt;/code&gt; trait&lt;/a&gt;)
+is definitely&amp;nbsp;helpful.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;The &amp;#8220;two-semicolon&amp;#8221; variant of the &lt;code&gt;for&lt;/code&gt; loop doesn&amp;#8217;t exist in Rust. Just like in Python, the equivalent is
+iterating over a &lt;a href="http://rustbyexample.com/flow_control/for.html"&gt;range object&lt;/a&gt;, or using a regular &lt;code&gt;while&lt;/code&gt; loop
+for more complex cases.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;This shift is completely transparent in the loop&amp;#8217;s body. The way it works is based on Rust&amp;#8217;s special mechanism
+called &lt;a href="https://doc.rust-lang.org/book/deref-coercions.html"&gt;the &lt;code&gt;Deref&lt;/code&gt; coercions&lt;/a&gt;.
+Without going into too much detail (as it is way out of scope for this post),
+this feature allows us to treat references to objects (&lt;code&gt;&amp;amp;T&lt;/code&gt;) as if they were the objects themselves (&lt;code&gt;T&lt;/code&gt;).
+The compiler will perform the necessary &lt;em&gt;derefencing&lt;/em&gt; where possible,
+or signal an error in case of a (rare) ambiguity.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;How do we know that? It&amp;#8217;s because &lt;code&gt;into_iter&lt;/code&gt; takes &lt;code&gt;self&lt;/code&gt; (rather than &lt;code&gt;&amp;amp;self&lt;/code&gt; or &lt;code&gt;&amp;amp;mut self&lt;/code&gt;)
+as its first parameter. It means that the entire object for which this method is called is moved &lt;em&gt;into&lt;/em&gt; its body
+(hence the method&amp;#8217;s name).&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;Curiously enough, this equivalence isn&amp;#8217;t encoded in the type system in any way,
+making it technically just a convention. It is followed consistently at least in the standard library, though.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="loops"></category><category term="iterators"></category></entry><entry><title>str.startswith() with tuple argument</title><link href="http://xion.io/post/code/python-startswith-tuple.html" rel="alternate"></link><updated>2016-06-28T09:56:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-06-28:post/code/python-startswith-tuple.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a little known trick that&amp;#8217;s applicable to Python&amp;#8217;s &lt;a href="http://bugs.python.org/issue1491485"&gt;&lt;code&gt;startswith&lt;/code&gt;&lt;/a&gt;
+and &lt;a href="http://bugs.python.org/issue1491485"&gt;&lt;code&gt;endswith&lt;/code&gt;&lt;/a&gt; methods of &lt;code&gt;str&lt;/code&gt; (and &lt;code&gt;unicode&lt;/code&gt;).&lt;/p&gt;
+&lt;p&gt;Suppose you&amp;#8217;re checking whether a string starts with some&amp;nbsp;prefix:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="c"&gt;# totally an URL&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;You eventually add more possible prefixes (or suffixes) to your&amp;nbsp;condition:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="c"&gt;# ...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Later on you notice the repetition and refactor it into something like&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;SCHEMES&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;ftp://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;git://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;SCHEMES&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="c"&gt;# ...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;or if you&amp;#8217;re feeling extra&amp;nbsp;functional:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;SCHEMES&lt;/span&gt;&lt;span class="p"&gt;)):&lt;/span&gt;
+    &lt;span class="c"&gt;# ...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Turns out, however, that &lt;code&gt;startswith&lt;/code&gt; (and &lt;code&gt;endswith&lt;/code&gt;) support this use case natively.
+Rather than passing just a single string as the argument,
+you can provide a &lt;em&gt;tuple&lt;/em&gt; of strings&amp;nbsp;instead:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;SCHEMES&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;ftp://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;git://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;SCHEMES&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="c"&gt;# ...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Either method will then check the original string against every element of the passed tuple.
+Both will only return &lt;code&gt;True&lt;/code&gt; if &lt;em&gt;at least one&lt;/em&gt; of the strings is recognized as prefix/suffix.
+As you can see, that&amp;#8217;s exactly what we would previously do with &lt;code&gt;any&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Somewhat surprisingly, however, the feature only works for actual &lt;em&gt;tuples&lt;/em&gt;.
+Trying to pass a seemingly equivalent iterable &amp;#8212; a &lt;code&gt;list&lt;/code&gt; or &lt;code&gt;set&lt;/code&gt;, for example &amp;#8212;
+will be met with interpreter&amp;#8217;s&amp;nbsp;refusal:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;is_jpeg&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;endswith&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;.jpg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;.jpeg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;!----&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;TypeError: endswith first arg must be str, unicode, or tuple, not list
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;If you dig into it, there doesn&amp;#8217;t seem to be a compelling reason for this behavior.
+The &lt;a href="http://bugs.python.org/issue1491485"&gt;relevant feature request&lt;/a&gt; talks about
+consistency with the built-in &lt;code&gt;isinstance&lt;/code&gt; function,
+but it&amp;#8217;s quite difficult to see how those two are&amp;nbsp;related.&lt;/p&gt;
+&lt;p&gt;In any case, this can be worked around without much&amp;nbsp;difficulty:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;PROTOCOLS&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;https&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;ftp&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;git&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;tuple&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;://&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;PROTOCOLS&lt;/span&gt;&lt;span class="p"&gt;)):&lt;/span&gt;
+    &lt;span class="c"&gt;# ...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;though ideally, you&amp;#8217;d want to pack the prefixes in a tuple to begin&amp;nbsp;with.&lt;/p&gt;</summary><category term="Python"></category><category term="strings"></category><category term="tuples"></category></entry><entry><title>…or lambda?</title><link href="http://xion.io/post/code/python-or-lambda.html" rel="alternate"></link><updated>2016-06-20T22:07:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-06-20:post/code/python-or-lambda.html</id><summary type="html">&lt;p&gt;&lt;em&gt;a.k.a. Curious Facts about Python&amp;nbsp;Syntax&lt;/em&gt;&lt;/p&gt;
 &lt;p&gt;In Python 3.3,
 a new method has been &lt;a href="https://docs.python.org/3/library/stdtypes.html#str.casefold"&gt;added&lt;/a&gt; to the &lt;code&gt;str&lt;/code&gt; type: &lt;code&gt;casefold&lt;/code&gt;.
 Its purpose is to return a &amp;#8220;sanitized&amp;#8221; version of the string
@@ -327,675 +1205,4 @@ a &lt;a href="https://doc.rust-lang.org/book/deref-coercions.html"&gt;&lt;em&gt;
 (or conversely, &lt;em&gt;refutability&lt;/em&gt;) of the pattern.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="pattern matching"></category><category term="borrowing"></category><category term="references"></category></entry><entry><title>Mock.configure_mock fix for Python</title><link href="http://xion.io/post/code/python-mock-configure.html" rel="alternate"></link><updated>2016-05-07T17:12:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-05-07:post/code/python-mock-configure.html</id><summary type="html">&lt;p&gt;Python&amp;#8217;s &lt;a href="https://docs.python.org/3/library/unittest.mock.html"&gt;mocking library&lt;/a&gt; is rather uncomplicated.
-Most of what it does is creating &lt;em&gt;mock objects&lt;/em&gt;: veritable sponges that absorb every interaction with any code
-that we pass them&amp;nbsp;to.&lt;/p&gt;
-&lt;p&gt;This simplicity is also surfaced in the &lt;span class="caps"&gt;API&lt;/span&gt;, especially in the main part of it &amp;#8212; the &lt;code&gt;mock.Mock&lt;/code&gt; constructor:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;some_mock&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://example.com&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="k"&gt;assert&lt;/span&gt; &lt;span class="n"&gt;some_mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;http://example.com&amp;#39;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Any arguments that we pass there become attributes on the resulting mock object. This is really useful when
-&lt;a href="https://docs.python.org/3/library/unittest.mock.html#the-patchers"&gt;patching&lt;/a&gt;, because it allows us to completely specify
-the replacement object within a &lt;code&gt;@mock.patch&lt;/code&gt; decorator:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nd"&gt;@patch.object&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;get&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;return_value&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;status_code&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;400&lt;/span&gt;&lt;span class="p"&gt;)))&lt;/span&gt;
-&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;test_404&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assertRaises&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;NotFoundError&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;You have to keep in mind, however, that the &lt;code&gt;mock.Mock&lt;/code&gt; class also has some
-&lt;a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock"&gt;constructor arguments&lt;/a&gt; of its own.
-For this reason, there exists some potential for name collision: some of the &lt;code&gt;Mock&lt;/code&gt;&lt;span class="quo"&gt;&amp;#8216;&lt;/span&gt;s own arguments may have the same
-names as the &lt;em&gt;attributes&lt;/em&gt; we&amp;#8217;d like to set on the mock&amp;nbsp;object:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;some_mock&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;John Doe&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;  &lt;span class="c"&gt;# doesn&amp;#39;t set the `name` attribute&lt;/span&gt;
-&lt;span class="k"&gt;assert&lt;/span&gt; &lt;span class="n"&gt;some_mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;John Doe&amp;quot;&lt;/span&gt;  &lt;span class="c"&gt;# blows up!&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Here, the &lt;code&gt;name&lt;/code&gt; argument is inherent to the &lt;code&gt;Mock&lt;/code&gt; class. Its constructor will interpret it in a special way,
-and so it &lt;em&gt;won&amp;#8217;t&lt;/em&gt; set a &lt;code&gt;name&lt;/code&gt; attribute on the resulting mock. Other possible culprits include the &lt;code&gt;spec&lt;/code&gt; and &lt;code&gt;wraps&lt;/code&gt;
-parameters, both of which have relatively common names that we may want to use as object attributes&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h4&gt;Collision&amp;nbsp;avoidance&lt;/h4&gt;
-&lt;p&gt;It&amp;#8217;s trivial to fix the issue, of&amp;nbsp;course:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;some_mock&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
-&lt;span class="n"&gt;some_mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;John Doe&amp;quot;&lt;/span&gt;
-&lt;span class="k"&gt;assert&lt;/span&gt; &lt;span class="n"&gt;sock_mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;John Doe&amp;quot;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;but this approach has a downside. Creating and configuring a mock is no longer a single expression, which means we cannot
-use it with patchers as easily as&amp;nbsp;before:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nd"&gt;@patch.object&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;foo&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;bar&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;test_something&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;mock_bar&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="n"&gt;mock_bar&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;John Doe&amp;quot;&lt;/span&gt;
-    &lt;span class="c"&gt;# (...rest of the test...)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;We can either configure the mock after patching, like above, or perhaps introduce some utility functions to be called
-inside the &lt;code&gt;@patch&lt;/code&gt; decorator.&lt;/p&gt;
-&lt;h4&gt;The almost-there&amp;nbsp;method&lt;/h4&gt;
-&lt;p&gt;In any case, this is somewhat disappointing. And it is even more so when we discover that there is
-&lt;a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock.configure_mock"&gt;a method called &lt;code&gt;configure_mock&lt;/code&gt;&lt;/a&gt;
-which &lt;em&gt;looks&lt;/em&gt; like it was designed to solve this very issue. Its arguments are always interpreted as attributes
-of the mock: it has no &amp;#8220;special&amp;#8221; or &amp;#8220;reserved&amp;#8221; names. Indeed, this method is what allows us to actually
-write the mock setup as a single&amp;nbsp;expression:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;some_mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;configure_mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;John Doe&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Problem is, this expression returns &lt;code&gt;None&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Yes, &lt;code&gt;configure_mock&lt;/code&gt; returns nothing.&lt;br&gt;
-Or in other words, it doesn&amp;#8217;t return anything.&lt;br&gt;
-In fact, it has &lt;a href="https://github.com/testing-cabal/mock/blob/286792b2cd5b5baa8338260538ed207391280e34/mock/mock.py#L671"&gt;no &lt;code&gt;return&lt;/code&gt; statement&lt;/a&gt;&amp;nbsp;whatsoever.&lt;/p&gt;
-&lt;p&gt;Most importantly, it doesn&amp;#8217;t have the &lt;code&gt;return self&lt;/code&gt; line that&amp;#8217;d enable us to write&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;some_mock&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;mock&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;configure_mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;John Doe&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Well, that is &lt;em&gt;quite&lt;/em&gt; a&amp;nbsp;let-down.&lt;/p&gt;
-&lt;h4&gt;Fixing&amp;nbsp;it&lt;/h4&gt;
-&lt;p&gt;But hey, this is Python! Shortcomings like that don&amp;#8217;t necessarily mean we have to fork whole libraries.
-Let&amp;#8217;s just add the missing &lt;code&gt;return&lt;/code&gt;, shall&amp;nbsp;we?&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;mock&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;Mock&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;_Mock&lt;/span&gt;
-
-&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_Mock&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;configure_mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="nb"&gt;super&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Mock&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;configure_mock&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;**&lt;/span&gt;&lt;span class="n"&gt;kwargs&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;  &lt;span class="c"&gt;# &amp;lt;-- there!&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Whew, that was&amp;nbsp;quick!&lt;/p&gt;
-&lt;p&gt;&amp;#8230;Alright, that&amp;#8217;s actually the &lt;em&gt;whole&lt;/em&gt; fix, but it&amp;#8217;s close. To complete it, we need to apply the same treatment to
-three more &lt;code&gt;Mock&lt;/code&gt; classes: &lt;a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.MagicMock"&gt;&lt;code&gt;MagicMock&lt;/code&gt;&lt;/a&gt;,
-&lt;a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMock"&gt;&lt;code&gt;NonCallableMock&lt;/code&gt;&lt;/a&gt;,
-and &lt;a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMagicMock"&gt;&lt;code&gt;NonCallableMagicMock&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;A complete solution can be seen in &lt;a href="https://gist.github.com/Xion/8b98733d4b6be354be0ebae815ebd22d"&gt;this gist&lt;/a&gt;.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Collision may also occur with &lt;code&gt;mock.patch&lt;/code&gt; constructs. The most likely offender there is probably
-the &lt;a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.patch"&gt;&lt;code&gt;new&lt;/code&gt; parameter&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="mock"></category><category term="patching"></category></entry><entry><title>Source code of a Python lambda</title><link href="http://xion.io/post/code/python-get-lambda-code.html" rel="alternate"></link><updated>2016-04-19T07:43:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-04-19:post/code/python-get-lambda-code.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;or: The Most Hideous Hack I&amp;#8217;ve (Almost)&amp;nbsp;Done&lt;/em&gt;&lt;/p&gt;
-&lt;p&gt;In &lt;a href="http://github.com/Xion/callee"&gt;callee&lt;/a&gt;, the &lt;a href="http://callee.readthedocs.org"&gt;argument matcher library for Python&lt;/a&gt; that
-&lt;a href="http://xion.io/post/news/callee-intro.html"&gt;I released recently&lt;/a&gt;, there is this lovely
-&lt;a href="https://github.com/Xion/callee/blob/f695ff4e1c45bfd45445ebb8014a202029a93dce/callee/general.py#L55"&gt;&lt;code&gt;TODO&lt;/code&gt; note&lt;/a&gt;
-for a seemingly simple feature. When using the
-&lt;a href="http://callee.readthedocs.org/en/stable/reference/general.html#callee.general.Matching"&gt;&lt;code&gt;Matching&lt;/code&gt; construct&lt;/a&gt;
-with a simple &lt;code&gt;lambda&lt;/code&gt; predicate:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;mock_foo&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assert_called_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Matching&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;it would be great to see its &lt;em&gt;code&lt;/em&gt; in the error message if the assertion fails. Right now it&amp;#8217;s just going to say
-something like &lt;code&gt;&amp;lt;Matching &amp;lt;function &amp;lt;lambda&amp;gt; at 0x7f5d8a06eb18&amp;gt;&amp;gt;&lt;/code&gt;. Provided you don&amp;#8217;t possess a supernatural ability
-of dereferencing pointers in your head, this won&amp;#8217;t give you any immediate hint as to what went wrong. Wouldn&amp;#8217;t it be nice
-if it read as, say, &lt;code&gt;&amp;lt;Matching \x: x % 2&amp;gt;&lt;/code&gt; instead?&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
-&lt;p&gt;So I thought: why not try and implement such a mechanism? This is Python, after all &amp;#8212; a language where you can spawn
-&lt;a href="https://blog.ionelmc.ro/2015/02/09/understanding-python-metaclasses/#simple-metaclass-use"&gt;completely new classes&lt;/a&gt;
-at runtime, walk the stack &lt;a href="https://docs.python.org/2/library/inspect.html#the-interpreter-stack"&gt;backwards&lt;/a&gt;
-(or even &lt;a href="https://docs.python.org/2/library/sys.html#sys.settrace"&gt;forward&lt;/a&gt;) and read the local variables,
-or change the behavior of the &lt;a href="http://xion.org.pl/2012/05/06/hacking-python-imports/"&gt;import system itself&lt;/a&gt;.
-Surely it would be possible &amp;#8212; nay, easy &amp;#8212; to get the source code of a short lambda function,&amp;nbsp;right?&lt;/p&gt;
-&lt;p&gt;Boy, was I &lt;em&gt;wrong&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Make no mistake, though: the task turned out to be absolutely doable, at least in the scope I wanted it done.
-But what would you think of a solution that involves not just the usual Python hackery, but also &lt;span class="caps"&gt;AST&lt;/span&gt; inspection,
-transformations of the source code as text, &lt;em&gt;and&lt;/em&gt; bytecode&amp;nbsp;shenanigans?&amp;#8230;&lt;/p&gt;
-&lt;h4&gt;The code, all the code, and&amp;#8230; much more than the&amp;nbsp;code&lt;/h4&gt;
-&lt;p&gt;Let&amp;#8217;s start from the beginning, though. Here&amp;#8217;s a short lambda function, the kind of which we&amp;#8217;d like to obtain
-the source code&amp;nbsp;of:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;is_even&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;If the documentation for Python standard library is to be believed, this should be pretty easy.
-In the &lt;a href="https://docs.python.org/2/library/inspect.html"&gt;&lt;code&gt;inspect&lt;/code&gt; module&lt;/a&gt;,
-there is a function called no different than
-&lt;a href="https://docs.python.org/2/library/inspect.html#inspect.getsource"&gt;&lt;code&gt;getsource&lt;/code&gt;&lt;/a&gt;. For our purposes, however,
-&lt;a href="https://docs.python.org/2/library/inspect.html#inspect.getsourcelines"&gt;&lt;code&gt;getsourcelines&lt;/code&gt;&lt;/a&gt; is a little more
-convienient, because we can easily tell when the lambda is too&amp;nbsp;long:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_short_lambda_source&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_func&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="n"&gt;source_lines&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;inspect&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;getsourcelines&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_func&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;IOError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;source_lines&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;source_lines&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;strip&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Of course if you programmed in Python for any longer period of time, you know very well that the standard docs
-are &lt;em&gt;not&lt;/em&gt; to be trusted. And it&amp;#8217;s not just that the &lt;code&gt;except&lt;/code&gt; clause should also include &lt;code&gt;TypeError&lt;/code&gt;, because it
-will be thrown when you try to pass any of the Python builtins to &lt;code&gt;getsourcelines&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;More important is the ambiguity of what does &amp;#8220;source lines for an object&amp;#8221; actually mean. &amp;#8220;Source lines &lt;em&gt;containing&lt;/em&gt;
-the object definition&amp;#8221; would be much more accurate, and this seemingly small distinction is rather crucial here.
-Passing a lambda function to either &lt;code&gt;getsourcelines&lt;/code&gt; or &lt;code&gt;getsource&lt;/code&gt;, we&amp;#8217;ll get its source &lt;em&gt;and everything else&lt;/em&gt;
-that the returned lines&amp;nbsp;included.&lt;/p&gt;
-&lt;p&gt;That&amp;#8217;s right. Say hello to the complete &lt;code&gt;is_even =&lt;/code&gt; assignment, and the entire &lt;code&gt;assert_called_with&lt;/code&gt; invocation!
-And in case you are wondering: yes, the result will also include any end-of-line comments. No token left&amp;nbsp;behind!&lt;/p&gt;
-&lt;h4&gt;Trim&amp;nbsp;left&lt;/h4&gt;
-&lt;p&gt;Clearly this is more than we&amp;#8217;ve bargained for. Maybe there is a way to strip away the unnecessary cruft? Python does
-know how to parse itself, after all: the standard &lt;a href="https://docs.python.org/2/library/ast.html"&gt;&lt;code&gt;ast&lt;/code&gt; module&lt;/a&gt;
-is a manifestation of this knowledge. Perhaps we can use it to retrieve the &lt;code&gt;lambda&lt;/code&gt; &lt;span class="caps"&gt;AST&lt;/span&gt; node in order to turn it &amp;#8212;
-and just it &amp;#8212; back into Python&amp;nbsp;code?&amp;#8230;&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;get_short_lambda_ast_node&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_func&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="n"&gt;source_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get_short_lambda_source&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_func&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;source_text&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="n"&gt;source_ast&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;ast&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;source_text&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="n"&gt;node&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;node&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;ast&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;walk&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;source_ast&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-                     &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;isinstance&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;node&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;ast&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Lambda&lt;/span&gt;&lt;span class="p"&gt;)),&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;But as it turns out, getting the source text back this way is only &lt;em&gt;mostly&lt;/em&gt;&amp;nbsp;possible.&lt;/p&gt;
-&lt;p&gt;See, every substantial &lt;span class="caps"&gt;AST&lt;/span&gt; node &amp;#8212; which is either an expression (&lt;code&gt;ast.expr&lt;/code&gt;) or a statement (&lt;code&gt;ast.stmt&lt;/code&gt;) &amp;#8212;
-has two common attributes: &lt;code&gt;lineno&lt;/code&gt; and &lt;code&gt;col_offset&lt;/code&gt;. When combined, they point to a place in the original source code
-where the node was parsed from. This is how we can find out where to look for the definition of our lambda&amp;nbsp;function.&lt;/p&gt;
-&lt;p&gt;Looks promising, right? The only problem is we don&amp;#8217;t know when to &lt;em&gt;stop&lt;/em&gt; looking.
-That&amp;#8217;s right: nodes created by &lt;code&gt;ast.parse&lt;/code&gt; are annotated with their start offset, but not with length nor the end offset.
-As a result, the best we can do when it comes to carving out the lambda source from the very first example is&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;So close! Those hanging parentheses are evidently just taunting us, but how can we remove them? &lt;code&gt;lambda&lt;/code&gt; is basically
-just a Python expression, so in principle it can be followed by almost anything. This is doubly true for lambdas inside
-the &lt;code&gt;Matching&lt;/code&gt; construct, as they may be a part of some larger mock&amp;nbsp;assertion:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;mock_foo&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assert_called_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Matching&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="n"&gt;Integer&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="o"&gt;&amp;amp;&lt;/span&gt; &lt;span class="n"&gt;GreaterThan&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Here, the extraneous suffix is the entirety of &lt;code&gt;), Integer() &amp;amp; GreaterThan(42))&lt;/code&gt;, quite a lot of more than just &lt;code&gt;))&lt;/code&gt;.
-And that&amp;#8217;s of course nowhere near the limit of possiblities: for one, there may be more &lt;code&gt;lambda&lt;/code&gt;s in there,&amp;nbsp;too!&lt;/p&gt;
-&lt;h4&gt;Back off, &lt;em&gt;slowly&lt;/em&gt;&lt;/h4&gt;
-&lt;p&gt;It seems, however, that there is one thing those troublesome tails have in common: &lt;em&gt;they aren&amp;#8217;t syntactically valid&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Intuitively, a &lt;code&gt;lambda&lt;/code&gt; node nested within some other syntactical constructs will have their closing fragments (e.g. &lt;code&gt;)&lt;/code&gt;)
-appear somewhere after its end. Without the corresponding openings (e.g. &lt;code&gt;Matching(&lt;/code&gt;), those fragments won&amp;#8217;t&amp;nbsp;parse.&lt;/p&gt;
-&lt;p&gt;So here&amp;#8217;s the crazy idea. What we have is invalid Python, but only because of some unspecified number of extra characters.
-How about we just try and remove them, one by one, until we get something that &lt;em&gt;is&lt;/em&gt; syntactically correct?
-If we are not mistaken, this will finally be our lambda and nothing&amp;nbsp;else.&lt;/p&gt;
-&lt;p&gt;The fortune favors the brave, so let&amp;#8217;s go ahead and try&amp;nbsp;it:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c"&gt;# ... continuing get_short_lambda_source() ...&lt;/span&gt;
-
-&lt;span class="n"&gt;source_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;source_lines&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;strip&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
-&lt;span class="n"&gt;lambda_node&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get_short_lambda_ast_node&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_func&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-
-&lt;span class="n"&gt;lambda_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;source_text&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;lambda_node&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;col_offset&lt;/span&gt;&lt;span class="p"&gt;:]&lt;/span&gt;
-&lt;span class="n"&gt;min_length&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;lambda:_&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;  &lt;span class="c"&gt;# shortest possible lambda expression&lt;/span&gt;
-&lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_text&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;min_length&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="n"&gt;ast&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_text&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;lambda_text&lt;/span&gt;
-    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;SyntaxError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="n"&gt;lambda_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;lambda_text&lt;/span&gt;&lt;span class="p"&gt;[:&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Considering that we&amp;#8217;re basically taking lessons from the dusty old tomes in the Restricted Section of Hogwarts library,
-the magic here looks quite simple. As long as there is something that can pass for a lambda definition,
-we try to parse it and see if it succeeds. The line that says &lt;code&gt;except SyntaxError:&lt;/code&gt; is obviously not something for
-the faint of heart, but at least we are specifying
-&lt;a href="https://docs.python.org/2/howto/doanddont.html#except"&gt;&lt;em&gt;what&lt;/em&gt; exception&lt;/a&gt; we anticipate&amp;nbsp;catching.&lt;/p&gt;
-&lt;p&gt;And the kicker? It &lt;em&gt;works&lt;/em&gt;. By that I mean it doesn&amp;#8217;t return garbage results for a few obvious and not so obvious
-test cases, which is already more than you would normally expect from hacks of this magnitude.
-All the lambdas defined until this paragraph, for example, can have their source code extracted without&amp;nbsp;issue.&lt;/p&gt;
-&lt;h4&gt;Just one more&amp;nbsp;thing&lt;/h4&gt;
-&lt;p&gt;So&amp;#8230; victory? Not quite. Astute readers may recall my promise of some bytecode arcana, and now&amp;#8217;s the time for&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;Despite the initial success of our gradual, character dropping approach, there are cases where it doesn&amp;#8217;t produce
-the correct result. Consider, for example, a lambda definition that&amp;#8217;s nestled within a tuple&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
-&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;get_short_lambda_source&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
-&lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;We would of course expect the result to be &lt;code&gt;lambda _: True&lt;/code&gt;, without a comma or&amp;nbsp;zero.&lt;/p&gt;
-&lt;p&gt;Unfortunately, here&amp;#8217;s where our earlier assumption fails rather spectacularly. The line of code extracted from &lt;span class="caps"&gt;AST&lt;/span&gt;
-is syntactically valid even &lt;em&gt;with&lt;/em&gt; the extra characters. As a result, &lt;code&gt;ast.parse&lt;/code&gt; succeeds too early and returns an
-incorrect definition. It should have been of a lambda contained within a tuple, but tuple is apparently what the lambda
-&lt;em&gt;returns&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;You may say that this is the sharp end of a narrow edge case, and anyone who defines functions like that deserves all
-the trouble they get. And sure, I wouldn&amp;#8217;t mind if we just threw hands in the air and tell them we&amp;#8217;re simply unable
-to retrieve the source here. But my opinion is that it doesn&amp;#8217;t justify serving them obviously &lt;em&gt;wrong&lt;/em&gt;&amp;nbsp;results!&lt;/p&gt;
-&lt;h4&gt;A halting&amp;nbsp;problem&lt;/h4&gt;
-&lt;p&gt;Not if we can help it, anyway. Have a look at the expected source code and the one we&amp;#8217;ve extracted, side by&amp;nbsp;side:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;
-&lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The second line isn&amp;#8217;t just longer: it is also &lt;em&gt;doing more&lt;/em&gt;. It isn&amp;#8217;t just defining a lambda; it defines it,
-conjures up a constant &lt;code&gt;0&lt;/code&gt;, and then packs them both into a tuple. That&amp;#8217;s at least two additional steps compared to
-the&amp;nbsp;original.&lt;/p&gt;
-&lt;p&gt;Those steps have a more precise name, too: they are the &lt;em&gt;bytecode instructions&lt;/em&gt;. Every piece of Python source is compiled
-to a binary bytecode before it&amp;#8217;s executed, because the interpreter can only work with this representation.
-Compilation typically happens when a Python module is first imported, producing a &lt;em&gt;.pyc&lt;/em&gt; file corresponding to its
-&lt;em&gt;.py&lt;/em&gt; file. Subsequent imports will simply reuse the cached&amp;nbsp;bytecode.&lt;/p&gt;
-&lt;p&gt;Moreover, any function or class object has its bytecode accessible (read-only) at runtime. There is even a
-&lt;a href="http://late.am/post/2012/03/26/exploring-python-code-objects.html"&gt;dedicated data type&lt;/a&gt; to hold it &amp;#8212; called simply
-&lt;code&gt;code&lt;/code&gt; &amp;#8212; with a buffer of raw bytes under one of its&amp;nbsp;attributes.&lt;/p&gt;
-&lt;p&gt;Finally, the bytecode compiler itself is also available to Python programs as a built-in
-&lt;a href="https://docs.python.org/2/library/functions.html#compile"&gt;&lt;code&gt;compile&lt;/code&gt; function&lt;/a&gt;. You don&amp;#8217;t see it used as often as its
-counterparts &lt;a href="https://docs.python.org/2/library/functions.html#eval"&gt;&lt;code&gt;eval&lt;/code&gt;&lt;/a&gt;
-and &lt;a href="https://docs.python.org/2/reference/simple_stmts.html#exec"&gt;&lt;code&gt;exec&lt;/code&gt;&lt;/a&gt; (which hopefully are a rare sight themselves!),
-but it taps into the same internal machinery of&amp;nbsp;Python.&lt;/p&gt;
-&lt;p&gt;So how does it all add up? The idea is, basically, to cross-check the alleged source code of the lambda with its own
-&lt;em&gt;byte&lt;/em&gt;code. Any junk that&amp;#8217;s still left to trim &amp;#8212; even if syntactically valid &amp;#8212; will surface as a divergence after
-compilation. Thus we can simply continue dropping characters until the bytecodes&amp;nbsp;match:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;lambda_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;source_text&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;lambda_node&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;col_offset&lt;/span&gt;&lt;span class="p"&gt;:]&lt;/span&gt;
-&lt;span class="n"&gt;lambda_body_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;source_text&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;lambda_node&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;col_offset&lt;/span&gt;&lt;span class="p"&gt;:]&lt;/span&gt;
-&lt;span class="n"&gt;min_length&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;lambda:_&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;  &lt;span class="c"&gt;# shortest possible lambda expression&lt;/span&gt;
-&lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_text&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;min_length&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-    &lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="n"&gt;code&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;compile&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_body_text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;&amp;lt;unused filename&amp;gt;&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;eval&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;co_code&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;lambda_func&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__code__&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;co_code&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-            &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;lambda_text&lt;/span&gt;
-    &lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="ne"&gt;SyntaxError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;pass&lt;/span&gt;
-    &lt;span class="n"&gt;lambda_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;lambda_text&lt;/span&gt;&lt;span class="p"&gt;[:&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-    &lt;span class="n"&gt;lambda_body_text&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;lambda_body_text&lt;/span&gt;&lt;span class="p"&gt;[:&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Okay, maybe not the exact bytes&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;, but stopping at the identical bytecode &lt;em&gt;length&lt;/em&gt; is good enough a strategy.
-As an obvious bonus, &lt;code&gt;compile&lt;/code&gt; will also take care of detecting syntax errors in the candidate source code,
-so we don&amp;#8217;t need the &lt;code&gt;ast&lt;/code&gt; parsing&amp;nbsp;anymore.&lt;/p&gt;
-&lt;h4&gt;That escalated&amp;nbsp;quickly!&lt;/h4&gt;
-&lt;p&gt;Believe it or not, but there aren&amp;#8217;t any more objections to this solution, You can view it in its glorious entirety
-by looking at &lt;a href="https://gist.github.com/Xion/617c1496ff45f3673a5692c3b0e3f75a"&gt;this gist&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;Does it mean it is also making its cameo in the &lt;a href="https://github.com/Xion/callee"&gt;&lt;em&gt;callee&lt;/em&gt; library&lt;/a&gt;?&amp;#8230;&lt;/p&gt;
-&lt;p&gt;No, I&amp;#8217;m afraid&amp;nbsp;not.&lt;/p&gt;
-&lt;p&gt;Normally, I&amp;#8217;m not the one to shy away from, ahem, &lt;em&gt;bold&lt;/em&gt; solutions to tough problems. But in this case, the magnitude
-of hackery required is just too great, the result not satisfactory enough, the feature&amp;#8217;s priority isn&amp;#8217;t really
-all that high, and the maintenance burden it&amp;#8217;d introduce is most likely too&amp;nbsp;large.&lt;/p&gt;
-&lt;p&gt;In the end, it was great fun figuring it out: yet another example of how you can fiddle with Python to do basically
-anything. Still, we must not get too preoccupied with whether or not we can as to forget if we &lt;em&gt;should&lt;/em&gt;.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Backslash (&lt;code&gt;\&lt;/code&gt;) is how lambda functions are denoted in Haskell. We want to be short and sweet, so it feels
-like a natural choice.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;This isn&amp;#8217;t an actual snippet from a Python &lt;span class="caps"&gt;REPL&lt;/span&gt;, because &lt;code&gt;inspect.getsourcelines&lt;/code&gt; requires the object to be
-defined in a &lt;em&gt;.py&lt;/em&gt; file.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;Why we won&amp;#8217;t always get an identical bytecode? The short answer is that some instructions may be swapped
-for their approximate equivalents.&lt;br/&gt;
-The long answer is that with &lt;code&gt;compile&lt;/code&gt;, we aren&amp;#8217;t able to replicate the exact closure environment of the original lambda.
-When a function refers to an &lt;em&gt;free variable&lt;/em&gt; (like &lt;code&gt;foo&lt;/code&gt; in &lt;code&gt;lambda x: x + foo&lt;/code&gt;), it is its closure where the value
-for that variable comes from. For ad-hoc lambdas, this is typically the local scope of its &lt;em&gt;outer function&lt;/em&gt;.&lt;/br&gt;
-Code produced by &lt;code&gt;compile&lt;/code&gt;, however, isn&amp;#8217;t associated with any such local scope. All free names are thus assumed
-to refer to &lt;em&gt;global&lt;/em&gt; variables. Because Python uses different bytecode instructions for referencing local and global
-names (&lt;code&gt;LOAD_FAST&lt;/code&gt; vs &lt;code&gt;LOAD_GLOBAL&lt;/code&gt;), the result of &lt;code&gt;compile&lt;/code&gt; may differ from a piece of bytecode produced in the regular
-manner.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="functions"></category><category term="AST"></category><category term="bytecode"></category></entry><entry><title>Pipe `xargs` into `find`</title><link href="http://xion.io/post/code/shell-xargs-into-find.html" rel="alternate"></link><updated>2016-04-03T12:23:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-04-03:post/code/shell-xargs-into-find.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a trick that&amp;#8217;s hardly new, but if you haven&amp;#8217;t heard about, it will save you a trip to a man page or&amp;nbsp;two.&lt;/p&gt;
-&lt;p&gt;Assuming you&amp;#8217;re a person who mostly prefers the terminal over some fancy &lt;span class="caps"&gt;GUI&lt;/span&gt;, you&amp;#8217;ve probably used the &lt;code&gt;find&lt;/code&gt; command
-along with &lt;code&gt;xargs&lt;/code&gt; at least a few times. It&amp;#8217;s very common, for example, to use the results of &lt;code&gt;find&lt;/code&gt; as arguments
-to some other program. It could something as simple as figuring out which modules in your project have grown
-slightly too&amp;nbsp;large:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ find . -name &amp;#39;*.py&amp;#39; | xargs wc -l | sort -hr
-1467 total
- 322 callee/base.py
- 261 callee/general.py
- 251 callee/collections.py
-# etc.
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;We find them all first, and then use &lt;code&gt;xargs&lt;/code&gt; to build a long &lt;code&gt;wc&lt;/code&gt; invocation, and we finally display results
-in the reverse order. Pretty easy stuff: I don&amp;#8217;t usually have to try more than a dozen times to get it right!&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
-&lt;p&gt;But how about the opposite situation? Let&amp;#8217;s say you have a list of &lt;em&gt;directories&lt;/em&gt; you want to search through with &lt;code&gt;find&lt;/code&gt;.
-Doing so may seem easy enough&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ cat packagedirs.txt | xargs find -name &amp;#39;__init__.py&amp;#39;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Except it&amp;#8217;s not going to work. Like a few other Unix commands, &lt;code&gt;find&lt;/code&gt; is very particular about the order of arguments
-it receives. Not only are the predicate flags (like &lt;code&gt;-name&lt;/code&gt;) considered in sequence, but they also have to appear
-&lt;em&gt;after&lt;/em&gt; the directories we want to search&amp;nbsp;through.&lt;/p&gt;
-&lt;p&gt;But in the &lt;code&gt;xargs&lt;/code&gt; invocation above, essentially the opposite is going to&amp;nbsp;happen.&lt;/p&gt;
-&lt;h4&gt;The replacement&amp;nbsp;flag&lt;/h4&gt;
-&lt;p&gt;So how to remedy this? Enter the &lt;code&gt;-I&lt;/code&gt; flag to &lt;code&gt;xargs&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ cat packagedirs.txt | xargs -I{} find {} -name &amp;#39;__init__.py&amp;#39;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This flag will tell &lt;code&gt;xargs&lt;/code&gt; quite a few&amp;nbsp;things.&lt;/p&gt;
-&lt;p&gt;The most important one is to stop putting the arguments at the end of the command invocation.
-Instead, it shall place them wherever it sees the &lt;em&gt;replacement string&lt;/em&gt; &amp;#8212; here, pair of braces&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;: &lt;code&gt;{}&lt;/code&gt;.
-And because we placed the braces where &lt;code&gt;find&lt;/code&gt; is normally expecting the list of directories to search through,
-the command will now get us exactly the results we&amp;nbsp;wanted.&lt;/p&gt;
-&lt;p&gt;What&amp;#8217;s almost impossible to see, however, is that it may not use the exact &lt;em&gt;way&lt;/em&gt; we intended to obtain those results.
-The difference is easier to spot when we replace &lt;code&gt;find&lt;/code&gt; with &lt;code&gt;echo&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ cat &amp;gt;/tmp/list
-foo
-bar
-$ cat /tmp/list | xargs echo
-foo bar
-$ cat /tmp/list | xargs -I{} echo {}
-foo
-bar
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;or, better yet, use &lt;code&gt;xargs&lt;/code&gt; with the &lt;code&gt;-t&lt;/code&gt; flag to print the commands on stderr before executing&amp;nbsp;them:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ cat packagedirs.txt | xargs -I{} -t find {} -name &amp;#39;__init__.py&amp;#39; &amp;gt;/dev/null
-find callee -name &amp;#39;__init__.py&amp;#39;
-find tests -name &amp;#39;__init__.py&amp;#39;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;As you can see, we actually have more than one &lt;code&gt;find&lt;/code&gt; invocation&amp;nbsp;here!&lt;/p&gt;
-&lt;p&gt;This is the second effect of &lt;code&gt;-I&lt;/code&gt;: it causes &lt;code&gt;xargs&lt;/code&gt; to execute given command line &lt;em&gt;for each argument separately&lt;/em&gt;.
-It so happens that it doesn&amp;#8217;t really make any difference for our usage of &lt;code&gt;find&lt;/code&gt;, which is why it wasn&amp;#8217;t at all obvious
-we were running it multiple&amp;nbsp;times.&lt;/p&gt;
-&lt;p&gt;To avoid problems, though, you should definitely be cognizant of this fact when calling other programs with &lt;code&gt;xargs -I&lt;/code&gt;.&lt;/p&gt;
-&lt;h4&gt;Make arguments spaced&amp;nbsp;again&lt;/h4&gt;
-&lt;p&gt;Incidentally, I&amp;#8217;m not aware of any method that&amp;#8217;d actually make &lt;code&gt;xargs&lt;/code&gt; produce &lt;code&gt;find foo bar -name ...&lt;/code&gt; calls.
-If you need this exact form, probably the easiest way is to use plain old shell&amp;nbsp;variables:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ (d=$(cat packagedirs.txt); find $d -name &amp;#39;*.py&amp;#39;)
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This takes advantage of the &lt;a href="http://mywiki.wooledge.org/WordSplitting"&gt;word splitting&lt;/a&gt; feature of Bash and a few other
-compatible shells. Caveat is, you may be using a shell where this behavior is disabled by default. The result would be
-making &lt;code&gt;find&lt;/code&gt; interpret the content of &lt;code&gt;$d&lt;/code&gt; as a &lt;em&gt;single&lt;/em&gt; directory name: &lt;code&gt;foo bar&lt;/code&gt; rather than &lt;code&gt;foo&lt;/code&gt; and &lt;code&gt;bar&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;zsh is one such shell. Although &lt;a href="http://zsh.sourceforge.net/FAQ/zshfaq03.html#l18"&gt;probably a good thing overall&lt;/a&gt;,
-in times like these you&amp;#8217;d want to bring the &amp;#8220;normal&amp;#8221; behavior back. In zsh, it&amp;#8217;s fortunately pretty&amp;nbsp;simple:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ (d=$(cat packagedirs.txt); find ${=d} -name &amp;#39;*.py&amp;#39;)
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;What about a portable solution? As far as I can tell, the only certain way you can ensure word splitting occurs
-is to use &lt;code&gt;eval&lt;/code&gt;. Here, the &lt;code&gt;xargs&lt;/code&gt; command can actually come in handy again, albeit only as a&amp;nbsp;prop:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ (d=$(cat packagedirs.txt | xargs echo); eval &amp;quot;find $d -name &amp;#39;*.py&amp;#39;&amp;quot;)
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;One would hope such hacks aren&amp;#8217;t needed very&amp;nbsp;often.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;A completely kosher version would also use the &lt;code&gt;-print0&lt;/code&gt; flag to &lt;code&gt;find&lt;/code&gt; and the &lt;code&gt;-0&lt;/code&gt; flag to &lt;code&gt;xargs&lt;/code&gt;.
-It&amp;#8217;s not necessary here because Python module files cannot contain spaces.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Purists shall excuse my use of &lt;code&gt;cat&lt;/code&gt; here, it&amp;#8217;s merely for illustrative purposes.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;This use of braces in &lt;code&gt;find&lt;/code&gt; has of course nothing to do with the &lt;em&gt;other&lt;/em&gt; possible occurrences of &lt;code&gt;{}&lt;/code&gt; there,
-like in the &lt;code&gt;-exec&lt;/code&gt; flag. Since you cannot force &lt;code&gt;find&lt;/code&gt; to expect a different placeholder, you should use something else
-for &lt;code&gt;xargs&lt;/code&gt; in those cases, .e.g: &lt;code&gt;xargs -I^ find ^ -name '__main__.py' -exec 'python {}' \;&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="shell scripting"></category><category term="Bash"></category><category term="xargs"></category><category term="find"></category><category term="zsh"></category></entry><entry><title>Tricks with ownership in Rust</title><link href="http://xion.io/post/code/rust-borrowchk-tricks.html" rel="alternate"></link><updated>2016-02-06T16:42:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-03-07:post/code/rust-borrowchk-tricks.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;or how I learned to stop worrying and love the borrow&amp;nbsp;checker.&lt;/em&gt;&lt;/p&gt;
-&lt;p&gt;Having no equivalents in other languages, the &lt;a href="https://doc.rust-lang.org/book/ownership.html"&gt;borrow checker&lt;/a&gt;
-is arguably the most difficult thing to come to terms with when learning Rust. It&amp;#8217;s easy to understand why it&amp;#8217;s immensely
-useful, especially if you recall
-&lt;a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html"&gt;the various vulnerabities&lt;/a&gt;
-stemming from memory mismanagement. But that knowledge doesn&amp;#8217;t exactly help when the compiler is whining about what
-seems like a perfectly correct&amp;nbsp;code.&lt;/p&gt;
-&lt;p&gt;Let&amp;#8217;s face it: it will take some time to become productive writing efficient and safe code. It&amp;#8217;s not entirely unlike
-adjusting to a different paradigm such as functional programming when you&amp;#8217;ve been writing mostly imperative code.
-Before that happens, though, you can use some tricks to make the transition a little&amp;nbsp;easier.&lt;/p&gt;
-&lt;h4&gt;Just &lt;code&gt;clone&lt;/code&gt; it&lt;/h4&gt;
-&lt;p&gt;Ideally, we&amp;#8217;d want our code to be both correct &lt;em&gt;and&lt;/em&gt; fast. But if we cannot quite get to the &amp;#8220;correctness&amp;#8221; part yet &amp;#8212;
-because our program doesn&amp;#8217;t, you know, &lt;em&gt;compile&lt;/em&gt; &amp;#8212; then how about paying for it with a small (and refundable)
-performance&amp;nbsp;hit?&lt;/p&gt;
-&lt;p&gt;This is where the &lt;code&gt;clone&lt;/code&gt; method comes in handy. Many problems with the borrow checker stem from trying to spread
-object ownership too thin. It is a precious resource and it&amp;#8217;s not very cheap to &amp;#8220;produce&amp;#8221;, which is why good Rust code
-often deals with just immutable or mutable&amp;nbsp;references.&lt;/p&gt;
-&lt;p&gt;But if that proves difficult, then &amp;#8220;making more objects&amp;#8221; is a great intermediate solution. Incidentally, this is what
-higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
-those languages, we can start off by replicating their&amp;nbsp;behavior.&lt;/p&gt;
-&lt;p&gt;As an example, consider a function that tries to convert some value to &lt;code&gt;String&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_to_string&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// omitted&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;If we attempt to build upon it and create a &lt;code&gt;Vec&lt;/code&gt;tor&amp;nbsp;version:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_all_to_string&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;maybe_to_string&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;res&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;find&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_err&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;then we&amp;#8217;ll be unpleasantly surprised by a borrow checker&amp;nbsp;error:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;error: cannot move out of borrowed content [E0507]
-    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
-                              ^
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
-However, a simple stepping stone in the shape of additional &lt;code&gt;clone()&lt;/code&gt; call can help move things forward just
-a little&amp;nbsp;quicker:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#[derive(Clone)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="c1"&gt;// ...&lt;/span&gt;
-&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;clone&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The performance tradeoff is explicit, and easy to find later on with a simple &lt;code&gt;grep clone\(\)&lt;/code&gt; or similar.
-When you learn to do things the Rusty way, it won&amp;#8217;t be hard to go back to your &amp;#8220;hack&amp;#8221; and fix it&amp;nbsp;properly.&lt;/p&gt;
-&lt;h4&gt;Refcounting to the&amp;nbsp;rescue&lt;/h4&gt;
-&lt;p&gt;Adding &lt;code&gt;clone()&lt;/code&gt; willy-nilly to make the code compile is a valid workaround when we&amp;#8217;re just learning. Sometimes, however,
-even some gratuitous cloning doesn&amp;#8217;t &lt;em&gt;quite&lt;/em&gt; solve the problem, because the &lt;code&gt;clone()&lt;/code&gt; itself can become an&amp;nbsp;issue.&lt;/p&gt;
-&lt;p&gt;For one, it requires our objects to implement the &lt;a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"&gt;&lt;code&gt;Clone&lt;/code&gt; trait&lt;/a&gt;.
-This was apparent even in our previous example, since we had to add a &lt;code&gt;#[derive(Clone)]&lt;/code&gt; attribute to the &lt;code&gt;struct Error&lt;/code&gt;
-in order to make it &lt;code&gt;clone&lt;/code&gt;-able.&lt;/p&gt;
-&lt;p&gt;Fortunately, in the vast majority of cases this will be all that&amp;#8217;s necessary, as most built-in types in Rust implement
-&lt;code&gt;Clone&lt;/code&gt; already. One notable exception are &lt;em&gt;function traits&lt;/em&gt; (&lt;code&gt;FnOnce&lt;/code&gt;, &lt;code&gt;Fn&lt;/code&gt;, and &lt;code&gt;FnMut&lt;/code&gt;) which are used to store
-and refer to &lt;em&gt;closures&lt;/em&gt;&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;. Structures and other custom types that contain them (or those which &lt;em&gt;may&lt;/em&gt; contain them)
-cannot therefore implement &lt;code&gt;Clone&lt;/code&gt; through a simple &lt;code&gt;#[derive]&lt;/code&gt; annotation:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c-Doc"&gt;/// A value that&amp;#39;s either there already&lt;/span&gt;
-&lt;span class="c-Doc"&gt;/// or can be obtained by calling a function.&lt;/span&gt;
-&lt;span class="cp"&gt;#[derive(Clone)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;LazyValue&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Clone&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Immediate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Deferred&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Fn&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;!-- --&gt;
-
-&lt;div class="highlight"&gt;&lt;pre&gt;error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&amp;gt; T + &amp;#39;static` [E0277]
-    #[derive(Clone)]
-             ^~~~~
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
-and this one will likely sound familiar if you&amp;#8217;ve ever worked with a higher level language before. Instead of actually
-cloning an object, you can merely increment its &lt;em&gt;reference counter&lt;/em&gt;. As the most rudimentary kind of garbage collection,
-this allows to safely share the object between multiple &amp;#8220;owners&amp;#8221;, where each can behave as if it had
-its own copy of&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;Rust&amp;#8217;s pointer type that provides reference counting capabilities is called &lt;code&gt;std::rc::Rc&lt;/code&gt;. Conceptually, it is analogous
-to &lt;code&gt;std::shared_ptr&lt;/code&gt; from C++, and it similarly keeps the refcount updated when the pointer is &amp;#8220;acquired&amp;#8221; (&lt;code&gt;clone&lt;/code&gt;-ed)
-and &amp;#8220;released&amp;#8221; (&lt;code&gt;drop&lt;/code&gt;-ed). Because no data is moved around during either of those two operations, &lt;code&gt;Rc&lt;/code&gt; can refer even
-to types whose size isn&amp;#8217;t known at compilation time, like abstract&amp;nbsp;closures:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;rc&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Rc&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="cp"&gt;#[derive(Clone)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;LazyValue&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Clone&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Immediate&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Deferred&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Rc&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Fn&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Wrapping them in &lt;code&gt;Rc&lt;/code&gt; therefore makes them &amp;#8220;cloneable&amp;#8221;. They aren&amp;#8217;t actually cloned, of course, but because of
-the inherent immutability of Rust types they will appear so to any outside observer&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h4&gt;Move&amp;nbsp;it!&lt;/h4&gt;
-&lt;p&gt;Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
-There is &lt;em&gt;ownership&lt;/em&gt;, which is passed around by moving the values; and there is &lt;em&gt;borrowing&lt;/em&gt;, which means operating
-on them through&amp;nbsp;references.&lt;/p&gt;
-&lt;p&gt;When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
-has to be copiously sprinkled with &lt;code&gt;&amp;amp;&lt;/code&gt; and &lt;code&gt;&amp;amp;mut&lt;/code&gt;, and may sometimes require explicit lifetime annotations. All these
-have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
-of the program&amp;#8217;s&amp;nbsp;logic.&lt;/p&gt;
-&lt;p&gt;Therefore it is generally preferable, if at all possible, to deal with data directly
-and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
-stages of our algorithms. It turns out it&amp;#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
-of producing a moved&amp;nbsp;value.&lt;/p&gt;
-&lt;p&gt;Take our first example. The intuitively named &lt;code&gt;Vec::iter&lt;/code&gt; method produces an iterator that we can &lt;code&gt;map&lt;/code&gt; over, but does
-it really go over the actual &lt;em&gt;items&lt;/em&gt; in the vector? Nope! It gives us a &lt;em&gt;reference&lt;/em&gt; to each one &amp;#8212; a borrow, if you will
-&amp;#8212; which is exactly why we originally had to use &lt;code&gt;clone&lt;/code&gt; to get out of this&amp;nbsp;bind.&lt;/p&gt;
-&lt;p&gt;Instead, why not just get the elements themselves, by moving them out of the vector? &lt;code&gt;Vec::into_iter&lt;/code&gt; allows to do exactly&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;and enables us to remove the &lt;code&gt;clone()&lt;/code&gt; call. The family of similar &lt;code&gt;into_X&lt;/code&gt; (or even just &lt;code&gt;into&lt;/code&gt;) methods can be reliably counted
-on at least in the standard library. They are also part of a more-or-less official
-&lt;a href="https://aturon.github.io/style/naming.html#conversions"&gt;naming convention&lt;/a&gt; that you should also follow in your own&amp;nbsp;code.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Note how this is different from function &lt;em&gt;types&lt;/em&gt;, i.e. &lt;code&gt;fn(A, B, C, ...) -&amp;gt; Ret&lt;/code&gt;. It is because plain functions
-do not carry their closure environments along with them. This makes them little more than just pointers to some code,
-and those can be freely &lt;code&gt;Clone&lt;/code&gt;-d (or even &lt;code&gt;Copy&lt;/code&gt;-ed).&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;If you want both shared ownership (&amp;#8220;fake cloneability&amp;#8221;) &lt;em&gt;and&lt;/em&gt; the ability to mutate the shared value,
-take a look at the &lt;a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"&gt;&lt;code&gt;RefCell&lt;/code&gt; type&lt;/a&gt; and how it can be
-&lt;a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition"&gt;wrapped in &lt;code&gt;Rc&lt;/code&gt;&lt;/a&gt; to achieve both.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="borrow checker"></category><category term="reference counting"></category><category term="traits"></category></entry><entry><title>Requirements for Python’s pip</title><link href="http://xion.io/post/code/python-pip-requirements.html" rel="alternate"></link><updated>2016-02-21T09:01:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-02-21:post/code/python-pip-requirements.html</id><summary type="html">&lt;p&gt;In this post I&amp;#8217;ll describe all (hopefully all!) the various ways you can specify a single dependency for a Python&amp;nbsp;package.&lt;/p&gt;
-&lt;p&gt;This assumes &lt;em&gt;pip&lt;/em&gt; is used for installation. The list of dependencies then goes either in &lt;code&gt;install_requires=&lt;/code&gt;
-parameter of the &lt;code&gt;setup&lt;/code&gt; function within &lt;em&gt;setup.py&lt;/em&gt;, or as a separate &lt;em&gt;requirements.txt&lt;/em&gt; file. Commonly, it will actually
-go in both places, with the latter being the canonical source of&amp;nbsp;truth:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;setuptools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;setup&lt;/span&gt;
-
-&lt;span class="k"&gt;with&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;requirements.txt&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;rf&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-    &lt;span class="n"&gt;setup&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
-        &lt;span class="c"&gt;# ...&lt;/span&gt;
-        &lt;span class="n"&gt;install_requires&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;rf&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;readlines&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;
-    &lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;More details about this approach can be found in
-&lt;a href="http://xion.org.pl/2014/01/27/anathomy-of-a-python-package/"&gt;one of my previous posts&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;Here, I will concentrate on the format of a single line in &lt;em&gt;requirements.txt&lt;/em&gt; that defines a dependency.
-There are numerous variants that &lt;em&gt;pip&lt;/em&gt; supports, and they are all described in excruciating detail in
-&lt;a href="https://www.python.org/dev/peps/pep-0440/"&gt;&lt;span class="caps"&gt;PEP&lt;/span&gt; 440&lt;/a&gt;. This post shall serve as a short reference on the most useful&amp;nbsp;ones.&lt;/p&gt;
-&lt;h4&gt;Package name (and&amp;nbsp;version)&lt;/h4&gt;
-&lt;p&gt;The simplest and most common option is to identify a dependency by its package&amp;nbsp;name:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This will locate it in a global index of packages, which is sometimes called a &amp;#8220;cheese shop&amp;#8221;. Currently,
-by far the most popular package registry for Python is &lt;a href="https://pypi.python.org"&gt;PyPI&lt;/a&gt;, and &lt;em&gt;pip&lt;/em&gt; uses it by default&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;Without any further modifiers, &lt;em&gt;pip&lt;/em&gt; will download and install the &amp;#8220;current&amp;#8221; version of the package &amp;#8212; either the newest,
-or the one designated explicitly by a maintainer. This obviously makes the dependency somewhat unpredictable,
-for it can mean unintended upgrades that introduce breaking changes to your&amp;nbsp;code.&lt;/p&gt;
-&lt;p&gt;To prevent this, you&amp;#8217;d normally &lt;em&gt;pin&lt;/em&gt; the dependency to an exact version&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy==0.9.10
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Other comparison operators are also&amp;nbsp;available:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy&amp;gt;=0.9.10
-SQLAlchemy&amp;lt;1.0.0
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;and can even be&amp;nbsp;combined:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;SQLAlchemy&amp;gt;=0.9,&amp;lt;1.0.0
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Specs like that will make &lt;em&gt;pip&lt;/em&gt; find the newest version that&amp;#8217;s within given range. Assuming your dependency follows
-the &lt;a href="http://semver.org/"&gt;semantic versioning&lt;/a&gt; scheme, this will allow you to stay on top of any minor bugfixes
-and improvements to an older release (0.9.x here), without the risk of accidentally upgrading to a new one (1.x)
-that your code is not compatible with&amp;nbsp;yet.&lt;/p&gt;
-&lt;h4&gt;Repository &lt;span class="caps"&gt;URL&lt;/span&gt;&lt;/h4&gt;
-&lt;p&gt;Sometimes you want to live on the bleeding edge, though, and depend not just on the latest &lt;em&gt;release&lt;/em&gt;,
-but the head &lt;em&gt;commit&lt;/em&gt; to the package&amp;#8217;s repository. This makes sense especially in large systems
-that are distributed among multiple repos, and where development happens in&amp;nbsp;lockstep.&lt;/p&gt;
-&lt;p&gt;For those occasions, and a few others, &lt;em&gt;pip&lt;/em&gt; can recognize direct repository URLs. They are in the&amp;nbsp;format:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$VCS+$PROTOCOL://$URL@$LABEL#egg=$PACKAGE
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;where the &lt;code&gt;$PROTOCOL&lt;/code&gt; part can be optional if the version control system has a default there. That&amp;#8217;s for example
-the case for &lt;code&gt;git&lt;/code&gt;, which is of course the most important &lt;span class="caps"&gt;VCS&lt;/span&gt; you&amp;#8217;d be interested in&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;git://git.example.com/somepackage#egg=somepackage
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Note that the &lt;code&gt;#egg=$PACKAGE&lt;/code&gt; part is not a part of the &lt;code&gt;$URL&lt;/code&gt;, and it&amp;#8217;s only there to give a local name for the package
-distribution. This is what makes it possible to refer to it later via &lt;em&gt;pip&lt;/em&gt;, if only to remove it with
-&lt;code&gt;pip uninstall $PACKAGE&lt;/code&gt;.
-Of course, the sanest practice is to use the PyPI moniker if&amp;nbsp;possible.&lt;/p&gt;
-&lt;p&gt;When no &lt;code&gt;$LABEL&lt;/code&gt; is given, &lt;em&gt;pip&lt;/em&gt; will use the &lt;span class="caps"&gt;HEAD&lt;/span&gt;, trunk, tip, or the equivalent default/current revision from the repo.
-Often though (at least in case of Git), you would also pick a branch, tag, or even a particular &lt;em&gt;commit hash&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;git+https://github.com/Xion/unmatcher.git@0.1.3.1#egg=unmatcher
-git+ssh://github.com/You/yourpackage.git@master#egg=yourpackage
-git+https://github.com/mitsuhiko/jinja2.git@5b498453b5898257b2287f14ef6c363799f1405a#egg=Jinja2
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The last two options could be a good choice even with third party packages, when you don&amp;#8217;t want to wait for a new PyPI
-release to get a necessary feature or an urgent bug&amp;nbsp;fix.&lt;/p&gt;
-&lt;h4&gt;Local&amp;nbsp;filesystem&lt;/h4&gt;
-&lt;p&gt;Lastly, you can ask &lt;em&gt;pip&lt;/em&gt; to install a package from a local directory or archive. The former option is often used
-with the &lt;code&gt;-e&lt;/code&gt; (&lt;code&gt;--editable&lt;/code&gt;) flag for &lt;code&gt;pip install&lt;/code&gt;. This installs the package in the so-called &lt;em&gt;development mode&lt;/em&gt;,
-allowing you to edit its source code&amp;nbsp;in-place:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;$ pip install -e /home/me/Code/myotherpackage
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;You almost certainly don&amp;#8217;t want to put this line in &lt;em&gt;requirements.txt&lt;/em&gt;: you should still be pulling the other package
-from PyPI. But if it&amp;#8217;s your own one  &amp;#8212; maybe a self-contained utility library used by your main program &amp;#8212;
-this setup will be very helpful for making changes to it, informed by your own usage of the&amp;nbsp;package.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;This can be changed with &lt;code&gt;--index_url&lt;/code&gt; flag to &lt;code&gt;pip install&lt;/code&gt;. Running local indexes is a good practice
-for Python shops, especially those that rely on &lt;code&gt;pip install&lt;/code&gt; as part of their deployment process.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;If the package uses &lt;a href="http://semver.org/"&gt;semantic versioning&lt;/a&gt;, a possible alternative to &lt;code&gt;==&lt;/code&gt; is &lt;code&gt;~=&lt;/code&gt;,
-which means &amp;#8220;compatible&amp;#8221; version. The precise meaning of this is
-&lt;a href="https://www.python.org/dev/peps/pep-0440/#compatible-release"&gt;somewhat complicated&lt;/a&gt;, but it roughly means that upgrades
-are permitted as long as nothing in the public interface changes.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;&lt;a href="https://pip.pypa.io/en/latest/reference/pip_install/#vcs-support"&gt;Other options&lt;/a&gt; include &lt;code&gt;hg&lt;/code&gt; (Mercurial),
-&lt;code&gt;svn&lt;/code&gt;, and &lt;code&gt;bzr&lt;/code&gt; (Bazaar).&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="pip"></category><category term="packages"></category><category term="dependencies"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="pattern matching"></category><category term="borrowing"></category><category term="references"></category></entry></feed>

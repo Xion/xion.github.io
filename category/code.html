@@ -63,6 +63,959 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-optional-args.html#rust-optional-args">Optional arguments in Rust&nbsp;1.12</a></h2>
+    <p>
+      Posted on Thu 29 September 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/parameters.html">parameters</a>,      <a href="http://xion.io/tag/functions.html">functions</a>      &#8226; <a href="http://xion.io/post/code/rust-optional-args.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Today&#8217;s <a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html">announcement of Rust 1.12</a> contains,
+among other things, this innocous little&nbsp;tidbit:</p>
+<blockquote>
+<p><code>Option</code> implements <code>From</code> for its contained&nbsp;type</p>
+</blockquote>
+<p>If you&#8217;re not very familiar with it,
+<code>From</code> is a basic <a href="https://doc.rust-lang.org/std/convert/trait.From.html">converstion trait</a>
+which any Rust type can implement.
+By doing so, it defines how to create its values <em>from</em> some other type &#8212; hence its&nbsp;name.</p>
+<p>Perhaps the most widespread application of this trait (and its <code>from</code> method)
+is allocating owned <code>String</code> objects from literal <code>str</code> values:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">hello</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Hello, world!&quot;</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>What the change above means is that we can do similar thing with the <code>Option</code> type:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">maybe_int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>At a first glance, this doesn&#8217;t look like a big deal at all.
+For one, this syntax is much more wordy than the traditional <code>Some(42)</code>,
+so it&#8217;s not very clear what benefits it&nbsp;offers.</p>
+<p>But this first impression is rather deceptive.
+In many cases, this change can actually <em>reduce</em> the number of times we have to type <code>Some(x)</code>,
+allowing us to replace it with just <code>x</code>.
+That&#8217;s because this new <code>impl</code> brings Rust quite a bit closer to having <em>optional function arguments</em>
+as a first class feature in the&nbsp;language.</p>
+<p>Until now, a function defined like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>was the closest Rust had to default argument values.
+While this works perfectly &#8212; and is bolstered by compile-time checks! &#8212;
+callers are unfortunately required to build the <code>Option</code> objects&nbsp;manually:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="mi">42</span><span class="p">));</span><span class="w">  </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">None</span><span class="p">);</span><span class="w">      </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w">        </span><span class="c1">// error!</span>
+</pre></div>
+
+
+<p>After <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>, however, this can change for the better.
+<em>Much</em> better, in fact, for the last line above can be made valid.
+All that is necessary is to take advantage of this new <code>impl</code> in the function&nbsp;definition:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="n">x</span><span class="p">).</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Unfortunately, this results in quite a bit of complexity,
+up to and including the <code>where</code> clause: a telltale sign of convoluted, generic code.
+Still, this trade-off may be well worth it,
+as a function defined once can be called many times throughout the code base,
+and possibly across multiple crates if it&#8217;s a part of the public <span class="caps">API</span>.</p>
+<p>But we can do better than this.
+Indeed, using the <code>From</code> trait to constrain argument types is just complicating things for no good reason.
+What we should so instead is use the symmetrical trait, <a href="https://doc.rust-lang.org/std/convert/trait.Into.html"><code>Into</code></a>,
+and take advantage of its standard <code>impl</code>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="n">U</span><span class="o">:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Once we translate it to the <code>Option</code> case (now that <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>),
+we can switch the trait bounds around and get rid of the <code>where</code> clause&nbsp;completely:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;&gt;&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">into</span><span class="p">().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As a small bonus, the function body has also gotten a little&nbsp;simpler.</p>
+<hr />
+<p>So, should you go wild and change all your functions taking <code>Option</code>als to look like this?&#8230;
+Well, technically you can, although the benefits may not outweigh the downsides
+for small, private functions that are called&nbsp;infrequently.</p>
+<p>On the other hand, if you can afford to only support Rust 1.12 and up,
+this technique can make it much more pleasant to use the external <span class="caps">API</span> of your&nbsp;crates.</p>
+<p>What&#8217;s best is the <em>full backward compatibility</em> with any callers that still pass <code>Some(x)</code>:
+for them, the old syntax will continue to work exactly like before.
+Also note that the Rust compiler is smart about eliding the no-op conversion calls like the <code>Into::into</code> above,
+so you shouldn&#8217;t observe any changes in the performance department&nbsp;either.</p>
+<p>And who knows, maybe at some point Rust makes the final leap, and allows skipping the <code>None</code>s?&#8230;</p>
+      <a class="btn" href="http://xion.io/post/code/rust-optional-args.html#rust-optional-args">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/bash-flappy-bird.html#bash-flappy-bird">Flappy Bird in 1234 bytes of&nbsp;Bash</a></h2>
+    <p>
+      Posted on Thu 25 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/bash.html">Bash</a>,      <a href="http://xion.io/tag/shell-scripting.html">shell scripting</a>,      <a href="http://xion.io/tag/game-programming.html">game programming</a>,      <a href="http://xion.io/tag/flappy-bird.html">Flappy Bird</a>      &#8226; <a href="http://xion.io/post/code/bash-flappy-bird.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Contrary to an infamous opinion from a bygone era,
+<span class="caps">640KB</span> is not really sufficient for anyone anymore.
+A typical website exceeds that easily,
+and executable programs are usually measured in&nbsp;megabytes.</p>
+<p>But what if you only had 1234 <em>bytes</em> to work&nbsp;with?&#8230;</p>
+<p>A friend of mine, <a href="http://gynvael.coldwind.pl/?blog=1&amp;lang=en">Gynvael Coldwind</a>,
+organized a game programming compo<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> that had precisely this limitation.
+Unlike most demoscene ones, however, the size limit here
+applies to either the final binary <em>or</em> its source code.
+This can be chosen at the participant&#8217;s&nbsp;discretion.</p>
+<p>Since my currently favorite compiled language produces
+<a href="https://lifthrasiir.github.io/rustlog/why-is-a-rust-executable-large.html">the exact opposite of small binaries</a>,
+I was quite intrigued by the source code option.
+But as the rules say, the final game must run
+on a <em>clean</em> installation (only standard packages) of either Windows or Ubuntu Linux.
+The choice of viable languages and technologies was therefore rather&nbsp;limited.</p>
+<p>It was time to get <em>a little</em>&nbsp;creative.</p>
+<h4>Game&nbsp;theory</h4>
+<p>What must an environment provide to be a suitable platform for game development?
+Not much, really. We only need to be able&nbsp;to:</p>
+<ul>
+<li>put stuff on the&nbsp;screen</li>
+<li>react to user&nbsp;input</li>
+<li>execute time-dependent&nbsp;logic</li>
+</ul>
+<p>You could arguably get away without the last one,
+but the kind of games you would end up with
+had gone out of fashion about <a href="https://en.wikipedia.org/wiki/Zork">half a century ago</a>.
+For the &#8220;real&#8221; arcade games, we really ought to run our code at least a dozen times per&nbsp;second.</p>
+<p>There&#8217;s only a handful of standard technologies that allow all of this out of the&nbsp;box.</p>
+<p>I&#8217;m a wee bit out of touch with Windows these days
+but on Linux, there&#8217;s one thing that I really wanted to take for a serious spin.
+And luckily for me, it also has one extremely terse language to go hand in hand&nbsp;with.</p>
+<p>I&#8217;m talking, of course, about the <strong><span class="caps">ANSI</span> terminal</strong> that can be scripted in Bash.
+If there ever was anything that worked anywhere by default,
+then this got to be it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4>&#8230;put into&nbsp;practice</h4>
+<p>Note that I&#8217;ve stressed the &#8220;terminal&#8221; part.
+The shell itself is a neat instrument,
+but (perhaps surprisingly) it doesn&#8217;t actually concern itself
+with displaying anything on the&nbsp;screen.</p>
+<p>This has traditionally been the job of a <em>terminal emulator</em>.
+To this end, it has a couple of <a href="http://wiki.bash-hackers.org/scripting/terminalcodes">special codes</a>
+that are undoubtedly useful for an aspiring indie shell game developer.
+They are what allows us to display things in a specific position on the screen,
+complete with chosen color, background color, and (text)&nbsp;style.</p>
+<p>So this nails down our first requisite&nbsp;feature.</p>
+<p>As for the second one, the vanilla <a href="http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_08_02.html"><code>read</code> command</a>
+supports everything we may need for handling user input.
+The only real &#8220;trick&#8221; is passing the <code>-n</code> flag
+which makes it wait for a specific number of characters (e.g. one)
+rather than a whole line ending with <em>Enter</em>.
+Add a few more flags &#8212; like the one that prevents text from being echoed back to the console &#8212;
+and you can make a rudimentary input&nbsp;loop:</p>
+<div class="highlight"><pre><span class="nv">KEY</span><span class="o">=</span><span class="s1">&#39;\0&#39;</span>
+<span class="k">while</span> :<span class="p">;</span> <span class="k">do</span>
+    <span class="nb">read</span> -rsn <span class="m">1</span> KEY
+<span class="k">done</span>
+</pre></div>
+
+
+<p>I can imagine, however, that you&#8217;d want to do other things besides just waiting for input.
+Stuff like &#8220;updating the game state&#8221; and &#8220;drawing the next frame&#8221;
+is generally considered pretty important in&nbsp;games.</p>
+<p>Normally, we would deal with those things in between checking for input events,
+leading to a particular structure of the so-called <a href="http://gameprogrammingpatterns.com/game-loop.html">real-time loop</a>.</p>
+<p>But the shell doesn&#8217;t really handle input via &#8220;events&#8221;.
+Instead, you just ask for some text and wait until you get it.
+There is no &#8220;peek mode&#8221; that&#8217;d allow to squeeze in some rendering logic before the next key&nbsp;press.</p>
+<p>What do we do, then, with a tight loop that leaves us no wiggle&nbsp;room?&#8230;</p>
+<p>Why, we take a crowbar and pry it&nbsp;open!</p>
+<h5>(Don&#8217;t) be&nbsp;alarmed</h5>
+<p>Let&#8217;s start by noticing that to run some code whenever there is nothing else to do
+has a rough equivalent of running it <em>periodically</em>.
+This isn&#8217;t an exactly new observation:
+the <a href="https://developer.mozilla.org/en-US/docs/Web/API/WindowTimers/setTimeout"><code>setTimeout</code> function</a> in JavaScript
+has been the basis of &#8220;real-time&#8221; animation
+since the 90s era of falling snowflakes, and up to the contemporary browser games<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Neither does the shell nor the hosting terminal support anything like <code>setTimeout</code>, though.
+But fortunately, they don&#8217;t need to: Linux itself does.
+And it accomplishes it quite effortlessly, due to the sole fact of <em>being an operating system</em>.
+All we have to do is access some of its capabilities directly from the shell&nbsp;script:</p>
+<div class="highlight"><pre><span class="nv">KEY</span><span class="o">=</span><span class="s1">&#39;\0&#39;</span>
+<span class="nv">DT</span><span class="o">=</span>0.05  <span class="c"># timeout value in seconds</span>
+
+tick<span class="o">()</span> <span class="o">{</span>
+    <span class="c"># .. do stuff ...</span>
+    <span class="o">(</span> sleep <span class="nv">$DT</span><span class="p">;</span> <span class="nb">kill </span>ALRM <span class="nv">$$</span> <span class="o">)</span><span class="p">&amp;</span>
+<span class="o">}</span>
+
+<span class="nb">trap </span>tick ALRM
+tick
+<span class="k">while</span> :<span class="p">;</span> <span class="k">do</span>
+    <span class="nb">read</span> -rsn <span class="m">1</span> KEY
+<span class="k">done</span>
+</pre></div>
+
+
+<p>What we&#8217;re doing here is set up the <code>tick</code> function to be
+a <em><a href="https://en.wikipedia.org/wiki/Unix_signal">signal</a> handler</em>.
+A callback, if you&nbsp;will.</p>
+<p>Inside of this callback, we can do all the state updates and drawing we need,
+as long as we follow it with &#8220;scheduling&#8221; of the next <code>tick</code> call.
+As a direct equivalent of a <code>setTimeout</code> invocation, this can be done&nbsp;by:</p>
+<ul>
+<li>starting a subshell to run in the background (with <code>&amp;</code>)</li>
+<li>letting it sleep for however long we want to delay the next&nbsp;update</li>
+<li>sending a signal to the main script (<code>kill $$</code>)</li>
+</ul>
+<p>The signal we chose is of course <code>SIGALRM</code><sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+Technically, however, it can be anything,
+as long as we can set up a <code>trap</code> to actually handle&nbsp;it.</p>
+<p>In any case, success! Bash is officially a game programming&nbsp;platform!</p>
+<h4>Integration in&nbsp;parts</h4>
+<p>And so having figured out the technicalities,
+I was faced with the crucial dilemma: <em>what</em> game could I actually&nbsp;write?</p>
+<p>Nothing too complicated, that&#8217;s for sure.
+After the initial scaffolding has used up about 1/4 of the harsh size limit,
+I knew that radical simplicity was the order of the&nbsp;day.</p>
+<p>And so I went for possibly <a href="https://en.wikipedia.org/wiki/Flappy_Bird">the most trivial game ever</a>.</p>
+<p style="text-align: center">
+    <img src="https://upload.wikimedia.org/wikipedia/en/5/52/Flappy_Bird_gameplay.png" alt="flap flap"></br>
+    <small>Sorry, Pong!</small>
+</p>
+
+<p>Then, after hours of (<em>ahem</em>) <a href="https://www.flappybird.com/">meticulous research</a>,
+I managed to reverse-engineer the core&nbsp;mechanic:</p>
+<ul>
+<li>let the bird fall down with a constant&nbsp;acceleration</li>
+<li>to jump, give it some upwards-facing&nbsp;velocity</li>
+</ul>
+<p>Actually <a href="https://github.com/Xion/flappybash/blob/0372ef9173c921ff79c64553974cea0b02c2bb3f/flappybash.sh">coding this</a>
+in Bash was mostly a matter of finding out how to perform floating-point calculations.
+Rather unsurprisingly, this is done through
+<a href="https://en.wikipedia.org/wiki/Bc_(programming_language)#Using_bc_in_shell_scripts">an external program</a>,
+while truncating of the fractional part involves &#8212; wait for it &#8212;
+<a href="http://unix.stackexchange.com/a/167059"><em>string formatting</em></a>.</p>
+<h4>Pipe&nbsp;dream</h4>
+<p>Based on the above nuggets of Stack Overflow wisdom,
+you&#8217;ve probably figured out that Bash isn&#8217;t exactly what you would call <em>a programming language</em>.
+With a little bit of perseverance, however, we can make it do our bidding&#8230;
+<em>some</em> fraction of the&nbsp;time.</p>
+<p>So far, I had the player character &#8212; a beautiful red rectangle &#8212;
+fall down under the constant force of gravity, and maybe ascend if the Space key has been pressed.
+But a heroic protagonist necessitates the presence of formidable adversaries,
+so my next step was to figure out how to implement this crucial gameplay&nbsp;mechanic.</p>
+<p>Which one?&#8230; Pipes, of&nbsp;course.</p>
+<p>Pipes in <em>Bash</em>.</p>
+<p style="text-align: center">
+    <img src="http://xion.io/images/irony-sign.jpg" alt="...ahem">
+</p>
+
+<p>It was pretty evident I&#8217;m gonna need to represent them somehow,
+and Bash isn&#8217;t exactly known for its strong repertoire of data structures.
+Starting from version 4.0, it does however have <a href="http://tldp.org/LDP/abs/html/arrays.html">arrays</a>,
+so there is at least something we can work&nbsp;with.</p>
+<p>Let&#8217;s not get <em>too</em> carried away, though.
+The somewhat obvious idea of mirroring the entire game field in a (pseudo) 2D array
+of pipe/not-pipe turned out to be completely unworkable.
+The fill rate of most (all?) terminal emulators is nowhere near sufficient
+to permit redrawing of the whole screen <em>and</em> maintaining <span class="caps">FPS</span> value above the slideshow&nbsp;threshold.</p>
+<p><a href="https://github.com/Xion/flappybash/commit/467fe6429fa8dcc7005f5324278804243204ec9a">What I went with instead</a>
+was a 1D array for the pipe itself, and a separate variable to denote its horizontal position.
+Working from there, it wasn&#8217;t too hard to
+<a href="https://github.com/Xion/flappybash/commit/5e3281e408767eab2ade2fa2f9299fee60681bdc">make it move</a>,
+and eventually to check for its collision with the player&nbsp;object.</p>
+<h4>Fitting&nbsp;in</h4>
+<p>That, of course,
+was <a href="https://github.com/Xion/flappybash/commit/ff3260e1dd5fa61695310578091ff922acf06e71">the most important milestone</a>.
+<br/>
+I added <em>an objective</em>.</br>
+It was <em>an actual game</em>.</p>
+<p>And I still had about 100 bytes&nbsp;left!</p>
+<p>Speaking of size, this is probably a good moment
+to talk about making the most of those meager 1234 bytes.
+It&#8217;s not exactly surprising that it was possible mostly thanks to <em>minification</em>.</p>
+<p>While it&#8217;s extremely popular for JavaScript,
+the same abundance of minification utilities cannot be expected when it comes of shell scripts.
+Still, &#8220;bash minification&#8221; does return some useful search results,
+and <a href="http://bash-minifier.appspot.com/">one of them</a> is what I used to shrink the final&nbsp;script.</p>
+<p>Obviously, it didn&#8217;t go without some trouble.
+Since the minifier does little more than to swap newlines for semicolons,
+it got a few bugs that had to be ironed out.
+No big deal, really:
+a small batch of
+<a href="https://github.com/Xion/flappybash/commit/a9556bbef8245bd1ce849e1bffd175412934ef9d">handcrafted, artisanal Python</a>
+was enough to paper over the&nbsp;issues.</p>
+<p>The other technique you can use to slim down is <em>obfuscation</em>, i.e.
+<a href="https://github.com/Xion/flappybash/commit/f2683785a8049fc385e5c6705f66dbb835ad84bc">shortening of the identifiers</a>.
+As the minifier didn&#8217;t offer this feature natively, I had to take care of it&nbsp;myself.</p>
+<p>This lead to adding such interesting assignments as this <code>p</code>:</p>
+<div class="highlight"><pre><span class="nv">p</span><span class="o">=</span><span class="nb">printf</span>
+</pre></div>
+
+
+<p>which absolutely shouldn&#8217;t be confused with <em>this</em> <code>p</code>:</p>
+<div class="highlight"><pre><span class="c"># put text at given position: p $x $y $text</span>
+p<span class="o">()</span> <span class="o">{</span> <span class="nb">echo</span> -en <span class="s2">&quot;\e[</span><span class="nv">$2</span><span class="s2">;</span><span class="si">${</span><span class="nv">1</span><span class="si">}</span><span class="s2">f</span><span class="nv">$3</span><span class="s2">&quot;</span><span class="p">;</span> <span class="o">}</span>
+</pre></div>
+
+
+<p>The reason it works is that in <span class="caps">POSIX</span> shells,
+variables and functions effectively form two separate namespaces.
+Their members are thus referred to in two different&nbsp;ways:</p>
+<div class="highlight"><pre>p <span class="nv">$X</span> <span class="nv">$Y</span> <span class="s2">&quot;\e[1;37;41mB&quot;</span>  <span class="c"># call the p() function</span>
+<span class="nv">$p</span> <span class="s2">&quot;\e[?25l&quot;</span>  <span class="c"># expand the p variable (i.e. call `printf`)</span>
+</pre></div>
+
+
+<p>Notice how functions have longer definitions but shorter usage,
+while the opposite is true for variables.
+Who can now say that Bash doesn&#8217;t find balance in all&nbsp;things?</p>
+<h4>Auditory&nbsp;sensations</h4>
+<p>Like I mentioned before, thanks to those and similar tricks
+I had managed to carve out about a hundred or so bytes of free&nbsp;space.</p>
+<p>Now, what could you possibly do with such a staggering&nbsp;amount?</p>
+<p style="text-align: center">
+    <img src="http://xion.io/images/lawrence-office-space.jpg" alt="Two tweets at the same time!"></br>
+    <small>&#8230;no, that won&#8217;t even be <em>one</em> tweet.</small>
+</p>
+
+<p>Well, let&#8217;s add some <em>sound effects</em>, shall&nbsp;we?</p>
+<p>Before you think that&#8217;s preposterous, remember the <a href="https://en.wikipedia.org/wiki/Bell_character">terminal bell</a>.
+Sounding the bell is as simple as printing the <code>"\a"</code> character (<span class="caps">ASCII</span> 7),
+which for this reason is also known as <code>BEL</code>:</p>
+<div class="highlight"><pre><span class="nb">echo</span> -e <span class="s2">&quot;\a&quot;</span>
+</pre></div>
+
+
+<p>Unfortunately, most terminal emulators silence the actual sound,
+and replace it with a visual indicator &#8212; typically a bell <em>icon</em>.
+If we want to make speakers reliably emit audible phenomena,
+we sadly have to look&nbsp;elsewhere.</p>
+<p>Fortunately, modern Linux systems handle the sound card somewhat better
+than you may have remembered from a few years ago.
+This is usually thanks to <a href="https://en.wikipedia.org/wiki/Advanced_Linux_Sound_Architecture"><span class="caps">ALSA</span></a>,
+a dedicated subsystem in the Linux kernel, and its numerous userspace&nbsp;complements.</p>
+<p>One of them is the inconspicuous <code>speaker-test</code> binary
+which, well, does exactly what it says on the&nbsp;can:</p>
+<div class="highlight"><pre>speaker-test  <span class="c"># play some noise through the speakers</span>
+</pre></div>
+
+
+<p>You can make it play a <span class="caps">WAV</span> file, too,
+but the most interesting option is to synthesize a <em>sine wave</em>.
+By adjusting its frequency, it&#8217;s easy to play higher and lower tones,
+forming the building blocks for more complex&nbsp;sounds.</p>
+<p>What you cannot control is the tone&#8217;s duration.
+That&#8217;s not a big problem, though, since we can run <code>speaker-test</code> in a separate process
+and then just <em><code>kill</code> it dead</em>:</p>
+<div class="highlight"><pre><span class="c"># play a sine wave (requires ALSA): s $frequency $duration</span>
+s<span class="o">()</span> <span class="o">{</span> <span class="o">(</span> speaker-test &gt;<span class="nv">$n</span> -t sine -f <span class="nv">$1</span> <span class="o">)</span><span class="p">&amp;</span> <span class="nv">_p</span><span class="o">=</span><span class="nv">$!</span><span class="p">;</span> sleep <span class="nv">$2</span><span class="p">;</span> <span class="nb">kill</span> -9 <span class="nv">$_p</span><span class="p">;</span> <span class="o">}</span>
+</pre></div>
+
+
+<p><a href="https://github.com/Xion/flappybash/commit/3f259418f3d6167492b7d849c659dfcee0c6aa3d">I&#8217;ve used this approach</a>
+to play a simple, two-tone sound
+whenever the player successfully overcomes a pipe obstacle.
+And I would&#8217;ve probably taken it further if &#8220;<code>speaker_test</code>&#8221; wasn&#8217;t such a damn <em>long</em> string.
+Unfortunately, it was one identifier I couldn&#8217;t afford to shorten,
+and this had put a stop to my ambitious plan of improvising <a href="https://www.sadtrombone.com/">a sad trombone</a>
+upon player&#8217;s failure&nbsp;:(</p>
+<h4>;&nbsp;done</h4>
+<p>It wouldn&#8217;t be right to say I wasn&#8217;t very happy with <a href="https://github.com/Xion/flappybash">the results</a>, though.
+All in all, it was <a href="https://github.com/Xion/flappybash/commits/master">the most fun</a>
+I had with coding in quite some time,
+and definitely the most amusing Bash script I&#8217;ve ever&nbsp;written.</p>
+<p style="text-align: center">
+    <img src="http://xion.io/images/flappybash.jpg" alt="FLAPPY BASH">
+</p>
+
+<p>It also got me curious what other games people have implemented purely as shell scripts.
+To my disappointment, there hadn&#8217;t been all that many.
+Of those I could find, this <a href="http://bruxy.regnet.cz/web/linux/EN/housenka-bash-game/">Snake clone</a>
+in about <span class="caps">7KB</span> of (unobfuscated) Bash
+is probably the most polished&nbsp;one.</p>
+<p>As you can see then, this is clearly an under-appreciated platform
+that evidently displays a lot of potential!
+If you want to create games that are both very portable
+and <em>extremely</em> space-efficient,
+Bash is definitely a technology you should have a closer look at&nbsp;;-)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Here&#8217;s the original announcement post <a href="http://gynvael.coldwind.pl/?lang=pl&amp;id=624">in Polish</a>
+and its somewhat understandable
+<a href="https://translate.google.com/translate?sl=auto&amp;tl=en&amp;js=y&amp;prev=_t&amp;hl=en&amp;ie=UTF-8&amp;u=http%3A%2F%2Fgynvael.coldwind.pl%2F%3Flang%3Dpl%26id%3D624&amp;edit-text=&amp;act=url">Google-translated version</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Yes, I&#8217;m ignoring the elephant in the room which is the web browser.
+It&#8217;s probably because a pile of minified JavaScript doesn&#8217;t strike me as very interesting anymore :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Nowadays, though,
+the <a href="https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame"><code>requestAnimationFrame</code> function</a>
+is closer to the actual continuous processing in the background.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Regular programs could simply call <a href="http://man7.org/linux/man-pages/man2/alarm.2.html">the <code>alarm</code> function</a>
+instead of forking a subprocess. But then again, regular programs could just run a normal game loop.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/bash-flappy-bird.html#bash-flappy-bird">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
+    <p>
+      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
+<p>For a long time, I resisted the appeal of various incremental improvements
+that early 3.x releases offered.
+And the world agreed with me:
+a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
+<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
+<p>As if to compensate for years of &#8220;good enough&#8221;,
+Python 3 development team has given in to a steadily accelerating feature creep.
+Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
+(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
+but it nevertheless causes an increasingly wide functional gap
+between the 2.x and 3.x&nbsp;series.</p>
+<p>Starting from around Python 3.5, this gap becomes really noticeable,
+even when partially bridged with many excellent backports.
+The ecosystem support is also mostly there,
+at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
+<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
+<p>Given all those portents,
+even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
+For better or for worse, 3.x is how Python will look like in the coming years and decades.
+Might as well prepare for&nbsp;it.</p>
+<p>In this post, I will discuss some important issues
+one should be aware of before trying to switch from Python 2 to 3.
+I won&#8217;t be talking about all the minute changes and additions,
+but cover the more significant, broader concepts
+that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
+<p>The two concepts I&#8217;ll be mentioning here are
+<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
+<h4>Unicode&nbsp;handling</h4>
+<p>You have probably heard it before.
+Python 3 was going to solve your Unicode problems once and for all.
+You haven&#8217;t believed it, of course,
+like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
+<p>Still, it may be rather surprising to learn
+that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
+<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
+<p>In any case, either version of Python gets the most important thing about Unicode right.
+They both distinguish, at the type level,
+between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
+The type that holds the latter is called <code>bytes</code> in both versions,
+while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
+<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
+where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
+<p>But where Python 2 does poorly is in the choice of defaults.
+You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
+That <code>str</code> is a fully functional string type,
+even though it can only contain <span class="caps">ASCII</span> characters.
+Moreover, it is also the <em>default</em>:
+quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
+<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
+<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
+If you already deal with Unicode correctly in your programs
+&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
+your main benefit will be not having to write that <code>u""</code> quotes anymore.
+Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
+rather than letting you write &#8220;working&#8221; programs
+that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
+<h4>Laziness by&nbsp;default</h4>
+<p>The second major change that Python 3 brings is of similar nature.
+It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
+<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
+are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
+Included in these are functions like <code>map</code> or <code>filter</code>,
+as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
+<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
+<ul>
+<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
+<li><code>xrange</code> is now just <code>range</code></li>
+<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
+</ul>
+<p>and so&nbsp;on.</p>
+<p>In some cases, this is exactly what happens.
+For example, there is virtually no downside to the new implementation of <code>range</code>,
+especially considering the way it is used most&nbsp;often.</p>
+<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
+Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
+their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
+i.e. the most simplistic and limited flavor of Python iterables.
+Working with them is trickier and more error-prone than with lists,
+which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
+that generators expose us&nbsp;to.</p>
+<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
+by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
+and using its functions in place of the built-ins.
+What you could gain in return was increased performance, and a lesser memory footprint.
+All those benefits came from making the computations <em>lazy</em>
+and refraining from storage of the intermediate&nbsp;results.</p>
+<p>In Python 3, however, laziness is <em>preordained</em>.
+Even if we don&#8217;t need or care about the aforementioned perks,
+we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
+<p>One option is to embrace lazy evaluation fully,
+and adapt to handling unspecified iterables throughout our code bases.<br>
+The risk is an increased frequency of bugs stemming from generator misuse &#8212;
+including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
+deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
+<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
+wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
+in order to &#8220;sanitize&#8221; them for later (re)use.<br>
+Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
+</pre></div>
+
+
+<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
+    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
+    <span class="c"># ...the rest of a long function...</span>
+</pre></div>
+
+
+<p>Even if you choose the first path, and somehow use lazy generators everywhere,
+conversions are still required at the serialization&nbsp;boundaries:</p>
+<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
+</pre></div>
+
+
+<p>At least in this case, the lazy iterable will vocally fail with an exception,
+rather than silently doing nothing (in case of repeated iteration)
+or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
+<h4>from __future__ import&nbsp;doubts</h4>
+<p>So, here they are: the highlights of Python 3.
+If you are disappointed they all turned out to be mixed blessings,
+don&#8217;t worry: you are
+<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
+<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
+<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
+<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
+<p>The truth is that Python 3 is more finnicky, less forgiving,
+and much less beginner-friendly than its predecessor.
+Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
+by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
+<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
+Perhaps it&#8217;s not a coincidence
+that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
+has passed between the first public version of Python (0.9)
+and the release of Python 3.0.
+By no conceivable means it is a toy language anymore,
+and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
+<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
+<p>It&#8217;s becoming harder to claim the language favors simplicity
+over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
+It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
+is the <em>obvious</em> way to do it.<br>
+It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
+and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
+<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
+The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
+But who knows? Maybe after two decades,
+a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
+<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
+are about to get&nbsp;in!</p>
+      <a class="btn" href="http://xion.io/post/code/python3-primer.html#python3-primer">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">for loops in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Tue 26 July 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/loops.html">loops</a>,      <a href="http://xion.io/tag/iterators.html">iterators</a>      &#8226; <a href="http://xion.io/post/code/rust-for-loop.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In this post, I&#8217;m going to talk about the <code>for</code> loop construct in <a href="https://rust-lang.org">Rust</a>,
+as well as the related concepts of <em>iterators</em> and&nbsp;&#8220;iterables&#8221;.</p>
+<p>Depending on your programming language background,
+they may seem somewhat familiar in terms of syntax <span class="amp">&amp;</span> semantics,
+or rather mysterious and surprising.
+Their closest analogues exist in Python,
+but programmers of Java, C#, or (modern) C++ should recognize many relevant features and ideas as&nbsp;well.</p>
+<h4>Basics</h4>
+<p>The syntax of a <code>for</code> loop is so modest it&#8217;s almost spartan<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;3&quot;</span><span class="p">];</span><span class="w"></span>
+<span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you would expect, <a href="https://is.gd/qtxqLD">this prints three lines</a> with <code>1</code>, <code>2</code>, <code>3</code>.
+What is probably not as obvious is that
+over the course of this loop the <code>v</code> vector was <em>expended</em>.
+Trying to <a href="https://is.gd/1mv7RV">use it</a> after the iteration,
+we&#8217;ll get a borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>&lt;anon&gt;:6:22: 6:23 error: use of moved value: `v` [E0382]
+&lt;anon&gt;:4         println!(&quot;{}&quot;, x);
+&lt;anon&gt;:5     }
+&lt;anon&gt;:6     println!(&quot;{:?}&quot;, v);
+                              ^
+</pre></div>
+
+
+<p>In Rust jargon, the vector has been <strong>moved</strong> into the loop.
+Its ownership &#8212; and that of its individual elements &#8212; has been transfered there permanently.
+While definitely surprising when compared to other languages,
+this behavior is consistent with Rust&#8217;s ubiquitous policy of moving values by&nbsp;default.</p>
+<p>Still, you may not expect it here
+because moving ownership is mostly seen at the function call boundaries.
+For most intents and purposes, however,
+you can picture a <code>for_each</code> function like this to be the equivalent of the <code>for</code> loop&nbsp;above:</p>
+<div class="highlight"><pre><span class="n">for_each</span><span class="p">(</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
+</pre></div>
+
+
+<p>This also gives us a hint on how we could prevent the move from happening.
+Rather than taking the vector itself,
+the function could accept only a reference to&nbsp;it:</p>
+<div class="highlight"><pre><span class="n">for_each_ref</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
+</pre></div>
+
+
+<p>After we translate this <a href="https://is.gd/Zrq0JL">back to the looping syntax</a>:</p>
+<div class="highlight"><pre><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+<span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>we won&#8217;t get any more objections from the&nbsp;compiler.</p>
+<h4>Iterators and &#8220;iterables&#8221; in&nbsp;Rust</h4>
+<p>It is important to emphasize that this new ampersand symbol (<code>&amp;</code>)
+is by no means a part of the syntax of the <code>for</code> loop itself.
+We have actually changed <em>what object</em> we&#8217;re iterating here.
+It is no longer <code>Vec&lt;T&gt;</code> &#8212; a vector itself &#8212; but <code>&amp;Vec&lt;T&gt;</code>, an immutable reference to it.
+As a consequence, <code>x</code> is not a <code>T</code> (the element type) anymore,
+but a <code>&amp;T</code> &#8212; a <em>reference</em> to an element<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<p>So it seems that in Rust, both <code>Vec&lt;T&gt;</code> and <code>&amp;Vec&lt;T&gt;</code> are what we would call &#8220;iterables&#8221;:
+collections (or other objects) that we can get iterate over.
+The usual way this is implemented in various programming languages
+is by introducing an <em>iterator</em>&nbsp;object.</p>
+<p>The iterator keeps track of what element it&#8217;s currently pointing to
+and supports at least the following basic&nbsp;operations:</p>
+<ul>
+<li>getting the current&nbsp;element</li>
+<li>advancing to the next&nbsp;element</li>
+<li>signaling when no more elements are&nbsp;available</li>
+</ul>
+<p>Some languages provide separate iterator methods for each of those tasks,
+but Rust chooses to combine them all into one.
+You can see that when looking at the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>:
+<code>next</code> is the only method to be provided by its&nbsp;implementations.</p>
+<h4>Desugaring with&nbsp;into-iterators</h4>
+<p>How is the iterator object created,&nbsp;though?</p>
+<p>In a typical Rust manner, this job is delegated to another trait.
+This one is called <code>IntoIterator</code>,
+and it roughly corresponds to the &#8220;iterable&#8221; concept I&#8217;ve alluded to&nbsp;earlier:</p>
+<div class="highlight"><pre><span class="c1">// (simplified)</span>
+<span class="k">trait</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>What is uniquely Rusty is the fact that <code>into_iter</code> &#8212; the sole method of this trait &#8212;
+doesn&#8217;t just create a new iterator for the collection.
+Instead, it effectively <em>consumes</em> the whole thing,
+leaving the new iterator as its only remnant and the only way to access the items<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>This, of course, is a direct manifestation of the Rust&#8217;s move-by-default policy.
+In this case, it protects us from the common problem of <strong>iterator invalidation</strong>
+which is probably all-too-familiar to C++ programmers.
+Because the collection is essentially &#8220;converted&#8221; to an iterator here, it is&nbsp;impossible:</p>
+<ul>
+<li>for more than one iterator to exist at a&nbsp;time</li>
+<li>to modify the collection while any iterators are in&nbsp;scope</li>
+</ul>
+<p>Doesn&#8217;t all this &#8220;moving&#8221; and &#8220;consuming&#8221; sound familiar, by the way?
+I&#8217;ve mentioned earlier that when we iterate over a vector with a <code>for</code> loop,
+we essentially move it &#8220;into the&nbsp;loop&#8221;.</p>
+<p>As you can probably deduce by now,
+what really happens is that <code>IntoIterator::into_iter</code> is invoked on the vector.
+Its result &#8212; the iterator object &#8212; is then repeatedly <code>next</code><span class="quo">&#8216;</span>ed until it returns <code>None</code>.</p>
+<p>In a way, a <code>for</code> loop like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>is therefore nothing else but a syntactic sugar for the following expanded&nbsp;version:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">iter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="n">v</span><span class="p">);</span><span class="w"></span>
+<span class="k">loop</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">iter</span><span class="p">.</span><span class="n">next</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Some</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="c1">// body</span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="nb">None</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">break</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>You can see quite clearly that <code>v</code> is unusable not only after the loop ends,
+but before it even <em>begins</em>.
+This is because it has been moved into <code>iter</code> &#8212; into an iterator &#8212;
+through an <code>into_iter</code> method&#8230; of <code>IntoIterator</code>!</p>
+<p>Simple, huh?&nbsp;:)</p>
+<blockquote>
+<p><code>for</code> loop is just a syntactic sugar for an <code>IntoIterator::into_iter</code> invocation,
+followed by repeated calling of <code>Iterator::next</code>.</p>
+</blockquote>
+<h4>The&nbsp;ampersand</h4>
+<p>On a more serious note, this move isn&#8217;t something that we&#8217;d always want to happen.
+Fortunately, we know a way to prevent it.
+Rather than iterating over the vector itself, use a <em>reference</em> to&nbsp;it:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The great thing about this syntax is that everything said above still applies,
+up to and including the desugaring procedure.
+The <code>into_iter</code> method is still being invoked,
+except that this time it is done on the <em>reference to the collection</em> &#8212;
+<code>&amp;Vec&lt;T&gt;</code> rather than <code>Vec&lt;T&gt;</code>:</p>
+<div class="highlight"><pre><span class="c1">// (simplified)</span>
+<span class="k">impl</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="o">&lt;</span><span class="n">Item</span><span class="o">=&amp;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The result is therefore an iterator that yields <em>references</em> to the elements (<code>&amp;T</code>),
+rather than elements themselves (<code>T</code>).
+And because <code>self</code> above is also a reference,
+the collection isn&#8217;t really moved anywhere,
+which is why we can freely access it after the loop&nbsp;ends.</p>
+<p>The exact same thing happens when looping over a <em>mutable</em>&nbsp;reference:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>except that this time <code>into_iter</code> is called for <code>&amp;mut Vec&lt;T&gt;</code>.
+Result is therefore of type <code>Iterator&lt;Item=&amp;mut T&gt;</code>,
+enabling us to modify the elements as we go through&nbsp;them.</p>
+<p>No further compiler machinery is required to support those two cases,
+because everything is already handled by the same&nbsp;trait.</p>
+<blockquote>
+<p>The <code>IntoIterator</code> desugaring works the same way for collections
+<em>and</em> both immutable and mutable references to&nbsp;them.</p>
+</blockquote>
+<h4>What about the iter()&nbsp;method?</h4>
+<p>So far, we&#8217;ve talked about regular <code>for</code> loops,
+and the very imperative style of computation they&nbsp;represent.</p>
+<p>If you are more inclined towards functional programming, though,
+you may have seen and written rather different constructs,
+combining various &#8220;fluent&#8221; methods into expressions such as this&nbsp;one:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">numbers</span><span class="p">.</span><span class="n">iter</span><span class="p">()</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>Methods like <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"><code>map</code></a>
+and <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"><code>filter</code></a> here
+are called <em>iterator adapters</em>,
+and they are all defined on the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>.
+Not only are they very powerful and numerous,
+but they can also be supplemented through several <a href="https://crates.io/crates/itertools">third-party crates</a>.</p>
+<p>In order to take advantage of the adapters, however,
+we need to obtain an iterator for our collection first.
+We know that <code>into_iter</code> is the way loops normally do it,
+so in principle we could follow the same approach&nbsp;here:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="o">&amp;</span><span class="n">numbers</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>To spare us the verbosity of this explicit syntax,
+collections normally offer an <code>iter</code> method which is exactly equivalent<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+This method is what you will normally see in chained expressions like the one&nbsp;above.</p>
+<blockquote>
+<p><code>v.iter()</code> is just a shorthand for <code>IntoIterator::into_iter(&amp;v)</code>.</p>
+</blockquote>
+<h4>Why not&nbsp;both?</h4>
+<p>The last thing to note is that Rust mandates neither loops nor iterator adapters
+when writing code that operates on collections of elements.
+When optimizations are turned on in the <a href="http://doc.crates.io/manifest.html#the-profile-sections">release mode</a>,
+both versions should compile to equally efficient machine code,
+with closures inlined and loops unrolled where&nbsp;necessary.</p>
+<p>Choosing one style over the other is therefore a matter of convention and style.
+Sometimes the right choice may actually be a <em>mix</em> of both approaches,
+and Rust allows it without any&nbsp;complaints:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">print_prime_numbers_upto</span><span class="p">(</span><span class="n">n</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Prime numbers lower than {}:&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="mf">2.</span><span class="p">.</span><span class="n">n</span><span class="p">).</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">i</span><span class="o">|</span><span class="w"> </span><span class="n">is_prime</span><span class="p">(</span><span class="n">i</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Like before, this is possible through the same <code>for</code> loop desugaring
+that involves the <code>IntoIterator</code> trait.
+In this case, Rust will simply use a
+<a href="https://github.com/rust-lang/rust/blob/bbfcb471db0799a7d92d62e66cf44bbd68051675/src/libcore/iter/traits.rs#L253">no-op implementation</a>
+of this trait, &#8220;converting&#8221; any existing <code>Iterator</code> <span class="dquo">&#8220;</span>into&#8221;&nbsp;itself.</p>
+<blockquote>
+<p>Iterators themselves are also &#8220;iterables&#8221;,
+implementing <code>IntoIterator::into_iter</code> as a&nbsp;pass-through.</p>
+</blockquote>
+<h4>Looping&nbsp;around</h4>
+<p>If you want to know even more about iterators and loops in Rust,
+the best source at this point is probably just
+<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the official documentation</a>.
+And although mastering all the iterator adapters is of course not necessary to write effective Rust code,
+taking a careful look at least at
+<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the <code>collect</code> method</a>
+(and the associated <a href="https://doc.rust-lang.org/std/iter/trait.FromIterator.html"><code>FromIterator</code> trait</a>)
+is definitely&nbsp;helpful.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The &#8220;two-semicolon&#8221; variant of the <code>for</code> loop doesn&#8217;t exist in Rust. Just like in Python, the equivalent is
+iterating over a <a href="http://rustbyexample.com/flow_control/for.html">range object</a>, or using a regular <code>while</code> loop
+for more complex cases.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>This shift is completely transparent in the loop&#8217;s body. The way it works is based on Rust&#8217;s special mechanism
+called <a href="https://doc.rust-lang.org/book/deref-coercions.html">the <code>Deref</code> coercions</a>.
+Without going into too much detail (as it is way out of scope for this post),
+this feature allows us to treat references to objects (<code>&amp;T</code>) as if they were the objects themselves (<code>T</code>).
+The compiler will perform the necessary <em>derefencing</em> where possible,
+or signal an error in case of a (rare) ambiguity.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>How do we know that? It&#8217;s because <code>into_iter</code> takes <code>self</code> (rather than <code>&amp;self</code> or <code>&amp;mut self</code>)
+as its first parameter. It means that the entire object for which this method is called is moved <em>into</em> its body
+(hence the method&#8217;s name).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Curiously enough, this equivalence isn&#8217;t encoded in the type system in any way,
+making it technically just a convention. It is followed consistently at least in the standard library, though.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">str.startswith() with tuple&nbsp;argument</a></h2>
+    <p>
+      Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/tuples.html">tuples</a>      &#8226; <a href="http://xion.io/post/code/python-startswith-tuple.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a little known trick that&#8217;s applicable to Python&#8217;s <a href="http://bugs.python.org/issue1491485"><code>startswith</code></a>
+and <a href="http://bugs.python.org/issue1491485"><code>endswith</code></a> methods of <code>str</code> (and <code>unicode</code>).</p>
+<p>Suppose you&#8217;re checking whether a string starts with some&nbsp;prefix:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">):</span>
+    <span class="c"># totally an URL</span>
+</pre></div>
+
+
+<p>You eventually add more possible prefixes (or suffixes) to your&nbsp;condition:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;https://&#39;</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Later on you notice the repetition and refactor it into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">]</span>
+<span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or if you&#8217;re feeling extra&nbsp;functional:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">,</span> <span class="n">SCHEMES</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Turns out, however, that <code>startswith</code> (and <code>endswith</code>) support this use case natively.
+Rather than passing just a single string as the argument,
+you can provide a <em>tuple</em> of strings&nbsp;instead:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Either method will then check the original string against every element of the passed tuple.
+Both will only return <code>True</code> if <em>at least one</em> of the strings is recognized as prefix/suffix.
+As you can see, that&#8217;s exactly what we would previously do with <code>any</code>.</p>
+<p>Somewhat surprisingly, however, the feature only works for actual <em>tuples</em>.
+Trying to pass a seemingly equivalent iterable &#8212; a <code>list</code> or <code>set</code>, for example &#8212;
+will be met with interpreter&#8217;s&nbsp;refusal:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">is_jpeg</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">([</span><span class="s">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s">&#39;.jpeg&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre>TypeError: endswith first arg must be str, unicode, or tuple, not list
+</pre></div>
+
+
+<p>If you dig into it, there doesn&#8217;t seem to be a compelling reason for this behavior.
+The <a href="http://bugs.python.org/issue1491485">relevant feature request</a> talks about
+consistency with the built-in <code>isinstance</code> function,
+but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
+<p>In any case, this can be worked around without much&nbsp;difficulty:</p>
+<div class="highlight"><pre><span class="n">PROTOCOLS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http&#39;</span><span class="p">,</span> <span class="s">&#39;https&#39;</span><span class="p">,</span> <span class="s">&#39;ftp&#39;</span><span class="p">,</span> <span class="s">&#39;git&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="s">&#39;://&#39;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">PROTOCOLS</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
+      <a class="btn" href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
     <p>
       Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -527,803 +1480,6 @@ the <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/python-mock-configure.html#python-mock-configure">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-get-lambda-code.html#python-get-lambda-code">Source code of a Python&nbsp;lambda</a></h2>
-    <p>
-      Posted on Tue 19 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/ast.html">AST</a>,      <a href="http://xion.io/tag/bytecode.html">bytecode</a>      &#8226; <a href="http://xion.io/post/code/python-get-lambda-code.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><em>&#8230;or: The Most Hideous Hack I&#8217;ve (Almost)&nbsp;Done</em></p>
-<p>In <a href="http://github.com/Xion/callee">callee</a>, the <a href="http://callee.readthedocs.org">argument matcher library for Python</a> that
-<a href="http://xion.io/post/news/callee-intro.html">I released recently</a>, there is this lovely
-<a href="https://github.com/Xion/callee/blob/f695ff4e1c45bfd45445ebb8014a202029a93dce/callee/general.py#L55"><code>TODO</code> note</a>
-for a seemingly simple feature. When using the
-<a href="http://callee.readthedocs.org/en/stable/reference/general.html#callee.general.Matching"><code>Matching</code> construct</a>
-with a simple <code>lambda</code> predicate:</p>
-<div class="highlight"><pre><span class="n">mock_foo</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="n">Matching</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))</span>
-</pre></div>
-
-
-<p>it would be great to see its <em>code</em> in the error message if the assertion fails. Right now it&#8217;s just going to say
-something like <code>&lt;Matching &lt;function &lt;lambda&gt; at 0x7f5d8a06eb18&gt;&gt;</code>. Provided you don&#8217;t possess a supernatural ability
-of dereferencing pointers in your head, this won&#8217;t give you any immediate hint as to what went wrong. Wouldn&#8217;t it be nice
-if it read as, say, <code>&lt;Matching \x: x % 2&gt;</code> instead?<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup></p>
-<p>So I thought: why not try and implement such a mechanism? This is Python, after all &#8212; a language where you can spawn
-<a href="https://blog.ionelmc.ro/2015/02/09/understanding-python-metaclasses/#simple-metaclass-use">completely new classes</a>
-at runtime, walk the stack <a href="https://docs.python.org/2/library/inspect.html#the-interpreter-stack">backwards</a>
-(or even <a href="https://docs.python.org/2/library/sys.html#sys.settrace">forward</a>) and read the local variables,
-or change the behavior of the <a href="http://xion.org.pl/2012/05/06/hacking-python-imports/">import system itself</a>.
-Surely it would be possible &#8212; nay, easy &#8212; to get the source code of a short lambda function,&nbsp;right?</p>
-<p>Boy, was I <em>wrong</em>.</p>
-<p>Make no mistake, though: the task turned out to be absolutely doable, at least in the scope I wanted it done.
-But what would you think of a solution that involves not just the usual Python hackery, but also <span class="caps">AST</span> inspection,
-transformations of the source code as text, <em>and</em> bytecode&nbsp;shenanigans?&#8230;</p>
-<h4>The code, all the code, and&#8230; much more than the&nbsp;code</h4>
-<p>Let&#8217;s start from the beginning, though. Here&#8217;s a short lambda function, the kind of which we&#8217;d like to obtain
-the source code&nbsp;of:</p>
-<div class="highlight"><pre><span class="n">is_even</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">=</span> <span class="mi">0</span>
-</pre></div>
-
-
-<p>If the documentation for Python standard library is to be believed, this should be pretty easy.
-In the <a href="https://docs.python.org/2/library/inspect.html"><code>inspect</code> module</a>,
-there is a function called no different than
-<a href="https://docs.python.org/2/library/inspect.html#inspect.getsource"><code>getsource</code></a>. For our purposes, however,
-<a href="https://docs.python.org/2/library/inspect.html#inspect.getsourcelines"><code>getsourcelines</code></a> is a little more
-convienient, because we can easily tell when the lambda is too&nbsp;long:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">get_short_lambda_source</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">source_lines</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcelines</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">None</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">source_lines</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">None</span>
-    <span class="k">return</span> <span class="n">source_lines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-</pre></div>
-
-
-<p>Of course if you programmed in Python for any longer period of time, you know very well that the standard docs
-are <em>not</em> to be trusted. And it&#8217;s not just that the <code>except</code> clause should also include <code>TypeError</code>, because it
-will be thrown when you try to pass any of the Python builtins to <code>getsourcelines</code>.</p>
-<p>More important is the ambiguity of what does &#8220;source lines for an object&#8221; actually mean. &#8220;Source lines <em>containing</em>
-the object definition&#8221; would be much more accurate, and this seemingly small distinction is rather crucial here.
-Passing a lambda function to either <code>getsourcelines</code> or <code>getsource</code>, we&#8217;ll get its source <em>and everything else</em>
-that the returned lines&nbsp;included.</p>
-<p>That&#8217;s right. Say hello to the complete <code>is_even =</code> assignment, and the entire <code>assert_called_with</code> invocation!
-And in case you are wondering: yes, the result will also include any end-of-line comments. No token left&nbsp;behind!</p>
-<h4>Trim&nbsp;left</h4>
-<p>Clearly this is more than we&#8217;ve bargained for. Maybe there is a way to strip away the unnecessary cruft? Python does
-know how to parse itself, after all: the standard <a href="https://docs.python.org/2/library/ast.html"><code>ast</code> module</a>
-is a manifestation of this knowledge. Perhaps we can use it to retrieve the <code>lambda</code> <span class="caps">AST</span> node in order to turn it &#8212;
-and just it &#8212; back into Python&nbsp;code?&#8230;</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">get_short_lambda_ast_node</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">):</span>
-    <span class="n">source_text</span> <span class="o">=</span> <span class="n">get_short_lambda_source</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">source_text</span><span class="p">:</span>
-        <span class="n">source_ast</span> <span class="o">=</span> <span class="n">ast</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">source_text</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">next</span><span class="p">((</span><span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">ast</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">source_ast</span><span class="p">)</span>
-                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Lambda</span><span class="p">)),</span> <span class="bp">None</span><span class="p">)</span>
-</pre></div>
-
-
-<p>But as it turns out, getting the source text back this way is only <em>mostly</em>&nbsp;possible.</p>
-<p>See, every substantial <span class="caps">AST</span> node &#8212; which is either an expression (<code>ast.expr</code>) or a statement (<code>ast.stmt</code>) &#8212;
-has two common attributes: <code>lineno</code> and <code>col_offset</code>. When combined, they point to a place in the original source code
-where the node was parsed from. This is how we can find out where to look for the definition of our lambda&nbsp;function.</p>
-<p>Looks promising, right? The only problem is we don&#8217;t know when to <em>stop</em> looking.
-That&#8217;s right: nodes created by <code>ast.parse</code> are annotated with their start offset, but not with length nor the end offset.
-As a result, the best we can do when it comes to carving out the lambda source from the very first example is&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))</span>
-</pre></div>
-
-
-<p>So close! Those hanging parentheses are evidently just taunting us, but how can we remove them? <code>lambda</code> is basically
-just a Python expression, so in principle it can be followed by almost anything. This is doubly true for lambdas inside
-the <code>Matching</code> construct, as they may be a part of some larger mock&nbsp;assertion:</p>
-<div class="highlight"><pre><span class="n">mock_foo</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="n">Matching</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="n">Integer</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">GreaterThan</span><span class="p">(</span><span class="mi">42</span><span class="p">))</span>
-</pre></div>
-
-
-<p>Here, the extraneous suffix is the entirety of <code>), Integer() &amp; GreaterThan(42))</code>, quite a lot of more than just <code>))</code>.
-And that&#8217;s of course nowhere near the limit of possiblities: for one, there may be more <code>lambda</code>s in there,&nbsp;too!</p>
-<h4>Back off, <em>slowly</em></h4>
-<p>It seems, however, that there is one thing those troublesome tails have in common: <em>they aren&#8217;t syntactically valid</em>.</p>
-<p>Intuitively, a <code>lambda</code> node nested within some other syntactical constructs will have their closing fragments (e.g. <code>)</code>)
-appear somewhere after its end. Without the corresponding openings (e.g. <code>Matching(</code>), those fragments won&#8217;t&nbsp;parse.</p>
-<p>So here&#8217;s the crazy idea. What we have is invalid Python, but only because of some unspecified number of extra characters.
-How about we just try and remove them, one by one, until we get something that <em>is</em> syntactically correct?
-If we are not mistaken, this will finally be our lambda and nothing&nbsp;else.</p>
-<p>The fortune favors the brave, so let&#8217;s go ahead and try&nbsp;it:</p>
-<div class="highlight"><pre><span class="c"># ... continuing get_short_lambda_source() ...</span>
-
-<span class="n">source_text</span> <span class="o">=</span> <span class="n">source_lines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-<span class="n">lambda_node</span> <span class="o">=</span> <span class="n">get_short_lambda_ast_node</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">)</span>
-
-<span class="n">lambda_text</span> <span class="o">=</span> <span class="n">source_text</span><span class="p">[</span><span class="n">lambda_node</span><span class="o">.</span><span class="n">col_offset</span><span class="p">:]</span>
-<span class="n">min_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="s">&#39;lambda:_&#39;</span><span class="p">)</span>  <span class="c"># shortest possible lambda expression</span>
-<span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">lambda_text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">min_length</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">ast</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">lambda_text</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">lambda_text</span>
-    <span class="k">except</span> <span class="ne">SyntaxError</span><span class="p">:</span>
-        <span class="n">lambda_text</span> <span class="o">=</span> <span class="n">lambda_text</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-<span class="k">return</span> <span class="bp">None</span>
-</pre></div>
-
-
-<p>Considering that we&#8217;re basically taking lessons from the dusty old tomes in the Restricted Section of Hogwarts library,
-the magic here looks quite simple. As long as there is something that can pass for a lambda definition,
-we try to parse it and see if it succeeds. The line that says <code>except SyntaxError:</code> is obviously not something for
-the faint of heart, but at least we are specifying
-<a href="https://docs.python.org/2/howto/doanddont.html#except"><em>what</em> exception</a> we anticipate&nbsp;catching.</p>
-<p>And the kicker? It <em>works</em>. By that I mean it doesn&#8217;t return garbage results for a few obvious and not so obvious
-test cases, which is already more than you would normally expect from hacks of this magnitude.
-All the lambdas defined until this paragraph, for example, can have their source code extracted without&nbsp;issue.</p>
-<h4>Just one more&nbsp;thing</h4>
-<p>So&#8230; victory? Not quite. Astute readers may recall my promise of some bytecode arcana, and now&#8217;s the time for&nbsp;it.</p>
-<p>Despite the initial success of our gradual, character dropping approach, there are cases where it doesn&#8217;t produce
-the correct result. Consider, for example, a lambda definition that&#8217;s nestled within a tuple<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">x</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span><span class="p">,</span> <span class="mi">0</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">get_short_lambda_source</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-<span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span><span class="p">,</span> <span class="mi">0</span>
-</pre></div>
-
-
-<p>We would of course expect the result to be <code>lambda _: True</code>, without a comma or&nbsp;zero.</p>
-<p>Unfortunately, here&#8217;s where our earlier assumption fails rather spectacularly. The line of code extracted from <span class="caps">AST</span>
-is syntactically valid even <em>with</em> the extra characters. As a result, <code>ast.parse</code> succeeds too early and returns an
-incorrect definition. It should have been of a lambda contained within a tuple, but tuple is apparently what the lambda
-<em>returns</em>.</p>
-<p>You may say that this is the sharp end of a narrow edge case, and anyone who defines functions like that deserves all
-the trouble they get. And sure, I wouldn&#8217;t mind if we just threw hands in the air and tell them we&#8217;re simply unable
-to retrieve the source here. But my opinion is that it doesn&#8217;t justify serving them obviously <em>wrong</em>&nbsp;results!</p>
-<h4>A halting&nbsp;problem</h4>
-<p>Not if we can help it, anyway. Have a look at the expected source code and the one we&#8217;ve extracted, side by&nbsp;side:</p>
-<div class="highlight"><pre><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span>
-<span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span><span class="p">,</span> <span class="mi">0</span>
-</pre></div>
-
-
-<p>The second line isn&#8217;t just longer: it is also <em>doing more</em>. It isn&#8217;t just defining a lambda; it defines it,
-conjures up a constant <code>0</code>, and then packs them both into a tuple. That&#8217;s at least two additional steps compared to
-the&nbsp;original.</p>
-<p>Those steps have a more precise name, too: they are the <em>bytecode instructions</em>. Every piece of Python source is compiled
-to a binary bytecode before it&#8217;s executed, because the interpreter can only work with this representation.
-Compilation typically happens when a Python module is first imported, producing a <em>.pyc</em> file corresponding to its
-<em>.py</em> file. Subsequent imports will simply reuse the cached&nbsp;bytecode.</p>
-<p>Moreover, any function or class object has its bytecode accessible (read-only) at runtime. There is even a
-<a href="http://late.am/post/2012/03/26/exploring-python-code-objects.html">dedicated data type</a> to hold it &#8212; called simply
-<code>code</code> &#8212; with a buffer of raw bytes under one of its&nbsp;attributes.</p>
-<p>Finally, the bytecode compiler itself is also available to Python programs as a built-in
-<a href="https://docs.python.org/2/library/functions.html#compile"><code>compile</code> function</a>. You don&#8217;t see it used as often as its
-counterparts <a href="https://docs.python.org/2/library/functions.html#eval"><code>eval</code></a>
-and <a href="https://docs.python.org/2/reference/simple_stmts.html#exec"><code>exec</code></a> (which hopefully are a rare sight themselves!),
-but it taps into the same internal machinery of&nbsp;Python.</p>
-<p>So how does it all add up? The idea is, basically, to cross-check the alleged source code of the lambda with its own
-<em>byte</em>code. Any junk that&#8217;s still left to trim &#8212; even if syntactically valid &#8212; will surface as a divergence after
-compilation. Thus we can simply continue dropping characters until the bytecodes&nbsp;match:</p>
-<div class="highlight"><pre><span class="n">lambda_text</span> <span class="o">=</span> <span class="n">source_text</span><span class="p">[</span><span class="n">lambda_node</span><span class="o">.</span><span class="n">col_offset</span><span class="p">:]</span>
-<span class="n">lambda_body_text</span> <span class="o">=</span> <span class="n">source_text</span><span class="p">[</span><span class="n">lambda_node</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">col_offset</span><span class="p">:]</span>
-<span class="n">min_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="s">&#39;lambda:_&#39;</span><span class="p">)</span>  <span class="c"># shortest possible lambda expression</span>
-<span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">lambda_text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">min_length</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="n">lambda_body_text</span><span class="p">,</span> <span class="s">&#39;&lt;unused filename&gt;&#39;</span><span class="p">,</span> <span class="s">&#39;eval&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">code</span><span class="o">.</span><span class="n">co_code</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">lambda_func</span><span class="o">.</span><span class="n">__code__</span><span class="o">.</span><span class="n">co_code</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">lambda_text</span>
-    <span class="k">except</span> <span class="ne">SyntaxError</span><span class="p">:</span>
-        <span class="k">pass</span>
-    <span class="n">lambda_text</span> <span class="o">=</span> <span class="n">lambda_text</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-    <span class="n">lambda_body_text</span> <span class="o">=</span> <span class="n">lambda_body_text</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-<span class="k">return</span> <span class="bp">None</span>
-</pre></div>
-
-
-<p>Okay, maybe not the exact bytes<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>, but stopping at the identical bytecode <em>length</em> is good enough a strategy.
-As an obvious bonus, <code>compile</code> will also take care of detecting syntax errors in the candidate source code,
-so we don&#8217;t need the <code>ast</code> parsing&nbsp;anymore.</p>
-<h4>That escalated&nbsp;quickly!</h4>
-<p>Believe it or not, but there aren&#8217;t any more objections to this solution, You can view it in its glorious entirety
-by looking at <a href="https://gist.github.com/Xion/617c1496ff45f3673a5692c3b0e3f75a">this gist</a>.</p>
-<p>Does it mean it is also making its cameo in the <a href="https://github.com/Xion/callee"><em>callee</em> library</a>?&#8230;</p>
-<p>No, I&#8217;m afraid&nbsp;not.</p>
-<p>Normally, I&#8217;m not the one to shy away from, ahem, <em>bold</em> solutions to tough problems. But in this case, the magnitude
-of hackery required is just too great, the result not satisfactory enough, the feature&#8217;s priority isn&#8217;t really
-all that high, and the maintenance burden it&#8217;d introduce is most likely too&nbsp;large.</p>
-<p>In the end, it was great fun figuring it out: yet another example of how you can fiddle with Python to do basically
-anything. Still, we must not get too preoccupied with whether or not we can as to forget if we <em>should</em>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Backslash (<code>\</code>) is how lambda functions are denoted in Haskell. We want to be short and sweet, so it feels
-like a natural choice.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>This isn&#8217;t an actual snippet from a Python <span class="caps">REPL</span>, because <code>inspect.getsourcelines</code> requires the object to be
-defined in a <em>.py</em> file.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>Why we won&#8217;t always get an identical bytecode? The short answer is that some instructions may be swapped
-for their approximate equivalents.<br/>
-The long answer is that with <code>compile</code>, we aren&#8217;t able to replicate the exact closure environment of the original lambda.
-When a function refers to an <em>free variable</em> (like <code>foo</code> in <code>lambda x: x + foo</code>), it is its closure where the value
-for that variable comes from. For ad-hoc lambdas, this is typically the local scope of its <em>outer function</em>.</br>
-Code produced by <code>compile</code>, however, isn&#8217;t associated with any such local scope. All free names are thus assumed
-to refer to <em>global</em> variables. Because Python uses different bytecode instructions for referencing local and global
-names (<code>LOAD_FAST</code> vs <code>LOAD_GLOBAL</code>), the result of <code>compile</code> may differ from a piece of bytecode produced in the regular
-manner.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/python-get-lambda-code.html#python-get-lambda-code">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Pipe `xargs` into&nbsp;`find`</a></h2>
-    <p>
-      Posted on Sun 03 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/shell-scripting.html">shell scripting</a>,      <a href="http://xion.io/tag/bash.html">Bash</a>,      <a href="http://xion.io/tag/xargs.html">xargs</a>,      <a href="http://xion.io/tag/find.html">find</a>,      <a href="http://xion.io/tag/zsh.html">zsh</a>      &#8226; <a href="http://xion.io/post/code/shell-xargs-into-find.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Here&#8217;s a trick that&#8217;s hardly new, but if you haven&#8217;t heard about, it will save you a trip to a man page or&nbsp;two.</p>
-<p>Assuming you&#8217;re a person who mostly prefers the terminal over some fancy <span class="caps">GUI</span>, you&#8217;ve probably used the <code>find</code> command
-along with <code>xargs</code> at least a few times. It&#8217;s very common, for example, to use the results of <code>find</code> as arguments
-to some other program. It could something as simple as figuring out which modules in your project have grown
-slightly too&nbsp;large:</p>
-<div class="highlight"><pre>$ find . -name &#39;*.py&#39; | xargs wc -l | sort -hr
-1467 total
- 322 callee/base.py
- 261 callee/general.py
- 251 callee/collections.py
-# etc.
-</pre></div>
-
-
-<p>We find them all first, and then use <code>xargs</code> to build a long <code>wc</code> invocation, and we finally display results
-in the reverse order. Pretty easy stuff: I don&#8217;t usually have to try more than a dozen times to get it right!<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup></p>
-<p>But how about the opposite situation? Let&#8217;s say you have a list of <em>directories</em> you want to search through with <code>find</code>.
-Doing so may seem easy enough<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre>$ cat packagedirs.txt | xargs find -name &#39;__init__.py&#39;
-</pre></div>
-
-
-<p>Except it&#8217;s not going to work. Like a few other Unix commands, <code>find</code> is very particular about the order of arguments
-it receives. Not only are the predicate flags (like <code>-name</code>) considered in sequence, but they also have to appear
-<em>after</em> the directories we want to search&nbsp;through.</p>
-<p>But in the <code>xargs</code> invocation above, essentially the opposite is going to&nbsp;happen.</p>
-<h4>The replacement&nbsp;flag</h4>
-<p>So how to remedy this? Enter the <code>-I</code> flag to <code>xargs</code>:</p>
-<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} find {} -name &#39;__init__.py&#39;
-</pre></div>
-
-
-<p>This flag will tell <code>xargs</code> quite a few&nbsp;things.</p>
-<p>The most important one is to stop putting the arguments at the end of the command invocation.
-Instead, it shall place them wherever it sees the <em>replacement string</em> &#8212; here, pair of braces<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>: <code>{}</code>.
-And because we placed the braces where <code>find</code> is normally expecting the list of directories to search through,
-the command will now get us exactly the results we&nbsp;wanted.</p>
-<p>What&#8217;s almost impossible to see, however, is that it may not use the exact <em>way</em> we intended to obtain those results.
-The difference is easier to spot when we replace <code>find</code> with <code>echo</code>:</p>
-<div class="highlight"><pre>$ cat &gt;/tmp/list
-foo
-bar
-$ cat /tmp/list | xargs echo
-foo bar
-$ cat /tmp/list | xargs -I{} echo {}
-foo
-bar
-</pre></div>
-
-
-<p>or, better yet, use <code>xargs</code> with the <code>-t</code> flag to print the commands on stderr before executing&nbsp;them:</p>
-<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} -t find {} -name &#39;__init__.py&#39; &gt;/dev/null
-find callee -name &#39;__init__.py&#39;
-find tests -name &#39;__init__.py&#39;
-</pre></div>
-
-
-<p>As you can see, we actually have more than one <code>find</code> invocation&nbsp;here!</p>
-<p>This is the second effect of <code>-I</code>: it causes <code>xargs</code> to execute given command line <em>for each argument separately</em>.
-It so happens that it doesn&#8217;t really make any difference for our usage of <code>find</code>, which is why it wasn&#8217;t at all obvious
-we were running it multiple&nbsp;times.</p>
-<p>To avoid problems, though, you should definitely be cognizant of this fact when calling other programs with <code>xargs -I</code>.</p>
-<h4>Make arguments spaced&nbsp;again</h4>
-<p>Incidentally, I&#8217;m not aware of any method that&#8217;d actually make <code>xargs</code> produce <code>find foo bar -name ...</code> calls.
-If you need this exact form, probably the easiest way is to use plain old shell&nbsp;variables:</p>
-<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find $d -name &#39;*.py&#39;)
-</pre></div>
-
-
-<p>This takes advantage of the <a href="http://mywiki.wooledge.org/WordSplitting">word splitting</a> feature of Bash and a few other
-compatible shells. Caveat is, you may be using a shell where this behavior is disabled by default. The result would be
-making <code>find</code> interpret the content of <code>$d</code> as a <em>single</em> directory name: <code>foo bar</code> rather than <code>foo</code> and <code>bar</code>.</p>
-<p>zsh is one such shell. Although <a href="http://zsh.sourceforge.net/FAQ/zshfaq03.html#l18">probably a good thing overall</a>,
-in times like these you&#8217;d want to bring the &#8220;normal&#8221; behavior back. In zsh, it&#8217;s fortunately pretty&nbsp;simple:</p>
-<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find ${=d} -name &#39;*.py&#39;)
-</pre></div>
-
-
-<p>What about a portable solution? As far as I can tell, the only certain way you can ensure word splitting occurs
-is to use <code>eval</code>. Here, the <code>xargs</code> command can actually come in handy again, albeit only as a&nbsp;prop:</p>
-<div class="highlight"><pre>$ (d=$(cat packagedirs.txt | xargs echo); eval &quot;find $d -name &#39;*.py&#39;&quot;)
-</pre></div>
-
-
-<p>One would hope such hacks aren&#8217;t needed very&nbsp;often.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>A completely kosher version would also use the <code>-print0</code> flag to <code>find</code> and the <code>-0</code> flag to <code>xargs</code>.
-It&#8217;s not necessary here because Python module files cannot contain spaces.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Purists shall excuse my use of <code>cat</code> here, it&#8217;s merely for illustrative purposes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>This use of braces in <code>find</code> has of course nothing to do with the <em>other</em> possible occurrences of <code>{}</code> there,
-like in the <code>-exec</code> flag. Since you cannot force <code>find</code> to expect a different placeholder, you should use something else
-for <code>xargs</code> in those cases, .e.g: <code>xargs -I^ find ^ -name '__main__.py' -exec 'python {}' \;</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Tricks with ownership in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Mon 07 March 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/reference-counting.html">reference counting</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-borrowchk-tricks.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><em>&#8230;or how I learned to stop worrying and love the borrow&nbsp;checker.</em></p>
-<p>Having no equivalents in other languages, the <a href="https://doc.rust-lang.org/book/ownership.html">borrow checker</a>
-is arguably the most difficult thing to come to terms with when learning Rust. It&#8217;s easy to understand why it&#8217;s immensely
-useful, especially if you recall
-<a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html">the various vulnerabities</a>
-stemming from memory mismanagement. But that knowledge doesn&#8217;t exactly help when the compiler is whining about what
-seems like a perfectly correct&nbsp;code.</p>
-<p>Let&#8217;s face it: it will take some time to become productive writing efficient and safe code. It&#8217;s not entirely unlike
-adjusting to a different paradigm such as functional programming when you&#8217;ve been writing mostly imperative code.
-Before that happens, though, you can use some tricks to make the transition a little&nbsp;easier.</p>
-<h4>Just <code>clone</code> it</h4>
-<p>Ideally, we&#8217;d want our code to be both correct <em>and</em> fast. But if we cannot quite get to the &#8220;correctness&#8221; part yet &#8212;
-because our program doesn&#8217;t, you know, <em>compile</em> &#8212; then how about paying for it with a small (and refundable)
-performance&nbsp;hit?</p>
-<p>This is where the <code>clone</code> method comes in handy. Many problems with the borrow checker stem from trying to spread
-object ownership too thin. It is a precious resource and it&#8217;s not very cheap to &#8220;produce&#8221;, which is why good Rust code
-often deals with just immutable or mutable&nbsp;references.</p>
-<p>But if that proves difficult, then &#8220;making more objects&#8221; is a great intermediate solution. Incidentally, this is what
-higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
-those languages, we can start off by replicating their&nbsp;behavior.</p>
-<p>As an example, consider a function that tries to convert some value to <code>String</code>:</p>
-<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">maybe_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="c1">// omitted</span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>If we attempt to build upon it and create a <code>Vec</code>tor&nbsp;version:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_all_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">results</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="n">maybe_to_string</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">find</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">is_err</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>then we&#8217;ll be unpleasantly surprised by a borrow checker&nbsp;error:</p>
-<div class="highlight"><pre>error: cannot move out of borrowed content [E0507]
-    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
-                              ^
-</pre></div>
-
-
-<p>Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
-However, a simple stepping stone in the shape of additional <code>clone()</code> call can help move things forward just
-a little&nbsp;quicker:</p>
-<div class="highlight"><pre><span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
-
-<span class="c1">// ...</span>
-<span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">clone</span><span class="p">().</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-</pre></div>
-
-
-<p>The performance tradeoff is explicit, and easy to find later on with a simple <code>grep clone\(\)</code> or similar.
-When you learn to do things the Rusty way, it won&#8217;t be hard to go back to your &#8220;hack&#8221; and fix it&nbsp;properly.</p>
-<h4>Refcounting to the&nbsp;rescue</h4>
-<p>Adding <code>clone()</code> willy-nilly to make the code compile is a valid workaround when we&#8217;re just learning. Sometimes, however,
-even some gratuitous cloning doesn&#8217;t <em>quite</em> solve the problem, because the <code>clone()</code> itself can become an&nbsp;issue.</p>
-<p>For one, it requires our objects to implement the <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"><code>Clone</code> trait</a>.
-This was apparent even in our previous example, since we had to add a <code>#[derive(Clone)]</code> attribute to the <code>struct Error</code>
-in order to make it <code>clone</code>-able.</p>
-<p>Fortunately, in the vast majority of cases this will be all that&#8217;s necessary, as most built-in types in Rust implement
-<code>Clone</code> already. One notable exception are <em>function traits</em> (<code>FnOnce</code>, <code>Fn</code>, and <code>FnMut</code>) which are used to store
-and refer to <em>closures</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Structures and other custom types that contain them (or those which <em>may</em> contain them)
-cannot therefore implement <code>Clone</code> through a simple <code>#[derive]</code> annotation:</p>
-<div class="highlight"><pre><span class="c-Doc">/// A value that&#39;s either there already</span>
-<span class="c-Doc">/// or can be obtained by calling a function.</span>
-<span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&gt; T + &#39;static` [E0277]
-    #[derive(Clone)]
-             ^~~~~
-</pre></div>
-
-
-<p>What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
-and this one will likely sound familiar if you&#8217;ve ever worked with a higher level language before. Instead of actually
-cloning an object, you can merely increment its <em>reference counter</em>. As the most rudimentary kind of garbage collection,
-this allows to safely share the object between multiple &#8220;owners&#8221;, where each can behave as if it had
-its own copy of&nbsp;it.</p>
-<p>Rust&#8217;s pointer type that provides reference counting capabilities is called <code>std::rc::Rc</code>. Conceptually, it is analogous
-to <code>std::shared_ptr</code> from C++, and it similarly keeps the refcount updated when the pointer is &#8220;acquired&#8221; (<code>clone</code>-ed)
-and &#8220;released&#8221; (<code>drop</code>-ed). Because no data is moved around during either of those two operations, <code>Rc</code> can refer even
-to types whose size isn&#8217;t known at compilation time, like abstract&nbsp;closures:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">rc</span><span class="o">::</span><span class="n">Rc</span><span class="p">;</span><span class="w"></span>
-
-<span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Rc</span><span class="o">&lt;</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">),</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>Wrapping them in <code>Rc</code> therefore makes them &#8220;cloneable&#8221;. They aren&#8217;t actually cloned, of course, but because of
-the inherent immutability of Rust types they will appear so to any outside observer<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
-<h4>Move&nbsp;it!</h4>
-<p>Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
-There is <em>ownership</em>, which is passed around by moving the values; and there is <em>borrowing</em>, which means operating
-on them through&nbsp;references.</p>
-<p>When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
-has to be copiously sprinkled with <code>&amp;</code> and <code>&amp;mut</code>, and may sometimes require explicit lifetime annotations. All these
-have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
-of the program&#8217;s&nbsp;logic.</p>
-<p>Therefore it is generally preferable, if at all possible, to deal with data directly
-and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
-stages of our algorithms. It turns out it&#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
-of producing a moved&nbsp;value.</p>
-<p>Take our first example. The intuitively named <code>Vec::iter</code> method produces an iterator that we can <code>map</code> over, but does
-it really go over the actual <em>items</em> in the vector? Nope! It gives us a <em>reference</em> to each one &#8212; a borrow, if you will
-&#8212; which is exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
-<p>Instead, why not just get the elements themselves, by moving them out of the vector? <code>Vec::into_iter</code> allows to do exactly&nbsp;this:</p>
-<div class="highlight"><pre><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-</pre></div>
-
-
-<p>and enables us to remove the <code>clone()</code> call. The family of similar <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
-on at least in the standard library. They are also part of a more-or-less official
-<a href="https://aturon.github.io/style/naming.html#conversions">naming convention</a> that you should also follow in your own&nbsp;code.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Note how this is different from function <em>types</em>, i.e. <code>fn(A, B, C, ...) -&gt; Ret</code>. It is because plain functions
-do not carry their closure environments along with them. This makes them little more than just pointers to some code,
-and those can be freely <code>Clone</code>-d (or even <code>Copy</code>-ed).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>If you want both shared ownership (&#8220;fake cloneability&#8221;) <em>and</em> the ability to mutate the shared value,
-take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code> type</a> and how it can be
-<a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition">wrapped in <code>Rc</code></a> to achieve both.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Requirements for Python&#8217;s&nbsp;pip</a></h2>
-    <p>
-      Posted on Sun 21 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/pip.html">pip</a>,      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/dependencies.html">dependencies</a>      &#8226; <a href="http://xion.io/post/code/python-pip-requirements.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In this post I&#8217;ll describe all (hopefully all!) the various ways you can specify a single dependency for a Python&nbsp;package.</p>
-<p>This assumes <em>pip</em> is used for installation. The list of dependencies then goes either in <code>install_requires=</code>
-parameter of the <code>setup</code> function within <em>setup.py</em>, or as a separate <em>requirements.txt</em> file. Commonly, it will actually
-go in both places, with the latter being the canonical source of&nbsp;truth:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">setuptools</span> <span class="kn">import</span> <span class="n">setup</span>
-
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;requirements.txt&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">rf</span><span class="p">:</span>
-    <span class="n">setup</span><span class="p">(</span>
-        <span class="c"># ...</span>
-        <span class="n">install_requires</span><span class="o">=</span><span class="n">rf</span><span class="o">.</span><span class="n">readlines</span><span class="p">(),</span>
-    <span class="p">)</span>
-</pre></div>
-
-
-<p>More details about this approach can be found in
-<a href="http://xion.org.pl/2014/01/27/anathomy-of-a-python-package/">one of my previous posts</a>.</p>
-<p>Here, I will concentrate on the format of a single line in <em>requirements.txt</em> that defines a dependency.
-There are numerous variants that <em>pip</em> supports, and they are all described in excruciating detail in
-<a href="https://www.python.org/dev/peps/pep-0440/"><span class="caps">PEP</span> 440</a>. This post shall serve as a short reference on the most useful&nbsp;ones.</p>
-<h4>Package name (and&nbsp;version)</h4>
-<p>The simplest and most common option is to identify a dependency by its package&nbsp;name:</p>
-<div class="highlight"><pre>SQLAlchemy
-</pre></div>
-
-
-<p>This will locate it in a global index of packages, which is sometimes called a &#8220;cheese shop&#8221;. Currently,
-by far the most popular package registry for Python is <a href="https://pypi.python.org">PyPI</a>, and <em>pip</em> uses it by default<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>Without any further modifiers, <em>pip</em> will download and install the &#8220;current&#8221; version of the package &#8212; either the newest,
-or the one designated explicitly by a maintainer. This obviously makes the dependency somewhat unpredictable,
-for it can mean unintended upgrades that introduce breaking changes to your&nbsp;code.</p>
-<p>To prevent this, you&#8217;d normally <em>pin</em> the dependency to an exact version<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre>SQLAlchemy==0.9.10
-</pre></div>
-
-
-<p>Other comparison operators are also&nbsp;available:</p>
-<div class="highlight"><pre>SQLAlchemy&gt;=0.9.10
-SQLAlchemy&lt;1.0.0
-</pre></div>
-
-
-<p>and can even be&nbsp;combined:</p>
-<div class="highlight"><pre>SQLAlchemy&gt;=0.9,&lt;1.0.0
-</pre></div>
-
-
-<p>Specs like that will make <em>pip</em> find the newest version that&#8217;s within given range. Assuming your dependency follows
-the <a href="http://semver.org/">semantic versioning</a> scheme, this will allow you to stay on top of any minor bugfixes
-and improvements to an older release (0.9.x here), without the risk of accidentally upgrading to a new one (1.x)
-that your code is not compatible with&nbsp;yet.</p>
-<h4>Repository <span class="caps">URL</span></h4>
-<p>Sometimes you want to live on the bleeding edge, though, and depend not just on the latest <em>release</em>,
-but the head <em>commit</em> to the package&#8217;s repository. This makes sense especially in large systems
-that are distributed among multiple repos, and where development happens in&nbsp;lockstep.</p>
-<p>For those occasions, and a few others, <em>pip</em> can recognize direct repository URLs. They are in the&nbsp;format:</p>
-<div class="highlight"><pre>$VCS+$PROTOCOL://$URL@$LABEL#egg=$PACKAGE
-</pre></div>
-
-
-<p>where the <code>$PROTOCOL</code> part can be optional if the version control system has a default there. That&#8217;s for example
-the case for <code>git</code>, which is of course the most important <span class="caps">VCS</span> you&#8217;d be interested in<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>:</p>
-<div class="highlight"><pre>git://git.example.com/somepackage#egg=somepackage
-</pre></div>
-
-
-<p>Note that the <code>#egg=$PACKAGE</code> part is not a part of the <code>$URL</code>, and it&#8217;s only there to give a local name for the package
-distribution. This is what makes it possible to refer to it later via <em>pip</em>, if only to remove it with
-<code>pip uninstall $PACKAGE</code>.
-Of course, the sanest practice is to use the PyPI moniker if&nbsp;possible.</p>
-<p>When no <code>$LABEL</code> is given, <em>pip</em> will use the <span class="caps">HEAD</span>, trunk, tip, or the equivalent default/current revision from the repo.
-Often though (at least in case of Git), you would also pick a branch, tag, or even a particular <em>commit hash</em>:</p>
-<div class="highlight"><pre>git+https://github.com/Xion/unmatcher.git@0.1.3.1#egg=unmatcher
-git+ssh://github.com/You/yourpackage.git@master#egg=yourpackage
-git+https://github.com/mitsuhiko/jinja2.git@5b498453b5898257b2287f14ef6c363799f1405a#egg=Jinja2
-</pre></div>
-
-
-<p>The last two options could be a good choice even with third party packages, when you don&#8217;t want to wait for a new PyPI
-release to get a necessary feature or an urgent bug&nbsp;fix.</p>
-<h4>Local&nbsp;filesystem</h4>
-<p>Lastly, you can ask <em>pip</em> to install a package from a local directory or archive. The former option is often used
-with the <code>-e</code> (<code>--editable</code>) flag for <code>pip install</code>. This installs the package in the so-called <em>development mode</em>,
-allowing you to edit its source code&nbsp;in-place:</p>
-<div class="highlight"><pre>$ pip install -e /home/me/Code/myotherpackage
-</pre></div>
-
-
-<p>You almost certainly don&#8217;t want to put this line in <em>requirements.txt</em>: you should still be pulling the other package
-from PyPI. But if it&#8217;s your own one  &#8212; maybe a self-contained utility library used by your main program &#8212;
-this setup will be very helpful for making changes to it, informed by your own usage of the&nbsp;package.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>This can be changed with <code>--index_url</code> flag to <code>pip install</code>. Running local indexes is a good practice
-for Python shops, especially those that rely on <code>pip install</code> as part of their deployment process.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>If the package uses <a href="http://semver.org/">semantic versioning</a>, a possible alternative to <code>==</code> is <code>~=</code>,
-which means &#8220;compatible&#8221; version. The precise meaning of this is
-<a href="https://www.python.org/dev/peps/pep-0440/#compatible-release">somewhat complicated</a>, but it roughly means that upgrades
-are permitted as long as nothing in the public interface changes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p><a href="https://pip.pypa.io/en/latest/reference/pip_install/#vcs-support">Other options</a> include <code>hg</code> (Mercurial),
-<code>svn</code>, and <code>bzr</code> (Bazaar).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Moving out of a container in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Fri 05 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/vector.html">vector</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/references.html">references</a>      &#8226; <a href="http://xion.io/post/code/rust-move-out-of-container.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>To prevent the kind of memory errors that plagues many C programs,
-the <a href="https://doc.rust-lang.org/book/ownership.html"><em>borrow checker</em> in Rust</a> tracks how data is moved between variables,
-or accessed via references. This is all done at compile time, with zero runtime overhead, and is a sizeable part
-of Rust&#8217;s value&nbsp;offering.</p>
-<p>Like all rigid and automated systems, however, it is necessarily constrained and cannot handle all situations perfectly.
-One of its limitations is treating all objects as <em>atomic</em>. It&#8217;s impossible for a variable to own a part of some bigger
-structure, neither is it possible to maintain mutable references to two or more elements of a&nbsp;collection.</p>
-<p>If we nonetheless <a href="http://is.gd/yWCYmJ">try</a>:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="o">&amp;</span><span class="n">b</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>we&#8217;ll be served with a classic borrow checker&nbsp;error:</p>
-<div class="highlight"><pre>&lt;anon&gt;:3:25: 3:33 error: cannot move out of indexed content [E0507]
-&lt;anon&gt;:3     let fullname = join(names[0], names[1]);
-                                 ^~~~~~~~
-</pre></div>
-
-
-<p>Behind its rather cryptic verbiage, it informs us that we tried to move a <em>part</em> of the <code>names</code> vector &#8212; its first
-element &#8212; to a new variable (here, a function parameter). This isn&#8217;t allowed, because in principle it would
-render the vector invalid from the standpoint of strict memory safety. Rust would no longer guarantee <code>names[0]</code> to be
-a legal <code>String</code>: its internal pointer could&#8217;ve been invalidated by the code which the element moved to
-(the <code>join</code> function)<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
-there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
-it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
-the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
-by the borrow&nbsp;checker.</p>
-<h4>Pointers to the&nbsp;rescue?</h4>
-<p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
-As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
-(structs, hashmaps, etc.), it&#8217;s been recognized and countermeasures are&nbsp;available.</p>
-<p>However, the <a href="http://is.gd/o3GRnw">idiomatic practice</a> is to actually leave the elements be and access them
-solely through&nbsp;references:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
-pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
-the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
-In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
-the call stacks and abstraction&nbsp;layers.</p>
-<h4>Vector&nbsp;solution</h4>
-<p>If we still insist on moving the elements out, at least in case of vector we aren&#8217;t <em>completely</em> out of luck.
-The <code>Vec</code> type offers several specialized methods that can slice, dice, and splice the collection in various ways.
-Those&nbsp;include:</p>
-<ul>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_first"><code>split_first</code></a> (and <code>split_first_mut</code>)
-for cutting right after the first&nbsp;element</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_last"><code>split_last</code></a> (and <code>split_last_mut</code>)
-for a similar cut right before the last&nbsp;element</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_at"><code>split_at</code></a> (and <code>split_at_mut</code>),
-generalized versions of the above&nbsp;methods</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_off"><code>split_off</code></a>, a partially-in-place version
-of <code>split_at_mut</code></li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain"><code>drain</code></a> for moving all elements from a specified&nbsp;range</li>
-</ul>
-<p>Other types may offer different methods, depending on their particular data layout, though <code>drain</code> should be available
-on any data structure that can be iterated&nbsp;over.</p>
-<h4>Structural&nbsp;advantage</h4>
-<p>What about user-defined types, such as <code>struct</code>s?</p>
-<p>Fortunately, these are covered by the compiler itself. Since accessing <code>struct</code> fields is a fully compile-time
-operation, it is possible to track the ownership of each individual object that makes up the structure.
-Thus there are no obstacles to simply <a href="http://is.gd/ZUI2Mn">moving all the fields</a>:</p>
-<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="p">{</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"></span>
-<span class="w">                   </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()};</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first_name</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">last_name</span><span class="p">)</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<h4>If all else&nbsp;fails&#8230;</h4>
-<p>This leaves us with some rare cases when the container&#8217;s interface doesn&#8217;t <em>quite</em> support the exact subset of elements
-we want to move out. If we don&#8217;t want to <code>drain</code> them all and inspect every item for potential preservation,
-it may be time to skirt around the more dangerous areas of the&nbsp;language.</p>
-<p>But I don&#8217;t necessarily mean going all out with <code>unsafe</code> blocks, pointers, and (let&#8217;s be honest) segfaults.
-Instead, we can look at the gray zone between them and the regular, borrow-checked Rust&nbsp;code.</p>
-<p>Some of the functions inside the <a href="https://doc.rust-lang.org/std/mem/index.html"><code>std::mem</code> module</a> can be said
-to fall into this category. Most notably, <a href="https://doc.rust-lang.org/std/mem/fn.swap.html"><code>mem::swap</code></a> and
-<a href="https://doc.rust-lang.org/std/mem/fn.replace.html"><code>mem::replace</code></a> allow us to operate directly on the memory blocks
-that back every Rust object, albeit without the dangerous ability to freely modify&nbsp;them.</p>
-<p>What those functions enable is a small sleight of hand &#8212; a quick exchange of two variables or objects
-while the borrow checker &#8220;isn&#8217;t looking&#8221;. Possessing such an ability, we can smuggle any item out of a container
-as long as we&#8217;re able to provide a suitable&nbsp;replacement:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="p">;</span><span class="w"></span>
-
-<span class="c-Doc">/// Pick only the items under indices that are powers of two.</span>
-<span class="k">fn</span><span class="w"> </span><span class="n">pick_powers_of_2</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Default</span><span class="o">&gt;</span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Vec</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">elem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mem</span><span class="o">::</span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">T</span><span class="o">::</span><span class="n">default</span><span class="p">());</span><span class="w"></span>
-<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">elem</span><span class="p">);</span><span class="w"></span>
-<span class="w">        </span><span class="n">i</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="n">result</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p style="text-align: center">
-    <img src="http://xion.io/images/indyswap.jpg" alt="Swap!"></br>
-    <small>Pictured: implementation of <code>mem::replace</code>.</small>
-</p>
-
-<p><a href="https://doc.rust-lang.org/std/default/trait.Default.html#tymethod.default">The <code>Default</code> value</a>,
-if available, is usually a great choice here. Alternately, a <code>Copy</code> or <code>Clone</code> of some other element can also work
-if it&#8217;s cheap to&nbsp;obtain.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
-on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the languag itself,
-it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
-is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
-instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Continue reading</a>
   </div>
 </article>
 

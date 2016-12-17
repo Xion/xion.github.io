@@ -63,6 +63,803 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-get-lambda-code.html#python-get-lambda-code">Source code of a Python&nbsp;lambda</a></h2>
+    <p>
+      Posted on Tue 19 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/ast.html">AST</a>,      <a href="http://xion.io/tag/bytecode.html">bytecode</a>      &#8226; <a href="http://xion.io/post/code/python-get-lambda-code.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>&#8230;or: The Most Hideous Hack I&#8217;ve (Almost)&nbsp;Done</em></p>
+<p>In <a href="http://github.com/Xion/callee">callee</a>, the <a href="http://callee.readthedocs.org">argument matcher library for Python</a> that
+<a href="http://xion.io/post/news/callee-intro.html">I released recently</a>, there is this lovely
+<a href="https://github.com/Xion/callee/blob/f695ff4e1c45bfd45445ebb8014a202029a93dce/callee/general.py#L55"><code>TODO</code> note</a>
+for a seemingly simple feature. When using the
+<a href="http://callee.readthedocs.org/en/stable/reference/general.html#callee.general.Matching"><code>Matching</code> construct</a>
+with a simple <code>lambda</code> predicate:</p>
+<div class="highlight"><pre><span class="n">mock_foo</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="n">Matching</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))</span>
+</pre></div>
+
+
+<p>it would be great to see its <em>code</em> in the error message if the assertion fails. Right now it&#8217;s just going to say
+something like <code>&lt;Matching &lt;function &lt;lambda&gt; at 0x7f5d8a06eb18&gt;&gt;</code>. Provided you don&#8217;t possess a supernatural ability
+of dereferencing pointers in your head, this won&#8217;t give you any immediate hint as to what went wrong. Wouldn&#8217;t it be nice
+if it read as, say, <code>&lt;Matching \x: x % 2&gt;</code> instead?<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup></p>
+<p>So I thought: why not try and implement such a mechanism? This is Python, after all &#8212; a language where you can spawn
+<a href="https://blog.ionelmc.ro/2015/02/09/understanding-python-metaclasses/#simple-metaclass-use">completely new classes</a>
+at runtime, walk the stack <a href="https://docs.python.org/2/library/inspect.html#the-interpreter-stack">backwards</a>
+(or even <a href="https://docs.python.org/2/library/sys.html#sys.settrace">forward</a>) and read the local variables,
+or change the behavior of the <a href="http://xion.org.pl/2012/05/06/hacking-python-imports/">import system itself</a>.
+Surely it would be possible &#8212; nay, easy &#8212; to get the source code of a short lambda function,&nbsp;right?</p>
+<p>Boy, was I <em>wrong</em>.</p>
+<p>Make no mistake, though: the task turned out to be absolutely doable, at least in the scope I wanted it done.
+But what would you think of a solution that involves not just the usual Python hackery, but also <span class="caps">AST</span> inspection,
+transformations of the source code as text, <em>and</em> bytecode&nbsp;shenanigans?&#8230;</p>
+<h4>The code, all the code, and&#8230; much more than the&nbsp;code</h4>
+<p>Let&#8217;s start from the beginning, though. Here&#8217;s a short lambda function, the kind of which we&#8217;d like to obtain
+the source code&nbsp;of:</p>
+<div class="highlight"><pre><span class="n">is_even</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">=</span> <span class="mi">0</span>
+</pre></div>
+
+
+<p>If the documentation for Python standard library is to be believed, this should be pretty easy.
+In the <a href="https://docs.python.org/2/library/inspect.html"><code>inspect</code> module</a>,
+there is a function called no different than
+<a href="https://docs.python.org/2/library/inspect.html#inspect.getsource"><code>getsource</code></a>. For our purposes, however,
+<a href="https://docs.python.org/2/library/inspect.html#inspect.getsourcelines"><code>getsourcelines</code></a> is a little more
+convienient, because we can easily tell when the lambda is too&nbsp;long:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">get_short_lambda_source</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">source_lines</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getsourcelines</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">None</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">source_lines</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">None</span>
+    <span class="k">return</span> <span class="n">source_lines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Of course if you programmed in Python for any longer period of time, you know very well that the standard docs
+are <em>not</em> to be trusted. And it&#8217;s not just that the <code>except</code> clause should also include <code>TypeError</code>, because it
+will be thrown when you try to pass any of the Python builtins to <code>getsourcelines</code>.</p>
+<p>More important is the ambiguity of what does &#8220;source lines for an object&#8221; actually mean. &#8220;Source lines <em>containing</em>
+the object definition&#8221; would be much more accurate, and this seemingly small distinction is rather crucial here.
+Passing a lambda function to either <code>getsourcelines</code> or <code>getsource</code>, we&#8217;ll get its source <em>and everything else</em>
+that the returned lines&nbsp;included.</p>
+<p>That&#8217;s right. Say hello to the complete <code>is_even =</code> assignment, and the entire <code>assert_called_with</code> invocation!
+And in case you are wondering: yes, the result will also include any end-of-line comments. No token left&nbsp;behind!</p>
+<h4>Trim&nbsp;left</h4>
+<p>Clearly this is more than we&#8217;ve bargained for. Maybe there is a way to strip away the unnecessary cruft? Python does
+know how to parse itself, after all: the standard <a href="https://docs.python.org/2/library/ast.html"><code>ast</code> module</a>
+is a manifestation of this knowledge. Perhaps we can use it to retrieve the <code>lambda</code> <span class="caps">AST</span> node in order to turn it &#8212;
+and just it &#8212; back into Python&nbsp;code?&#8230;</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">get_short_lambda_ast_node</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">):</span>
+    <span class="n">source_text</span> <span class="o">=</span> <span class="n">get_short_lambda_source</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">source_text</span><span class="p">:</span>
+        <span class="n">source_ast</span> <span class="o">=</span> <span class="n">ast</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">source_text</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">next</span><span class="p">((</span><span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">ast</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">source_ast</span><span class="p">)</span>
+                     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ast</span><span class="o">.</span><span class="n">Lambda</span><span class="p">)),</span> <span class="bp">None</span><span class="p">)</span>
+</pre></div>
+
+
+<p>But as it turns out, getting the source text back this way is only <em>mostly</em>&nbsp;possible.</p>
+<p>See, every substantial <span class="caps">AST</span> node &#8212; which is either an expression (<code>ast.expr</code>) or a statement (<code>ast.stmt</code>) &#8212;
+has two common attributes: <code>lineno</code> and <code>col_offset</code>. When combined, they point to a place in the original source code
+where the node was parsed from. This is how we can find out where to look for the definition of our lambda&nbsp;function.</p>
+<p>Looks promising, right? The only problem is we don&#8217;t know when to <em>stop</em> looking.
+That&#8217;s right: nodes created by <code>ast.parse</code> are annotated with their start offset, but not with length nor the end offset.
+As a result, the best we can do when it comes to carving out the lambda source from the very first example is&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))</span>
+</pre></div>
+
+
+<p>So close! Those hanging parentheses are evidently just taunting us, but how can we remove them? <code>lambda</code> is basically
+just a Python expression, so in principle it can be followed by almost anything. This is doubly true for lambdas inside
+the <code>Matching</code> construct, as they may be a part of some larger mock&nbsp;assertion:</p>
+<div class="highlight"><pre><span class="n">mock_foo</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="n">Matching</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="n">Integer</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">GreaterThan</span><span class="p">(</span><span class="mi">42</span><span class="p">))</span>
+</pre></div>
+
+
+<p>Here, the extraneous suffix is the entirety of <code>), Integer() &amp; GreaterThan(42))</code>, quite a lot of more than just <code>))</code>.
+And that&#8217;s of course nowhere near the limit of possiblities: for one, there may be more <code>lambda</code>s in there,&nbsp;too!</p>
+<h4>Back off, <em>slowly</em></h4>
+<p>It seems, however, that there is one thing those troublesome tails have in common: <em>they aren&#8217;t syntactically valid</em>.</p>
+<p>Intuitively, a <code>lambda</code> node nested within some other syntactical constructs will have their closing fragments (e.g. <code>)</code>)
+appear somewhere after its end. Without the corresponding openings (e.g. <code>Matching(</code>), those fragments won&#8217;t&nbsp;parse.</p>
+<p>So here&#8217;s the crazy idea. What we have is invalid Python, but only because of some unspecified number of extra characters.
+How about we just try and remove them, one by one, until we get something that <em>is</em> syntactically correct?
+If we are not mistaken, this will finally be our lambda and nothing&nbsp;else.</p>
+<p>The fortune favors the brave, so let&#8217;s go ahead and try&nbsp;it:</p>
+<div class="highlight"><pre><span class="c"># ... continuing get_short_lambda_source() ...</span>
+
+<span class="n">source_text</span> <span class="o">=</span> <span class="n">source_lines</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+<span class="n">lambda_node</span> <span class="o">=</span> <span class="n">get_short_lambda_ast_node</span><span class="p">(</span><span class="n">lambda_func</span><span class="p">)</span>
+
+<span class="n">lambda_text</span> <span class="o">=</span> <span class="n">source_text</span><span class="p">[</span><span class="n">lambda_node</span><span class="o">.</span><span class="n">col_offset</span><span class="p">:]</span>
+<span class="n">min_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="s">&#39;lambda:_&#39;</span><span class="p">)</span>  <span class="c"># shortest possible lambda expression</span>
+<span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">lambda_text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">min_length</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">ast</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">lambda_text</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">lambda_text</span>
+    <span class="k">except</span> <span class="ne">SyntaxError</span><span class="p">:</span>
+        <span class="n">lambda_text</span> <span class="o">=</span> <span class="n">lambda_text</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<span class="k">return</span> <span class="bp">None</span>
+</pre></div>
+
+
+<p>Considering that we&#8217;re basically taking lessons from the dusty old tomes in the Restricted Section of Hogwarts library,
+the magic here looks quite simple. As long as there is something that can pass for a lambda definition,
+we try to parse it and see if it succeeds. The line that says <code>except SyntaxError:</code> is obviously not something for
+the faint of heart, but at least we are specifying
+<a href="https://docs.python.org/2/howto/doanddont.html#except"><em>what</em> exception</a> we anticipate&nbsp;catching.</p>
+<p>And the kicker? It <em>works</em>. By that I mean it doesn&#8217;t return garbage results for a few obvious and not so obvious
+test cases, which is already more than you would normally expect from hacks of this magnitude.
+All the lambdas defined until this paragraph, for example, can have their source code extracted without&nbsp;issue.</p>
+<h4>Just one more&nbsp;thing</h4>
+<p>So&#8230; victory? Not quite. Astute readers may recall my promise of some bytecode arcana, and now&#8217;s the time for&nbsp;it.</p>
+<p>Despite the initial success of our gradual, character dropping approach, there are cases where it doesn&#8217;t produce
+the correct result. Consider, for example, a lambda definition that&#8217;s nestled within a tuple<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">x</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span><span class="p">,</span> <span class="mi">0</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">get_short_lambda_source</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span><span class="p">,</span> <span class="mi">0</span>
+</pre></div>
+
+
+<p>We would of course expect the result to be <code>lambda _: True</code>, without a comma or&nbsp;zero.</p>
+<p>Unfortunately, here&#8217;s where our earlier assumption fails rather spectacularly. The line of code extracted from <span class="caps">AST</span>
+is syntactically valid even <em>with</em> the extra characters. As a result, <code>ast.parse</code> succeeds too early and returns an
+incorrect definition. It should have been of a lambda contained within a tuple, but tuple is apparently what the lambda
+<em>returns</em>.</p>
+<p>You may say that this is the sharp end of a narrow edge case, and anyone who defines functions like that deserves all
+the trouble they get. And sure, I wouldn&#8217;t mind if we just threw hands in the air and told them we&#8217;re simply unable
+to retrieve the source here. But my opinion is that it doesn&#8217;t justify serving them obviously <em>wrong</em>&nbsp;results!</p>
+<h4>A halting&nbsp;problem</h4>
+<p>Not if we can help it, anyway. Have a look at the expected source code and the one we&#8217;ve extracted, side by&nbsp;side:</p>
+<div class="highlight"><pre><span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span>
+<span class="k">lambda</span> <span class="n">_</span><span class="p">:</span> <span class="bp">True</span><span class="p">,</span> <span class="mi">0</span>
+</pre></div>
+
+
+<p>The second line isn&#8217;t just longer: it is also <em>doing more</em>. It isn&#8217;t just defining a lambda; it defines it,
+conjures up a constant <code>0</code>, and then packs them both into a tuple. That&#8217;s at least two additional steps compared to
+the&nbsp;original.</p>
+<p>Those steps have a more precise name, too: they are the <em>bytecode instructions</em>. Every piece of Python source is compiled
+to a binary bytecode before it&#8217;s executed, because the interpreter can only work with this representation.
+Compilation typically happens when a Python module is first imported, producing a <em>.pyc</em> file corresponding to its
+<em>.py</em> file. Subsequent imports will simply reuse the cached&nbsp;bytecode.</p>
+<p>Moreover, any function or class object has its bytecode accessible (read-only) at runtime. There is even a
+<a href="http://late.am/post/2012/03/26/exploring-python-code-objects.html">dedicated data type</a> to hold it &#8212; called simply
+<code>code</code> &#8212; with a buffer of raw bytes under one of its&nbsp;attributes.</p>
+<p>Finally, the bytecode compiler itself is also available to Python programs as a built-in
+<a href="https://docs.python.org/2/library/functions.html#compile"><code>compile</code> function</a>. You don&#8217;t see it used as often as its
+counterparts <a href="https://docs.python.org/2/library/functions.html#eval"><code>eval</code></a>
+and <a href="https://docs.python.org/2/reference/simple_stmts.html#exec"><code>exec</code></a> (which hopefully are a rare sight themselves!),
+but it taps into the same internal machinery of&nbsp;Python.</p>
+<p>So how does it all add up? The idea is, basically, to cross-check the alleged source code of the lambda with its own
+<em>byte</em>code. Any junk that&#8217;s still left to trim &#8212; even if syntactically valid &#8212; will surface as a divergence after
+compilation. Thus we can simply continue dropping characters until the bytecodes&nbsp;match:</p>
+<div class="highlight"><pre><span class="n">lambda_text</span> <span class="o">=</span> <span class="n">source_text</span><span class="p">[</span><span class="n">lambda_node</span><span class="o">.</span><span class="n">col_offset</span><span class="p">:]</span>
+<span class="n">lambda_body_text</span> <span class="o">=</span> <span class="n">source_text</span><span class="p">[</span><span class="n">lambda_node</span><span class="o">.</span><span class="n">body</span><span class="o">.</span><span class="n">col_offset</span><span class="p">:]</span>
+<span class="n">min_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="s">&#39;lambda:_&#39;</span><span class="p">)</span>  <span class="c"># shortest possible lambda expression</span>
+<span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">lambda_text</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">min_length</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="nb">compile</span><span class="p">(</span><span class="n">lambda_body_text</span><span class="p">,</span> <span class="s">&#39;&lt;unused filename&gt;&#39;</span><span class="p">,</span> <span class="s">&#39;eval&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">code</span><span class="o">.</span><span class="n">co_code</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">lambda_func</span><span class="o">.</span><span class="n">__code__</span><span class="o">.</span><span class="n">co_code</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">lambda_text</span>
+    <span class="k">except</span> <span class="ne">SyntaxError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="n">lambda_text</span> <span class="o">=</span> <span class="n">lambda_text</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">lambda_body_text</span> <span class="o">=</span> <span class="n">lambda_body_text</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<span class="k">return</span> <span class="bp">None</span>
+</pre></div>
+
+
+<p>Okay, maybe not the exact bytes<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>, but stopping at the identical bytecode <em>length</em> is good enough a strategy.
+As an obvious bonus, <code>compile</code> will also take care of detecting syntax errors in the candidate source code,
+so we don&#8217;t need the <code>ast</code> parsing&nbsp;anymore.</p>
+<h4>That escalated&nbsp;quickly!</h4>
+<p>Believe it or not, but there aren&#8217;t any more objections to this solution, You can view it in its glorious entirety
+by looking at <a href="https://gist.github.com/Xion/617c1496ff45f3673a5692c3b0e3f75a">this gist</a>.</p>
+<p>Does it mean it is also making its cameo in the <a href="https://github.com/Xion/callee"><em>callee</em> library</a>?&#8230;</p>
+<p>No, I&#8217;m afraid&nbsp;not.</p>
+<p>Normally, I&#8217;m not the one to shy away from, ahem, <em>bold</em> solutions to tough problems. But in this case, the magnitude
+of hackery required is just too great, the result not satisfactory enough, the feature&#8217;s priority isn&#8217;t really
+all that high, and the maintenance burden it&#8217;d introduce is most likely too&nbsp;large.</p>
+<p>In the end, it was great fun figuring it out: yet another example of how you can fiddle with Python to do basically
+anything. Still, we must not get too preoccupied with whether or not we can as to forget if we <em>should</em>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Backslash (<code>\</code>) is how lambda functions are denoted in Haskell. We want to be short and sweet, so it feels
+like a natural choice.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>This isn&#8217;t an actual snippet from a Python <span class="caps">REPL</span>, because <code>inspect.getsourcelines</code> requires the object to be
+defined in a <em>.py</em> file.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Why we won&#8217;t always get an identical bytecode? The short answer is that some instructions may be swapped
+for their approximate equivalents.<br/>
+The long answer is that with <code>compile</code>, we aren&#8217;t able to replicate the exact closure environment of the original lambda.
+When a function refers to an <em>free variable</em> (like <code>foo</code> in <code>lambda x: x + foo</code>), it is its closure where the value
+for that variable comes from. For ad-hoc lambdas, this is typically the local scope of its <em>outer function</em>.</br>
+Code produced by <code>compile</code>, however, isn&#8217;t associated with any such local scope. All free names are thus assumed
+to refer to <em>global</em> variables. Because Python uses different bytecode instructions for referencing local and global
+names (<code>LOAD_FAST</code> vs <code>LOAD_GLOBAL</code>), the result of <code>compile</code> may differ from a piece of bytecode produced in the regular
+manner.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-get-lambda-code.html#python-get-lambda-code">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Pipe `xargs` into&nbsp;`find`</a></h2>
+    <p>
+      Posted on Sun 03 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/shell-scripting.html">shell scripting</a>,      <a href="http://xion.io/tag/bash.html">Bash</a>,      <a href="http://xion.io/tag/xargs.html">xargs</a>,      <a href="http://xion.io/tag/find.html">find</a>,      <a href="http://xion.io/tag/zsh.html">zsh</a>      &#8226; <a href="http://xion.io/post/code/shell-xargs-into-find.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a trick that&#8217;s hardly new, but if you haven&#8217;t heard about, it will save you a trip to a man page or&nbsp;two.</p>
+<p>Assuming you&#8217;re a person who mostly prefers the terminal over some fancy <span class="caps">GUI</span>, you&#8217;ve probably used the <code>find</code> command
+along with <code>xargs</code> at least a few times. It&#8217;s very common, for example, to use the results of <code>find</code> as arguments
+to some other program. It could something as simple as figuring out which modules in your project have grown
+slightly too&nbsp;large:</p>
+<div class="highlight"><pre>$ find . -name &#39;*.py&#39; | xargs wc -l | sort -hr
+1467 total
+ 322 callee/base.py
+ 261 callee/general.py
+ 251 callee/collections.py
+# etc.
+</pre></div>
+
+
+<p>We find them all first, and then use <code>xargs</code> to build a long <code>wc</code> invocation, and we finally display results
+in the reverse order. Pretty easy stuff: I don&#8217;t usually have to try more than a dozen times to get it right!<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup></p>
+<p>But how about the opposite situation? Let&#8217;s say you have a list of <em>directories</em> you want to search through with <code>find</code>.
+Doing so may seem easy enough<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre>$ cat packagedirs.txt | xargs find -name &#39;__init__.py&#39;
+</pre></div>
+
+
+<p>Except it&#8217;s not going to work. Like a few other Unix commands, <code>find</code> is very particular about the order of arguments
+it receives. Not only are the predicate flags (like <code>-name</code>) considered in sequence, but they also have to appear
+<em>after</em> the directories we want to search&nbsp;through.</p>
+<p>But in the <code>xargs</code> invocation above, essentially the opposite is going to&nbsp;happen.</p>
+<h4>The replacement&nbsp;flag</h4>
+<p>So how to remedy this? Enter the <code>-I</code> flag to <code>xargs</code>:</p>
+<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} find {} -name &#39;__init__.py&#39;
+</pre></div>
+
+
+<p>This flag will tell <code>xargs</code> quite a few&nbsp;things.</p>
+<p>The most important one is to stop putting the arguments at the end of the command invocation.
+Instead, it shall place them wherever it sees the <em>replacement string</em> &#8212; here, pair of braces<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>: <code>{}</code>.
+And because we placed the braces where <code>find</code> is normally expecting the list of directories to search through,
+the command will now get us exactly the results we&nbsp;wanted.</p>
+<p>What&#8217;s almost impossible to see, however, is that it may not use the exact <em>way</em> we intended to obtain those results.
+The difference is easier to spot when we replace <code>find</code> with <code>echo</code>:</p>
+<div class="highlight"><pre>$ cat &gt;/tmp/list
+foo
+bar
+$ cat /tmp/list | xargs echo
+foo bar
+$ cat /tmp/list | xargs -I{} echo {}
+foo
+bar
+</pre></div>
+
+
+<p>or, better yet, use <code>xargs</code> with the <code>-t</code> flag to print the commands on stderr before executing&nbsp;them:</p>
+<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} -t find {} -name &#39;__init__.py&#39; &gt;/dev/null
+find callee -name &#39;__init__.py&#39;
+find tests -name &#39;__init__.py&#39;
+</pre></div>
+
+
+<p>As you can see, we actually have more than one <code>find</code> invocation&nbsp;here!</p>
+<p>This is the second effect of <code>-I</code>: it causes <code>xargs</code> to execute given command line <em>for each argument separately</em>.
+It so happens that it doesn&#8217;t really make any difference for our usage of <code>find</code>, which is why it wasn&#8217;t at all obvious
+we were running it multiple&nbsp;times.</p>
+<p>To avoid problems, though, you should definitely be cognizant of this fact when calling other programs with <code>xargs -I</code>.</p>
+<h4>Make arguments spaced&nbsp;again</h4>
+<p>Incidentally, I&#8217;m not aware of any method that&#8217;d actually make <code>xargs</code> produce <code>find foo bar -name ...</code> calls.
+If you need this exact form, probably the easiest way is to use plain old shell&nbsp;variables:</p>
+<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find $d -name &#39;*.py&#39;)
+</pre></div>
+
+
+<p>This takes advantage of the <a href="http://mywiki.wooledge.org/WordSplitting">word splitting</a> feature of Bash and a few other
+compatible shells. Caveat is, you may be using a shell where this behavior is disabled by default. The result would be
+making <code>find</code> interpret the content of <code>$d</code> as a <em>single</em> directory name: <code>foo bar</code> rather than <code>foo</code> and <code>bar</code>.</p>
+<p>zsh is one such shell. Although <a href="http://zsh.sourceforge.net/FAQ/zshfaq03.html#l18">probably a good thing overall</a>,
+in times like these you&#8217;d want to bring the &#8220;normal&#8221; behavior back. In zsh, it&#8217;s fortunately pretty&nbsp;simple:</p>
+<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find ${=d} -name &#39;*.py&#39;)
+</pre></div>
+
+
+<p>What about a portable solution? As far as I can tell, the only certain way you can ensure word splitting occurs
+is to use <code>eval</code>. Here, the <code>xargs</code> command can actually come in handy again, albeit only as a&nbsp;prop:</p>
+<div class="highlight"><pre>$ (d=$(cat packagedirs.txt | xargs echo); eval &quot;find $d -name &#39;*.py&#39;&quot;)
+</pre></div>
+
+
+<p>One would hope such hacks aren&#8217;t needed very&nbsp;often.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A completely kosher version would also use the <code>-print0</code> flag to <code>find</code> and the <code>-0</code> flag to <code>xargs</code>.
+It&#8217;s not necessary here because Python module files cannot contain spaces.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Purists shall excuse my use of <code>cat</code> here, it&#8217;s merely for illustrative purposes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>This use of braces in <code>find</code> has of course nothing to do with the <em>other</em> possible occurrences of <code>{}</code> there,
+like in the <code>-exec</code> flag. Since you cannot force <code>find</code> to expect a different placeholder, you should use something else
+for <code>xargs</code> in those cases, .e.g: <code>xargs -I^ find ^ -name '__main__.py' -exec 'python {}' \;</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Tricks with ownership in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Mon 07 March 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/reference-counting.html">reference counting</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-borrowchk-tricks.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>&#8230;or how I learned to stop worrying and love the borrow&nbsp;checker.</em></p>
+<p>Having no equivalents in other languages, the <a href="https://doc.rust-lang.org/book/ownership.html">borrow checker</a>
+is arguably the most difficult thing to come to terms with when learning Rust. It&#8217;s easy to understand why it&#8217;s immensely
+useful, especially if you recall
+<a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html">the various vulnerabities</a>
+stemming from memory mismanagement. But that knowledge doesn&#8217;t exactly help when the compiler is whining about what
+seems like a perfectly correct&nbsp;code.</p>
+<p>Let&#8217;s face it: it will take some time to become productive writing efficient and safe code. It&#8217;s not entirely unlike
+adjusting to a different paradigm such as functional programming when you&#8217;ve been writing mostly imperative code.
+Before that happens, though, you can use some tricks to make the transition a little&nbsp;easier.</p>
+<h4>Just <code>clone</code> it</h4>
+<p>Ideally, we&#8217;d want our code to be both correct <em>and</em> fast. But if we cannot quite get to the &#8220;correctness&#8221; part yet &#8212;
+because our program doesn&#8217;t, you know, <em>compile</em> &#8212; then how about paying for it with a small (and refundable)
+performance&nbsp;hit?</p>
+<p>This is where the <code>clone</code> method comes in handy. Many problems with the borrow checker stem from trying to spread
+object ownership too thin. It is a precious resource and it&#8217;s not very cheap to &#8220;produce&#8221;, which is why good Rust code
+often deals with just immutable or mutable&nbsp;references.</p>
+<p>But if that proves difficult, then &#8220;making more objects&#8221; is a great intermediate solution. Incidentally, this is what
+higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
+those languages, we can start off by replicating their&nbsp;behavior.</p>
+<p>As an example, consider a function that tries to convert some value to <code>String</code>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">maybe_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// omitted</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>If we attempt to build upon it and create a <code>Vec</code>tor&nbsp;version:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_all_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">results</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="n">maybe_to_string</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">find</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">is_err</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>then we&#8217;ll be unpleasantly surprised by a borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>error: cannot move out of borrowed content [E0507]
+    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
+                              ^
+</pre></div>
+
+
+<p>Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
+However, a simple stepping stone in the shape of additional <code>clone()</code> call can help move things forward just
+a little&nbsp;quicker:</p>
+<div class="highlight"><pre><span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="c1">// ...</span>
+<span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">clone</span><span class="p">().</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+</pre></div>
+
+
+<p>The performance tradeoff is explicit, and easy to find later on with a simple <code>grep clone\(\)</code> or similar.
+When you learn to do things the Rusty way, it won&#8217;t be hard to go back to your &#8220;hack&#8221; and fix it&nbsp;properly.</p>
+<h4>Refcounting to the&nbsp;rescue</h4>
+<p>Adding <code>clone()</code> willy-nilly to make the code compile is a valid workaround when we&#8217;re just learning. Sometimes, however,
+even some gratuitous cloning doesn&#8217;t <em>quite</em> solve the problem, because the <code>clone()</code> itself can become an&nbsp;issue.</p>
+<p>For one, it requires our objects to implement the <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"><code>Clone</code> trait</a>.
+This was apparent even in our previous example, since we had to add a <code>#[derive(Clone)]</code> attribute to the <code>struct Error</code>
+in order to make it <code>clone</code>-able.</p>
+<p>Fortunately, in the vast majority of cases this will be all that&#8217;s necessary, as most built-in types in Rust implement
+<code>Clone</code> already. One notable exception are <em>function traits</em> (<code>FnOnce</code>, <code>Fn</code>, and <code>FnMut</code>) which are used to store
+and refer to <em>closures</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Structures and other custom types that contain them (or those which <em>may</em> contain them)
+cannot therefore implement <code>Clone</code> through a simple <code>#[derive]</code> annotation:</p>
+<div class="highlight"><pre><span class="c-Doc">/// A value that&#39;s either there already</span>
+<span class="c-Doc">/// or can be obtained by calling a function.</span>
+<span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&gt; T + &#39;static` [E0277]
+    #[derive(Clone)]
+             ^~~~~
+</pre></div>
+
+
+<p>What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
+and this one will likely sound familiar if you&#8217;ve ever worked with a higher level language before. Instead of actually
+cloning an object, you can merely increment its <em>reference counter</em>. As the most rudimentary kind of garbage collection,
+this allows to safely share the object between multiple &#8220;owners&#8221;, where each can behave as if it had
+its own copy of&nbsp;it.</p>
+<p>Rust&#8217;s pointer type that provides reference counting capabilities is called <code>std::rc::Rc</code>. Conceptually, it is analogous
+to <code>std::shared_ptr</code> from C++, and it similarly keeps the refcount updated when the pointer is &#8220;acquired&#8221; (<code>clone</code>-ed)
+and &#8220;released&#8221; (<code>drop</code>-ed). Because no data is moved around during either of those two operations, <code>Rc</code> can refer even
+to types whose size isn&#8217;t known at compilation time, like abstract&nbsp;closures:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">rc</span><span class="o">::</span><span class="n">Rc</span><span class="p">;</span><span class="w"></span>
+
+<span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Rc</span><span class="o">&lt;</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Wrapping them in <code>Rc</code> therefore makes them &#8220;cloneable&#8221;. They aren&#8217;t actually cloned, of course, but because of
+the inherent immutability of Rust types they will appear so to any outside observer<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4>Move&nbsp;it!</h4>
+<p>Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
+There is <em>ownership</em>, which is passed around by moving the values; and there is <em>borrowing</em>, which means operating
+on them through&nbsp;references.</p>
+<p>When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
+has to be copiously sprinkled with <code>&amp;</code> and <code>&amp;mut</code>, and may sometimes require explicit lifetime annotations. All these
+have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
+of the program&#8217;s&nbsp;logic.</p>
+<p>Therefore it is generally preferable, if at all possible, to deal with data directly
+and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
+stages of our algorithms. It turns out it&#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
+of producing a moved&nbsp;value.</p>
+<p>Take our first example. The intuitively named <code>Vec::iter</code> method produces an iterator that we can <code>map</code> over, but does
+it really go over the actual <em>items</em> in the vector? Nope! It gives us a <em>reference</em> to each one &#8212; a borrow, if you will
+&#8212; which is exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
+<p>Instead, why not just get the elements themselves, by moving them out of the vector? <code>Vec::into_iter</code> allows to do exactly&nbsp;this:</p>
+<div class="highlight"><pre><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+</pre></div>
+
+
+<p>and enables us to remove the <code>clone()</code> call. The family of similar <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
+on at least in the standard library. They are also part of a more-or-less official
+<a href="https://aturon.github.io/style/naming.html#conversions">naming convention</a> that you should also follow in your own&nbsp;code.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Note how this is different from function <em>types</em>, i.e. <code>fn(A, B, C, ...) -&gt; Ret</code>. It is because plain functions
+do not carry their closure environments along with them. This makes them little more than just pointers to some code,
+and those can be freely <code>Clone</code>-d (or even <code>Copy</code>-ed).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>If you want both shared ownership (&#8220;fake cloneability&#8221;) <em>and</em> the ability to mutate the shared value,
+take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code> type</a> and how it can be
+<a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition">wrapped in <code>Rc</code></a> to achieve both.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Requirements for Python&#8217;s&nbsp;pip</a></h2>
+    <p>
+      Posted on Sun 21 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/pip.html">pip</a>,      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/dependencies.html">dependencies</a>      &#8226; <a href="http://xion.io/post/code/python-pip-requirements.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In this post I&#8217;ll describe all (hopefully all!) the various ways you can specify a single dependency for a Python&nbsp;package.</p>
+<p>This assumes <em>pip</em> is used for installation. The list of dependencies then goes either in <code>install_requires=</code>
+parameter of the <code>setup</code> function within <em>setup.py</em>, or as a separate <em>requirements.txt</em> file. Commonly, it will actually
+go in both places, with the latter being the canonical source of&nbsp;truth:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">setuptools</span> <span class="kn">import</span> <span class="n">setup</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;requirements.txt&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">rf</span><span class="p">:</span>
+    <span class="n">setup</span><span class="p">(</span>
+        <span class="c"># ...</span>
+        <span class="n">install_requires</span><span class="o">=</span><span class="n">rf</span><span class="o">.</span><span class="n">readlines</span><span class="p">(),</span>
+    <span class="p">)</span>
+</pre></div>
+
+
+<p>More details about this approach can be found in
+<a href="http://xion.org.pl/2014/01/27/anathomy-of-a-python-package/">one of my previous posts</a>.</p>
+<p>Here, I will concentrate on the format of a single line in <em>requirements.txt</em> that defines a dependency.
+There are numerous variants that <em>pip</em> supports, and they are all described in excruciating detail in
+<a href="https://www.python.org/dev/peps/pep-0440/"><span class="caps">PEP</span> 440</a>. This post shall serve as a short reference on the most useful&nbsp;ones.</p>
+<h4>Package name (and&nbsp;version)</h4>
+<p>The simplest and most common option is to identify a dependency by its package&nbsp;name:</p>
+<div class="highlight"><pre>SQLAlchemy
+</pre></div>
+
+
+<p>This will locate it in a global index of packages, which is sometimes called a &#8220;cheese shop&#8221;. Currently,
+by far the most popular package registry for Python is <a href="https://pypi.python.org">PyPI</a>, and <em>pip</em> uses it by default<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>Without any further modifiers, <em>pip</em> will download and install the &#8220;current&#8221; version of the package &#8212; either the newest,
+or the one designated explicitly by a maintainer. This obviously makes the dependency somewhat unpredictable,
+for it can mean unintended upgrades that introduce breaking changes to your&nbsp;code.</p>
+<p>To prevent this, you&#8217;d normally <em>pin</em> the dependency to an exact version<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre>SQLAlchemy==0.9.10
+</pre></div>
+
+
+<p>Other comparison operators are also&nbsp;available:</p>
+<div class="highlight"><pre>SQLAlchemy&gt;=0.9.10
+SQLAlchemy&lt;1.0.0
+</pre></div>
+
+
+<p>and can even be&nbsp;combined:</p>
+<div class="highlight"><pre>SQLAlchemy&gt;=0.9,&lt;1.0.0
+</pre></div>
+
+
+<p>Specs like that will make <em>pip</em> find the newest version that&#8217;s within given range. Assuming your dependency follows
+the <a href="http://semver.org/">semantic versioning</a> scheme, this will allow you to stay on top of any minor bugfixes
+and improvements to an older release (0.9.x here), without the risk of accidentally upgrading to a new one (1.x)
+that your code is not compatible with&nbsp;yet.</p>
+<h4>Repository <span class="caps">URL</span></h4>
+<p>Sometimes you want to live on the bleeding edge, though, and depend not just on the latest <em>release</em>,
+but the head <em>commit</em> to the package&#8217;s repository. This makes sense especially in large systems
+that are distributed among multiple repos, and where development happens in&nbsp;lockstep.</p>
+<p>For those occasions, and a few others, <em>pip</em> can recognize direct repository URLs. They are in the&nbsp;format:</p>
+<div class="highlight"><pre>$VCS+$PROTOCOL://$URL@$LABEL#egg=$PACKAGE
+</pre></div>
+
+
+<p>where the <code>$PROTOCOL</code> part can be optional if the version control system has a default there. That&#8217;s for example
+the case for <code>git</code>, which is of course the most important <span class="caps">VCS</span> you&#8217;d be interested in<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>:</p>
+<div class="highlight"><pre>git://git.example.com/somepackage#egg=somepackage
+</pre></div>
+
+
+<p>Note that the <code>#egg=$PACKAGE</code> part is not a part of the <code>$URL</code>, and it&#8217;s only there to give a local name for the package
+distribution. This is what makes it possible to refer to it later via <em>pip</em>, if only to remove it with
+<code>pip uninstall $PACKAGE</code>.
+Of course, the sanest practice is to use the PyPI moniker if&nbsp;possible.</p>
+<p>When no <code>$LABEL</code> is given, <em>pip</em> will use the <span class="caps">HEAD</span>, trunk, tip, or the equivalent default/current revision from the repo.
+Often though (at least in case of Git), you would also pick a branch, tag, or even a particular <em>commit hash</em>:</p>
+<div class="highlight"><pre>git+https://github.com/Xion/unmatcher.git@0.1.3.1#egg=unmatcher
+git+ssh://github.com/You/yourpackage.git@master#egg=yourpackage
+git+https://github.com/mitsuhiko/jinja2.git@5b498453b5898257b2287f14ef6c363799f1405a#egg=Jinja2
+</pre></div>
+
+
+<p>The last two options could be a good choice even with third party packages, when you don&#8217;t want to wait for a new PyPI
+release to get a necessary feature or an urgent bug&nbsp;fix.</p>
+<h4>Local&nbsp;filesystem</h4>
+<p>Lastly, you can ask <em>pip</em> to install a package from a local directory or archive. The former option is often used
+with the <code>-e</code> (<code>--editable</code>) flag for <code>pip install</code>. This installs the package in the so-called <em>development mode</em>,
+allowing you to edit its source code&nbsp;in-place:</p>
+<div class="highlight"><pre>$ pip install -e /home/me/Code/myotherpackage
+</pre></div>
+
+
+<p>You almost certainly don&#8217;t want to put this line in <em>requirements.txt</em>: you should still be pulling the other package
+from PyPI. But if it&#8217;s your own one  &#8212; maybe a self-contained utility library used by your main program &#8212;
+this setup will be very helpful for making changes to it, informed by your own usage of the&nbsp;package.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This can be changed with <code>--index_url</code> flag to <code>pip install</code>. Running local indexes is a good practice
+for Python shops, especially those that rely on <code>pip install</code> as part of their deployment process.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>If the package uses <a href="http://semver.org/">semantic versioning</a>, a possible alternative to <code>==</code> is <code>~=</code>,
+which means &#8220;compatible&#8221; version. The precise meaning of this is
+<a href="https://www.python.org/dev/peps/pep-0440/#compatible-release">somewhat complicated</a>, but it roughly means that upgrades
+are permitted as long as nothing in the public interface changes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p><a href="https://pip.pypa.io/en/latest/reference/pip_install/#vcs-support">Other options</a> include <code>hg</code> (Mercurial),
+<code>svn</code>, and <code>bzr</code> (Bazaar).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Moving out of a container in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Fri 05 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/vector.html">vector</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/references.html">references</a>      &#8226; <a href="http://xion.io/post/code/rust-move-out-of-container.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>To prevent the kind of memory errors that plagues many C programs,
+the <a href="https://doc.rust-lang.org/book/ownership.html"><em>borrow checker</em> in Rust</a> tracks how data is moved between variables,
+or accessed via references. This is all done at compile time, with zero runtime overhead, and is a sizeable part
+of Rust&#8217;s value&nbsp;offering.</p>
+<p>Like all rigid and automated systems, however, it is necessarily constrained and cannot handle all situations perfectly.
+One of its limitations is treating all objects as <em>atomic</em>. It&#8217;s impossible for a variable to own a part of some bigger
+structure, neither is it possible to maintain mutable references to two or more elements of a&nbsp;collection.</p>
+<p>If we nonetheless <a href="http://is.gd/yWCYmJ">try</a>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="o">&amp;</span><span class="n">b</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>we&#8217;ll be served with a classic borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>&lt;anon&gt;:3:25: 3:33 error: cannot move out of indexed content [E0507]
+&lt;anon&gt;:3     let fullname = join(names[0], names[1]);
+                                 ^~~~~~~~
+</pre></div>
+
+
+<p>Behind its rather cryptic verbiage, it informs us that we tried to move a <em>part</em> of the <code>names</code> vector &#8212; its first
+element &#8212; to a new variable (here, a function parameter). This isn&#8217;t allowed, because in principle it would
+render the vector invalid from the standpoint of strict memory safety. Rust would no longer guarantee <code>names[0]</code> to be
+a legal <code>String</code>: its internal pointer could&#8217;ve been invalidated by the code which the element moved to
+(the <code>join</code> function)<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
+there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
+it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
+the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
+by the borrow&nbsp;checker.</p>
+<h4>Pointers to the&nbsp;rescue?</h4>
+<p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
+As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
+(structs, hashmaps, etc.), it&#8217;s been recognized and countermeasures are&nbsp;available.</p>
+<p>However, the <a href="http://is.gd/o3GRnw">idiomatic practice</a> is to actually leave the elements be and access them
+solely through&nbsp;references:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
+pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
+the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
+In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
+the call stacks and abstraction&nbsp;layers.</p>
+<h4>Vector&nbsp;solution</h4>
+<p>If we still insist on moving the elements out, at least in case of vector we aren&#8217;t <em>completely</em> out of luck.
+The <code>Vec</code> type offers several specialized methods that can slice, dice, and splice the collection in various ways.
+Those&nbsp;include:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_first"><code>split_first</code></a> (and <code>split_first_mut</code>)
+for cutting right after the first&nbsp;element</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_last"><code>split_last</code></a> (and <code>split_last_mut</code>)
+for a similar cut right before the last&nbsp;element</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_at"><code>split_at</code></a> (and <code>split_at_mut</code>),
+generalized versions of the above&nbsp;methods</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_off"><code>split_off</code></a>, a partially-in-place version
+of <code>split_at_mut</code></li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain"><code>drain</code></a> for moving all elements from a specified&nbsp;range</li>
+</ul>
+<p>Other types may offer different methods, depending on their particular data layout, though <code>drain</code> should be available
+on any data structure that can be iterated&nbsp;over.</p>
+<h4>Structural&nbsp;advantage</h4>
+<p>What about user-defined types, such as <code>struct</code>s?</p>
+<p>Fortunately, these are covered by the compiler itself. Since accessing <code>struct</code> fields is a fully compile-time
+operation, it is possible to track the ownership of each individual object that makes up the structure.
+Thus there are no obstacles to simply <a href="http://is.gd/ZUI2Mn">moving all the fields</a>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="p">{</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"></span>
+<span class="w">                   </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()};</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first_name</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">last_name</span><span class="p">)</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>If all else&nbsp;fails&#8230;</h4>
+<p>This leaves us with some rare cases when the container&#8217;s interface doesn&#8217;t <em>quite</em> support the exact subset of elements
+we want to move out. If we don&#8217;t want to <code>drain</code> them all and inspect every item for potential preservation,
+it may be time to skirt around the more dangerous areas of the&nbsp;language.</p>
+<p>But I don&#8217;t necessarily mean going all out with <code>unsafe</code> blocks, pointers, and (let&#8217;s be honest) segfaults.
+Instead, we can look at the gray zone between them and the regular, borrow-checked Rust&nbsp;code.</p>
+<p>Some of the functions inside the <a href="https://doc.rust-lang.org/std/mem/index.html"><code>std::mem</code> module</a> can be said
+to fall into this category. Most notably, <a href="https://doc.rust-lang.org/std/mem/fn.swap.html"><code>mem::swap</code></a> and
+<a href="https://doc.rust-lang.org/std/mem/fn.replace.html"><code>mem::replace</code></a> allow us to operate directly on the memory blocks
+that back every Rust object, albeit without the dangerous ability to freely modify&nbsp;them.</p>
+<p>What those functions enable is a small sleight of hand &#8212; a quick exchange of two variables or objects
+while the borrow checker &#8220;isn&#8217;t looking&#8221;. Possessing such an ability, we can smuggle any item out of a container
+as long as we&#8217;re able to provide a suitable&nbsp;replacement:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="p">;</span><span class="w"></span>
+
+<span class="c-Doc">/// Pick only the items under indices that are powers of two.</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">pick_powers_of_2</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Default</span><span class="o">&gt;</span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Vec</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">elem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mem</span><span class="o">::</span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">T</span><span class="o">::</span><span class="n">default</span><span class="p">());</span><span class="w"></span>
+<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">elem</span><span class="p">);</span><span class="w"></span>
+<span class="w">        </span><span class="n">i</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="n">result</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p style="text-align: center">
+    <img src="http://xion.io/images/indyswap.jpg" alt="Swap!"></br>
+    <small>Pictured: implementation of <code>mem::replace</code>.</small>
+</p>
+
+<p><a href="https://doc.rust-lang.org/std/default/trait.Default.html#tymethod.default">The <code>Default</code> value</a>,
+if available, is usually a great choice here. Alternately, a <code>Copy</code> or <code>Clone</code> of some other element can also work
+if it&#8217;s cheap to&nbsp;obtain.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
+on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the language itself,
+it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
+is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
+instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Retry idiom for&nbsp;Python</a></h2>
     <p>
       Posted on Wed 27 January 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -431,866 +1228,6 @@ e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
 <p>To see the full power of <em>furl</em>, I recommend having a look at its
 <a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
       <a class="btn" href="http://xion.io/post/code/python-furl.html#python-furl">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">let: binding for&nbsp;Knockout</a></h2>
-    <p>
-      Posted on Wed 18 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/knockout.html">Knockout</a>,      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/web-frontend.html">web frontend</a>,      <a href="http://xion.io/tag/data-binding.html">data binding</a>      &#8226; <a href="http://xion.io/post/code/knockout-let-binding.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://knockoutjs.com/">Knockout</a> is a JavaScript &#8220;framework&#8221; that has always lurked in the shadows of other,
-more flashy ones. Even in the days of its relative novelty, the likes of Backbone or Ember had seemed to garner more
-widespread interest among frontend developers. Today, this hasn&#8217;t changed much, the difference being mainly
-that the spotlight is now taken by new actors (<em>*cough*</em> <a href="https://facebook.github.io/react/">React</a> <em>*cough*</em>).</p>
-<p>But Knockout has a loyal following, and for good reasons. Possibly the most imporant one is why I&#8217;ve put the word
-&#8220;framework&#8221; in quotes. Knockout is, first and foremost, a <em>data binding</em> library: it doesn&#8217;t do much else besides
-tying <span class="caps">DOM</span> nodes to JavaScript&nbsp;objects.</p>
-<p>This quality makes it both easy to learn and simple to integrate. In fact, it can very well live in just some small
-compartments of your web application, mingling easily with any server-side templating mechanism you might be using.
-It also interplays effortlessly with other <span class="caps">JS</span> libraries, and sticks very well to
-<a href="http://stackoverflow.com/q/30766900/434799">whatever duct tape you use</a> to hold your frontend stack&nbsp;together.</p>
-<p>Lastly, it&#8217;s also quite extensible. We can, for example, create our own
-<a href="http://knockoutjs.com/documentation/binding-syntax.html">bindings</a> rather easily, extending the declarative language
-used to describe relationship between the data and <span class="caps">UI</span>.</p>
-<p>In this post, I&#8217;m going to demonstrate this by implementing a very simple <code>let:</code> binding &#8212;
-a kind of &#8220;assignment&#8221; of an expression to a&nbsp;name.</p>
-<h4>From Knockout <code>with:</code> bluff</h4>
-<p>Out of box, Knockout proffers the <a href="http://knockoutjs.com/documentation/with-binding.html"><code>with:</code> binding</a>,
-a quite similar mechanism. How it may be somewhat problematic is analogous to the
-<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/with">widely discouraged <code>with</code> statement</a>
-in JavaScript itself. Namely, it blends several namespaces together, making it harder to determine which object
-is being referred to. As a result, the code is more prone to&nbsp;errors.</p>
-<p>On the other hand, freeing the developer from repeating long and complicated expressions is obviously valuable.
-Perhaps reducing them to nil is not the right approach, though, so how about we just shorten them
-to a more manageable length? Well, that&#8217;s exactly what the <code>let:</code> binding is meant to&nbsp;do:</p>
-<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">data-bind=</span><span class="s">&quot;let: { addr: currentUser.personalInfo.address }&quot;</span><span class="nt">&gt;</span>
-  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line1&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
-  <span class="c">&lt;!-- ko if: addr.line2 --&gt;</span>
-    <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line2&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
-  <span class="c">&lt;!-- /ko --&gt;</span>
-  <span class="nt">&lt;p&gt;</span>
-    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.city&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>,
-    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.region&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
-  <span class="nt">&lt;/p&gt;</span>
-  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.country&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
-<span class="nt">&lt;/div&gt;</span>
-</pre></div>
-
-
-<p>Making it happen turns out to be pretty&nbsp;easy.</p>
-<h4>Binding&nbsp;contract</h4>
-<p>To define a Knockout binding, up to two things are needed. We have to specify what the library should&nbsp;do:</p>
-<ul>
-<li>when the binding is first applied to a <span class="caps">DOM</span> node (the <code>init</code> method)</li>
-<li>when any of the <a href="http://knockoutjs.com/documentation/observables.html">observed values</a> changes (the <code>update</code> method)</li>
-</ul>
-<p>Not every binding has to implement both methods. In our cases, only the <code>init</code> is necessary, because all we have to do
-is modify the <em>binding context</em>.</p>
-<p>What&#8217;s that? Shortly speaking, a <a href="http://knockoutjs.com/documentation/binding-context.html">binding context</a>,
-is an object holding all the data you can potentially bind to your <span class="caps">DOM</span> nodes. Think of it as a namespace, or local scope:
-whatever&#8217;s in there can be used directly inside <code>data-bind</code> attributes.</p>
-<h4><code>let:</code> it&nbsp;go</h4>
-<p>Therefore, all that the <code>let:</code> binding has to do is to extend the context with a mapping passed to it as an argument.
-Well, almost&nbsp;all:</p>
-<div class="highlight"><pre><span class="nx">ko</span><span class="p">.</span><span class="nx">bindingHandlers</span><span class="p">[</span><span class="s1">&#39;let&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="nx">init</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">valueAccessor</span><span class="p">,</span> <span class="nx">allBindings</span><span class="p">,</span> <span class="nx">viewModel</span><span class="p">,</span> <span class="nx">bindingContext</span><span class="p">)</span> <span class="p">{</span>
-        <span class="kd">var</span> <span class="nx">innerContext</span> <span class="o">=</span> <span class="nx">bindingContext</span><span class="p">.</span><span class="nx">extend</span><span class="p">(</span><span class="nx">valueAccessor</span><span class="p">);</span>
-        <span class="nx">ko</span><span class="p">.</span><span class="nx">applyBindingsToDescendants</span><span class="p">(</span><span class="nx">innerContext</span><span class="p">,</span> <span class="nx">element</span><span class="p">);</span>
-        <span class="k">return</span> <span class="p">{</span> <span class="nx">controlsDescendantBindings</span><span class="o">:</span> <span class="kc">true</span> <span class="p">};</span>
-    <span class="p">}</span>
-<span class="p">};</span>
-</pre></div>
-
-
-<p>The resulting <code>innerContext</code> is a copy of the original <code>bindingContext</code>, augmented with additional properties from
-the argument of <code>let:</code> (those are available through <code>valueAccessor</code>). Once we have it, though, we need to handle it
-in a little special&nbsp;way.</p>
-<p>Normally, Knockout is processing all bindings recursively, pasing down the same <code>bindingContext</code> (which ultimately
-comes from the root <code>viewModel</code>). But since we want to locally alter the context, we also need to interrupt this regular
-way and take care of the lower-level <span class="caps">DOM</span> nodes&nbsp;ourselves.</p>
-<p>This is exactly what the overly-long <code>ko.applyBindingsToDescendants</code> function is doing. The only caveat is that Knockout
-has to be <a href="http://knockoutjs.com/documentation/custom-bindings-controlling-descendant-bindings.html">told explicitly</a>
-about our intentions through the <code>return</code> value from <code>init</code>. Otherwise, it would try to apply the <em>original</em>
-<code>bindingContext</code> recursively, which in our case would amount to applying it <strong>twice</strong>.
-<code>{ controlsDescendantBindings: true }</code> prevents Knockout from doing so&nbsp;erroneously.</p>
-      <a class="btn" href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Turn SQLAlchemy queries into literal <span class="caps">SQL</span></a></h2>
-    <p>
-      Posted on Thu 12 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>,      <a href="http://xion.io/tag/sql.html">SQL</a>,      <a href="http://xion.io/tag/databases.html">databases</a>      &#8226; <a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Like I mentioned in the <a href="http://xion.io/post/code/sqlalchemy-regex-filters.html">post about adding regular expression support</a>,
-the nice thing about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a> is the clean, layered structure of various abstractions
-it&nbsp;utilizes.</p>
-<p>Regretably, though, we know that <a href="https://en.wikipedia.org/wiki/Leaky_abstraction">software abstractions tend to leak</a>.
-Inn particular, any <span class="caps">ORM</span> seem to be a poster child of this rule, especially in the popular opinion among
-<a href="https://www.reddit.com/r/programming/search?q=ORM&amp;restrict_sr=on">developer crowds</a>.
-By design, they&#8217;re intended to hide at least <em>some</em> details of the operations on a database,
-but those very details can be quite critical at times. There are situations when we simply want to know
-what <em>exactly</em> is going on, and how all those model classes and mappers and relationships translate
-to the actual <span class="caps">SQL</span>&nbsp;code.</p>
-<p>To make it a little more concrete, let&#8217;s focus on the SQLAlchemy <code>Query</code> class. Given such a query, we&#8217;d like to get
-the final <span class="caps">SQL</span> representation of it, the one that&#8217;s ultimately sent to the database, It could be useful
-for any number of things, from logging<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> to profiling, or just displaying in the web page&#8217;s footer,
-or even solely for prototyping in the Python <span class="caps">REPL</span>.</p>
-<p>In other words, we want to turn&nbsp;this:</p>
-<div class="highlight"><pre><span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">some_email</span><span class="p">)</span>
-</pre></div>
-
-
-<p>into something like&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">SELECT</span> <span class="n">users</span><span class="p">.</span><span class="n">id</span> <span class="k">FROM</span> <span class="n">users</span> <span class="k">WHERE</span> <span class="n">users</span><span class="p">.</span><span class="n">email</span> <span class="o">=</span> <span class="p">:</span><span class="mi">1</span>
-</pre></div>
-
-
-<p>regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related
-<code>JOIN</code>s it&nbsp;involves.</p>
-<h4>It&#8217;s a&nbsp;dialect</h4>
-<p>There is one aspect we cannot really universalize, though. It&#8217;s the specific <em>database backend</em> that SQLAlchemy
-should compile our query for. Shrugging off syntactical and semantical differences between database engines
-is one thing that using an <span class="caps">ORM</span> can potentially buy us, but if we want to get down to the <span class="caps">SQL</span> level,
-we need to be specific about&nbsp;it.</p>
-<p>In SQLAlchemy&#8217;s parlance, any specific variant of the <span class="caps">SQL</span> language is called a <em>dialect</em>. Most of the time,
-you&#8217;ll be interested in the particular dialect your database of choice is using. This is easily obtainable from
-the <a href="docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session">database <code>Session</code></a>:</p>
-<div class="highlight"><pre><span class="n">dialect</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
-</pre></div>
-
-
-<p>The resulting
-<a href="http://docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Dialect"><code>Dialect</code> object</a>
-is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of
-the database backends it supports. For our purposes, though, it can be treated as a completely opaque&nbsp;token.</p>
-<h4>Compile <span class="amp">&amp;</span>&nbsp;unwrap</h4>
-<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representation of our <code>Query</code>.
-Or, to be more precise, the compiled version of the query&#8217;s
-<a href="docs.sqlalchemy.org/en/latest/core/selectable.html#sqlalchemy.sql.expression.Select"><code>Select</code> statement</a></p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="s">&#39;foo@example.com&#39;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">print</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span><span class="p">))</span>
-<span class="n">SELECT</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span>
-<span class="n">FROM</span> <span class="n">users</span>
-<span class="n">WHERE</span> <span class="n">users</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="o">%</span><span class="p">(</span><span class="n">email_1</span><span class="p">)</span><span class="n">s</span>
-</pre></div>
-
-
-<p>Perhaps unsurprisingly, even after compilation the result is still just <em>another object</em>:
-the <a href="docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Compiled"><code>Compiled</code> one</a>.
-As you can see, however, the actual <span class="caps">SQL</span> text is just its <code>__str__</code><span class="quo">&#8216;</span>ing representation, which we can <code>print</code> directly
-or obtain with <code>str()</code> or <code>unicode()</code>.</p>
-<h4><code>Query.to_sql</code></h4>
-<p>But obviously, we don&#8217;t want to type the above incantations every time we need to take a peek at the generated <span class="caps">SQL</span>
-for an <span class="caps">ORM</span> query. Probably the best solution is to extend the <code>Query</code> class so that it offers this additional
-functionality under a new&nbsp;method:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
-
-
-<span class="k">class</span> <span class="nc">Query</span><span class="p">(</span><span class="n">_Query</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Custom, enhanced SQLALchemy Query class.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">to_sql</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Return a literal SQL representation of the query.&quot;&quot;&quot;</span>
-        <span class="n">dialect</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
-        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">dialect</span><span class="p">))</span>
-</pre></div>
-
-
-<p>This new <code>Query</code> class needs then be passed as
-<a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.params.query_cls"><code>query_cls</code> argument</a>
-to the constructor of <code>Session</code>. Details may vary a little bit depending on how exactly your application is set up,
-but in most cases, it should be <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">easy enough to figure out</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>If you&#8217;re only interested in indiscriminate logging of all queries, setting the
-<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine.params.echo"><code>echo</code> parameter</a>
-in <a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine"><code>create_engine</code></a> may be sufficient.
-Another alternative is to look directly at the
-<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#configuring-logging">logging configuration options</a>
-for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Celery task in a Flask request&nbsp;context</a></h2>
-    <p>
-      Posted on Tue 03 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/celery.html">Celery</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/queue.html">queue</a>,      <a href="http://xion.io/tag/request-context.html">request context</a>      &#8226; <a href="http://xion.io/post/code/celery-include-flask-request-context.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://celeryproject.org">Celery</a> is an asynchronous task worker that&#8217;s frequently used for background processing
-in Python web apps. Rather than performing a time-consuming task within the request loop, we delegate it to a <em>queue</em>
-so that a <em>worker process</em> can pick it up when ready. The immediate benefit is much better latency for the end user.
-Pros also include easier scalability, since you can adjust the number of workers to your task&nbsp;load.</p>
-<p>Examples of tasks that are usually best done in the background vary from fetching data through a third-party <span class="caps">API</span>
-to sending emails, and from pushing mobile notifications to pruning the database of stale records. Anything that may
-take more than a couple hundred milliseconds to complete &#8212; and isn&#8217;t absolutely essential to the current <span class="caps">HTTP</span> request &#8212;
-is typically a good candidate for asynchronous&nbsp;processing.</p>
-<p>In Celery, workers are just regular Python processes, often running the exact same code that&#8217;s powering the app&#8217;s web
-frontend<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. But unlike most of that code, they aren&#8217;t servicing any <span class="caps">HTTP</span> requests &#8212; they simply run some function
-with given arguments, both specified by whomever sent a task for execution. Indeed, those functions don&#8217;t even <em>know</em>
-who or what asked for them to be&nbsp;executed.</p>
-<p>Neat, right? It is what we usually compliment as <em>decoupling</em>, or separation of concerns. They are valuable qualities even
-regardless of the <span class="caps">UI</span> and scaling benefits mentioned&nbsp;earlier.</p>
-<h4>Not quite&nbsp;web</h4>
-<p>But those qualities come with a trade-off. Task code is no longer a web frontend code: it doesn&#8217;t run within the
-comfy environment of our web framework of choice. Losing it may be quite unnerving, actually, because in a typical
-web application there will be many things tied directly to the <span class="caps">HTTP</span> request pipeline. After all, this is what web
-applications <em>do</em> &#8212; respond to <span class="caps">HTTP</span> requests &#8212; so it often makes perfect sense e.g. to marry the request flow
-with database transactions, committing or rolling those back according to <span class="caps">HTTP</span> status code that the app&nbsp;produced.</p>
-<p>Tasks may also require a database, though, if only to
-<a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#state">assert the expected state of the world</a>.
-Similar goes for memcache, a Redis instance, or basically any resource used by the frontend code.
-Alas, it&#8217;s quite possible <em>the very reason</em> we delegate work to a task is to shift lengthy interactions with those
-external systems away from the <span class="caps">UI</span>. Obviously, we&#8217;re going to need them for&nbsp;that!</p>
-<h4>Fake a&nbsp;request</h4>
-<p>So one way or another, our tasks will most likely need some initialization and/or cleanup code. And since it&#8217;s probably
-the same code that most <span class="caps">HTTP</span> request handlers require and use already, why not just <em>pretend we&#8217;re handling a request
-after all</em>?</p>
-<p>In <a href="http://flask.pocoo.org">Flask</a>, we can pull that off rather easily.
-The <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.test_request_context"><code>test_request_context</code> method</a>
-is conveniently provided to allow for faking the <em>request context</em> &#8212; that is, an execution environment for <span class="caps">HTTP</span> handlers.
-Like the name suggest, it is used mostly <a href="http://flask.pocoo.org/docs/0.10/testing/">for testing</a>, but there is nothing
-stopping us from using it in tasks run by&nbsp;Celery.</p>
-<p>We probably don&#8217;t want to call it directly, though. What would be better is to have Celery prepare the context first,
-and then run the task code as if it was an <span class="caps">HTTP</span> handler. For even better results, the context would preserve information
-extracted from the <em>actual <span class="caps">HTTP</span> request</em>, one that has sent the task for execution. Moving some work to the background
-would then be a trivial matter, for both the task and the original handler would operate within the same&nbsp;environment.</p>
-<p>Convenient? I believe so. And as I&#8217;ll demonstrate next, it isn&#8217;t very complicated to implement&nbsp;either.</p>
-<h4>Wrap the&nbsp;decorator?</h4>
-<p>At least one piece of the solution should stand out as pretty obvious. Since our intention is to wrap the task&#8217;s code
-in some additional packaging &#8212; the request context &#8212; it seems fairly natural to write our own <code>@task</code> decorator:</p>
-<div class="highlight"><pre><span class="kn">import</span> <span class="nn">functools</span>
-
-<span class="kn">from</span> <span class="nn">myapp</span> <span class="kn">import</span> <span class="n">app</span><span class="p">,</span> <span class="n">celery</span>
-
-
-<span class="k">def</span> <span class="nf">task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Decorator function to apply to Celery tasks.</span>
-<span class="sd">    Executes the actual task inside Flask&#39;s test request context.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Actual decorator.&quot;&quot;&quot;</span>
-        <span class="nd">@celery.task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="nd">@functools.wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
-        <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-            <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
-                <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">wrapped</span>
-
-    <span class="k">return</span> <span class="n">decorator</span>
-</pre></div>
-
-
-<p>Here, <code>app</code> is the <a href="http://flask.pocoo.org/docs/0.10/api/#application-object"><code>Flask</code> application</a>, and <code>celery</code> is the
-<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery-application-objects"><code>Celery</code> object</a>
-that&#8217;s often configured alongside&nbsp;it.</p>
-<h4>The <code>Task</code> class</h4>
-<p>While this technique will give us <em>a</em> request context inside the task code, it won&#8217;t be <em>the</em> request context
-from which the task has been sent for execution. To replicate that context correctly, we need additional support
-on the sender&nbsp;side.</p>
-<p>Internally, Celery is converting every function we annotate with <code>@task</code> decorator into a subclass of
-<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task"><code>Celery.app.task.Task</code></a>.
-This process can be customized, for example by providing an explicit <code>base=</code> parameter to <code>@task</code> which
-specifies a <a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#custom-task-classes">custom <code>Task</code> subclass</a>
-to use in place of the default one. Within that subclass, we&#8217;re free to override any functionality that we need&nbsp;to.</p>
-<p>In our case, we&#8217;ll scrape the current request context from Flask for all relevant information,
-and later use it to recreate the context in the task&nbsp;code.</p>
-<p>But before we get to that, let&#8217;s just create the <code>Task</code> subclass and move the above execution logic to it.
-This way, users won&#8217;t have to use a completely new <code>@task</code> decorator which would needlessly couple them to a specific
-<code>Celery</code> app&nbsp;instance:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">celery</span> <span class="kn">import</span> <span class="n">Task</span>
-
-<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Base class for tasks that run inside a Flask request context.&quot;&quot;&quot;</span>
-    <span class="n">abstract</span> <span class="o">=</span> <span class="bp">True</span>
-
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
-            <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Instead, they can either set this class as <code>base=</code> for a specific&nbsp;task:</p>
-<div class="highlight"><pre><span class="nd">@celery.task</span><span class="p">(</span><span class="n">base</span><span class="o">=</span><span class="n">RequestContextTask</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">sync_user_data</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>or make it into new default for all their&nbsp;tasks:</p>
-<div class="highlight"><pre><span class="n">celery</span> <span class="o">=</span> <span class="n">Celery</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-<span class="n">celery</span><span class="o">.</span><span class="n">Task</span> <span class="o">=</span> <span class="n">RequestContextTask</span>
-</pre></div>
-
-
-<h4>Invocation&nbsp;patterns</h4>
-<p>When the frontend asks for a task to be executed, it most often uses the
-<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.delay"><code>Task.delay</code> method</a>.
-It will package a payload contaning task arguments, and send it off through a <em>broker</em> &#8212;
-usually an <a href="https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol"><span class="caps">AMQP</span></a>-based queue,
-such as <a href="https://www.rabbitmq.com/">RabbitMQ</a> &#8212; so that a Celery worker can pick it up and actually&nbsp;execute.</p>
-<p>But there are other means of task invocation. We can even run it
-<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.apply">&#8220;in place&#8221;</a>,
-locally and synchronously, which is especially useful for various testing scenarios. Lastly, a task can also be
-<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.retry">retried</a> from within
-its own code, terminating its current run and scheduling another attempt for some future&nbsp;date.</p>
-<p>Obviously, for the <code>RequestContextTask</code> to be useful, it needs to behave correctly in every situation.
-Therefore we need to cover all the entry points I&#8217;ve mentioned &#8212;
-the asynchronous call, a synchronous invocation, and a task&nbsp;retry:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
-    <span class="c"># ...</span>
-
-    <span class="k">def</span> <span class="nf">apply_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
-            <span class="o">.</span><span class="n">apply_async</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
-            <span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">retry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
-            <span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Note that <code>Task.apply_async</code> is being called internally by <code>Task.delay</code>,
-so it&#8217;s only that first method that we have to&nbsp;override.</p>
-<h4>Context in a&nbsp;box</h4>
-<p>As you can deduce right away, the Flask-related magic is meant to go in the <code>_include_context</code> method.
-The idea is to prepare arguments for the eventual invocation of <code>Flask.test_request_context</code>,
-and pass them through an extra task parameter.
-Those arguments are relatively uncomplicated: they are just a medley of various pieces of information
-that we can easily obtain from the Flask&#8217;s <code>request</code> object:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">has_request_context</span><span class="p">,</span> <span class="n">request</span>
-
-
-<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
-    <span class="n">CONTEXT_ARG_NAME</span> <span class="o">=</span> <span class="s">&#39;_flask_request_context&#39;</span>
-
-    <span class="c"># ...</span>
-
-    <span class="k">def</span> <span class="nf">_include_request_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Includes all the information about current HTTP request context</span>
-<span class="sd">        as an additional argument to the task.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_request_context</span><span class="p">():</span>
-            <span class="k">return</span>
-
-        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s">&#39;path&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
-            <span class="s">&#39;base_url&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">url_root</span><span class="p">,</span>
-            <span class="s">&#39;method&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
-            <span class="s">&#39;headers&#39;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">),</span>
-        <span class="p">}</span>
-        <span class="k">if</span> <span class="s">&#39;?&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">:</span>
-            <span class="n">context</span><span class="p">[</span><span class="s">&#39;query_string&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">[(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s">&#39;?&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):]</span>
-
-        <span class="n">kwargs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">]</span> <span class="o">=</span> <span class="n">context</span>
-</pre></div>
-
-
-<p>On the worker side, we simply unpack them and recreate the&nbsp;context:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">make_response</span>
-
-<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
-    <span class="c"># ...</span>
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="n">call</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-        <span class="n">context</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">has_request_context</span><span class="p">():</span>
-            <span class="k">return</span> <span class="n">call</span><span class="p">()</span>
-
-        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">):</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">call</span><span class="p">()</span>
-            <span class="n">app</span><span class="o">.</span><span class="n">process_response</span><span class="p">(</span><span class="n">make_response</span><span class="p">(</span><span class="n">result</span> <span class="ow">or</span> <span class="s">&#39;&#39;</span><span class="p">))</span>
-
-        <span class="k">return</span> <span class="n">result</span>
-</pre></div>
-
-
-<p>The only tricky part is calling
-<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.process_response"><code>Flask.process_response</code></a> at the end.
-We need to do that for the <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.after_request"><code>@after_request</code> hooks</a>
-to execute correctly. This is quite crucial, because those hooks are where you&#8217;d normally put important cleanup code,
-like commit/rollback of the database&nbsp;transaction.</p>
-<h4>Complete&nbsp;solution</h4>
-<p>To see how all those code snippets fit together, see <a href="https://gist.github.com/Xion/46d739b980af14a0d3ea">this gist</a>.
-You may also want to have a look at
-<a href="http://flask.pocoo.org/docs/0.10/patterns/celery/">the article on Celery integration</a> in Flask docs for some tips on
-how to integrate it with your own&nbsp;project.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>This isn&#8217;t strictly necessary, as Celery supports sending tasks for execution
-<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery.Celery.send_task">by explicit name</a>.
-For that request to reach the worker, however,
-the <a href="http://docs.celeryproject.org/en/latest/configuration.html#broker-url">task broker configuration</a>
-must be correctly shared between sender and the worker.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></a></h2>
-    <p>
-      Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/enums.html">enums</a>,      <a href="http://xion.io/tag/serialization.html">serialization</a>      &#8226; <a href="http://xion.io/post/code/python-enums-are-ok.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Little over two years ago, I was writing about
-<a href="http://xion.org.pl/2013/05/13/we-dont-need-no-enums-in-python/">my skepticism</a> towards the
-<a href="https://www.python.org/dev/peps/pep-0435/">addition of enum types to Python</a>. My stance has changed somewhat since then,
-and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent
-in the circumstances involving any kind of persistence,
-from <a href="https://docs.python.org/2/library/pickle.html">pickling</a> to&nbsp;databases.</p>
-<p>I will elaborate on that through the rest of this&nbsp;post.</p>
-<h4>Revision</h4>
-<p>First, let&#8217;s recap (or perhaps introduce) the important facts about enums in Python. An <em>enum</em>, or an enumeration type,
-is a special class that inherits from <code>enum.Enum</code><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> and defines one or more&nbsp;constants:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
-
-<span class="k">class</span> <span class="nc">Cutlery</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="n">knife</span> <span class="o">=</span> <span class="s">&#39;knife&#39;</span>
-    <span class="n">fork</span> <span class="o">=</span> <span class="s">&#39;fork&#39;</span>
-    <span class="n">spoon</span> <span class="o">=</span> <span class="s">&#39;spoon&#39;</span>
-</pre></div>
-
-
-<p>Their values are then converted into singleton objects with distinct identity.
-They available as attributes of the enumeration&nbsp;type:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span>
-<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span>
-</pre></div>
-
-
-<p>As a shorthand for when the values themselves are not important, the <code>Enum</code> class can be directly invoked
-with constant names as&nbsp;strings:</p>
-<div class="highlight"><pre><span class="n">Cutlery</span> <span class="o">=</span> <span class="n">Enum</span><span class="p">(</span><span class="s">&#39;Cutlery&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">])</span>
-</pre></div>
-
-
-<p>Resulting class offers some useful <span class="caps">API</span> that we&#8217;d expect from an enumeration type in any programming&nbsp;language:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">Cutlery</span><span class="p">)</span>
-<span class="p">[</span><span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span><span class="p">:</span> <span class="s">&#39;knife&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span><span class="p">]</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">Cutlery</span><span class="p">]</span>
-<span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">]</span>
-<span class="o">&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span> <span class="ow">in</span> <span class="n">Cutlery</span>
-<span class="bp">True</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spoon&#39;</span><span class="p">)</span>
-<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spork&#39;</span><span class="p">)</span>
-<span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
-<span class="c"># (...)</span>
-<span class="ne">ValueError</span><span class="p">:</span> <span class="s">&#39;spork&#39;</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">a</span> <span class="n">valid</span> <span class="n">Cutlery</span>
-</pre></div>
-
-
-<h4>How it was done&nbsp;previously</h4>
-<p>Of course, there is nothing really groundbreaking about assigning some values to &#8220;constants&#8221;. It&#8217;s been done like that
-since times immemorial, and quite often those constants have been grouped within finite&nbsp;sets.</p>
-<p>Here&#8217;s an example of a comment model in some imaginary <span class="caps">ORM</span>, complete with a status&nbsp;&#8220;enumeration&#8221;:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
-    <span class="n">APPROVED</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
-    <span class="n">REJECTED</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
-    <span class="n">IN_REVIEW</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
-    <span class="n">STATES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">([</span><span class="n">APPROVED</span><span class="p">,</span> <span class="n">REJECTED</span><span class="p">,</span> <span class="n">IN_REVIEW</span><span class="p">])</span>
-
-    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
-    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
-    <span class="n">state</span> <span class="o">=</span> <span class="n">String</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="n">STATES</span><span class="p">)</span>
-
-<span class="c"># usage</span>
-<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Boo&quot;</span><span class="p">)</span>
-<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">IN_REVIEW</span>
-<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
-</pre></div>
-
-
-<p>Converting it to use an <code>Enum</code> is relatively&nbsp;straightforward:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
-    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-        <span class="n">approved</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
-        <span class="n">rejected</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
-        <span class="n">in_review</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
-
-    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
-    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
-    <span class="n">state</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">State</span><span class="p">])</span>
-
-<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Meh.&quot;</span><span class="p">)</span>
-<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span><span class="o">.</span><span class="n">value</span>
-<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
-</pre></div>
-
-
-<p>It is not apparent, though, if there is any immediate benefit of doing so. True, we no longer need to define the <code>STATES</code>
-set explicitly, but saving on this bit of boilerplate is balanced out by having to access the enum&#8217;s <code>value</code>
-when assigning it to a string&nbsp;property.</p>
-<p>All in all, it seems like a wash &#8212; though at least we&#8217;ve established that enums are <em>no worse</em> than their alternatives&nbsp;:)</p>
-<h4>Enums are&nbsp;interoperable</h4>
-<p>Obviously, this doesn&#8217;t exactly sound like high praise. Thing is, we haven&#8217;t really replaced the previous solution
-<em>completely</em>. Remnants of it still linger in the way the <code>state</code> property is declared. Even though it&#8217;s supposed to hold
-enum constants, it is defined as string, which at this point is more of an implementation detail of how those constants
-are&nbsp;serialized.</p>
-<p>What were really need here is a kind of <code>EnumProperty</code> that&#8217;d allow us to work solely with enum objects.
-Before the introduction of a standard <code>Enum</code> base, however, there was little incentive for ORMs and other similiar
-libraries to provide such a functionality. But now, it makes much more sense to support enums as first-class citizens,
-at least for data exchange and serialization, because users can be expected to already prefer the standard <code>Enum</code>
-in their own&nbsp;code.</p>
-<p>Thus, the previous example changes into something along these&nbsp;lines:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
-    <span class="c"># ...</span>
-    <span class="n">state</span> <span class="o">=</span> <span class="n">EnumProperty</span><span class="p">(</span><span class="n">State</span><span class="p">)</span>
-
-<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Yay!&quot;</span><span class="p">)</span>
-<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span>  <span class="c"># no .value!</span>
-<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
-</pre></div>
-
-
-<p>Details of <code>EnumProperty</code>, or some equivalent construct, are of course specific to any given data management library.
-In SQLAlchemy, for example, a <a href="https://gist.github.com/Xion/5564b907e5f4e883511c">custom column type</a>
-can handle the necessary serialization and deserialization between Python code and <span class="caps">SQL</span> queries,
-allowing you to define your models like this<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
-    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-        <span class="c"># ...</span>
-
-    <span class="n">author</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">255</span><span class="p">))</span>
-    <span class="n">text</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
-    <span class="n">state</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">EnumType</span><span class="p">(</span><span class="n">State</span><span class="p">,</span> <span class="n">impl</span><span class="o">=</span><span class="n">String</span><span class="p">(</span><span class="mi">32</span><span class="p">)))</span>
-
-<span class="c"># usage like above</span>
-</pre></div>
-
-
-<p>In any case, the point is to have Python code operate solely on enum objects, while the persistence layer takes
-care of converting between them and their serializable&nbsp;values.</p>
-<h4>Enums are&nbsp;extensible</h4>
-<p>The other advantage <code>Enum</code>s have over loose collections of constants is that they are proper <em>types</em>.
-Like all user-defined types in Python, they can have additional methods and properties defined on their instances,
-or even on the type&nbsp;itself.</p>
-<p>Although this capability is (by default) not as powerful as e.g. in Java &#8212; where <em>each enum constant</em> can
-<a href="https://gist.github.com/chandrasekhar4u/431839b9eac715c08b71">override a method in its own way</a> &#8212; it can nevertheless
-be quite convenient at times. Typical use cases include constant&nbsp;classification:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span>
-    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span>
-    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span>
-    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">is_horizontal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">is_vertical</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">)</span>
-</pre></div>
-
-
-<p>and&nbsp;conversion:</p>
-<div class="highlight"><pre>    <span class="k">def</span> <span class="nf">as_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-            <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
-            <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-            <span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-        <span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-</pre></div>
-
-
-<p>For the latter, it would be handy to have the Java&#8217;s ability to
-<a href="https://docs.oracle.com/javase/tutorial/java/javaOO/enum.html">attach additional data</a> to an enum constant.
-As it turns out, Python supports this feature natively in a very similar way.
-We simply have to override enum&#8217;s <code>__new__</code> method to parse out any extra values from the initializer
-and turn them into attributes of the enum&nbsp;instance:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">keycode</span><span class="p">,</span> <span class="n">vector</span><span class="p">):</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">)</span>
-        <span class="n">obj</span><span class="o">.</span><span class="n">_value_</span> <span class="o">=</span> <span class="n">keycode</span>
-        <span class="n">obj</span><span class="o">.</span><span class="n">vector</span> <span class="o">=</span> <span class="n">vector</span>
-        <span class="k">return</span> <span class="n">obj</span>
-</pre></div>
-
-
-<p>It&#8217;s possible, in fact, to insert any arbitrary computation here that yields the final <code>_value_</code> of an enum constant<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
-This trick can be used to, for example, construct enums that
-<a href="https://docs.python.org/3/library/enum.html#autonumber">automatically number themselves</a>.</p>
-<p>Finally, we can add static methods, class methods, or <a href="http://stackoverflow.com/a/3203659">class properties</a> to the
-<code>Enum</code> subclass, just like we would do with any other&nbsp;class:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">MyEnum</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
-    <span class="c"># ...</span>
-
-    <span class="nd">@classproperty</span>
-    <span class="k">def</span> <span class="nf">__values__</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">cls</span><span class="p">]</span>
-</pre></div>
-
-
-<h4>Enums just&nbsp;are</h4>
-<p>All these things are possible primarly because of the most notable aspect of Python enums: their existence
-as an <em>explicit concept</em>. A syntactically unorganized bunch of constants cannot offer half of the highlighted features
-because there is nowhere to pin them&nbsp;on.</p>
-<p>For that reason alone, using enums as an explicit &#8212; rather than implicit &#8212; pattern seems worthwhile.
-The one benefit we&#8217;re certain to reap is better code structure through separation of important&nbsp;concepts.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>The <code>enum</code> module is part of the Python standard library
-<a href="https://docs.python.org/3/library/enum.html">since version 3.4</a>
-but <a href="https://pypi.python.org/pypi/enum/">a fully functional backport</a> is available for Python 2.x as well.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>It is even possible to instruct SQLAlchemy how to map Python enums to
-<a href="http://www.postgresql.org/docs/9.1/static/datatype-enum.html"><code>ENUM</code> types</a> in database engines that support it,
-but details are outside of the scope of this article.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>If you&#8217;re fine with the enum&#8217;s <code>value</code> being the <em>whole</em> tuple (everything after the <code>=</code> sign),
-you can override <code>__init__</code> instead of <code>__new__</code>
-(cf. <a href="https://docs.python.org/3/library/enum.html#planet">the planet example</a> from standard docs).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
-    <p>
-      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
-in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
-<code>div.content</code>, and other presentational elements are still a common fact of life.
-Unless you&#8217;re one of the cool kids who use <a href="http://webcomponents.org/">Web Components</a> with
-<a href="https://www.polymer-project.org">Polymer</a>, your main option for abstracting this boilerplate away
-is defining some more general <a href="http://jinja.pocoo.org/docs/dev/templates/#macros">template macros</a>.</p>
-<p>As with any kind of abstraction, it&#8217;s crucial to balance broad applicability with a potential for finely-tuned
-customization. In the case of wrapping <span class="caps">HTML</span> snippets in Jinja macros, an easy way to maintain flexibility is to allow
-the caller to specify some crucial attributes of the root&nbsp;element:</p>
-<div class="highlight"><pre><span class="c">{#</span>
-<span class="c">  Renders the markup for a &lt;button&gt; from Twitter Bootstrap.</span>
-<span class="c">#}</span><span class="x"></span>
-<span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;</span>
-<span class="x">        class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}{%</span> <span class="k">if</span> <span class="nv">class</span> <span class="cp">%}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">class</span> <span class="cp">}}{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x">&quot;</span>
-<span class="x">        </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
-<span class="x">    </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
-<span class="x">  &lt;/button&gt;</span>
-<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>An element <code>id</code> would be a good example, and in the above macro it&#8217;s handled implicility
-thanks to the <code>{{ kwargs|xmlattr }}</code> stanza.</p>
-<p><code>class</code>, however, is not that simple, because a macro like that usually needs to supply some <span class="caps">CSS</span> classes of its own.
-The operation of combining them with additional ones, passed by the caller, is awfully textual and error-prone.
-It&#8217;s easy, for example, to forget about the crucial space and run two class names&nbsp;together.</p>
-<p>As if <span class="caps">CSS</span> wasn&#8217;t difficult enough to debug&nbsp;already!</p>
-<h4>Let them have&nbsp;list</h4>
-<p>The root cause for any of those problems is working at a level that&#8217;s too low for the task.
-The value for a <code>class</code> attribute may be <em>encoded</em> as string, but it&#8217;s fundamentally a <em>list of tokens</em>.
-In the modern <span class="caps">DOM</span> <span class="caps">API</span>, for example, it is represented
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/classList">as exactly that</a>: a <code>DOMTokenList</code>.</p>
-<p>I&#8217;ve found it helpful to replicate a similar mechanism in Jinja templates. The result is a <code>ClassList</code> wrapper
-whose code I quote here in&nbsp;full:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42
-43</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">MutableSet</span>
-
-
-<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Data structure for holding, and ultimately returning as a single string,</span>
-<span class="sd">    a set of identifiers that should be managed like CSS classes.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Constructor.</span>
-<span class="sd">        :param arg: A single class name or an iterable thereof.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
-            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
-            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span>
-        <span class="k">elif</span> <span class="n">arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="s">&quot;expected a string or string iterable, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">))</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">classes</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">class_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span>
-
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">discard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">__html__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s">&#39;class=&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
-</pre></div>
-</td></tr></table>
-
-<p>To make it work with <a href="http://flask.pocoo.org">Flask</a>, adorn the class with
-<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.template_global"><code>Flask.template_global</code> decorator</a>:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">myflaskapp</span> <span class="kn">import</span> <span class="n">app</span>
-
-<span class="nd">@app.template_global</span><span class="p">(</span><span class="s">&#39;classlist&#39;</span><span class="p">)</span>
-<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>Otherwise, if you&#8217;re working with a raw <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment">Jinja <code>Environment</code></a>,
-simply add <code>ClassList</code> to its <a href="http://jinja.pocoo.org/docs/dev/api/#global-namespace">global namespace</a>&nbsp;directly:</p>
-<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">globals</span><span class="p">[</span><span class="s">&#39;classlist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ClassList</span>
-</pre></div>
-
-
-<p>In either case, I recommend following the apparent Jinja convention of naming template symbols
-as <code>lowercasewithoutspaces</code>.</p>
-<h4>Becoming&nbsp;classy</h4>
-<p>Usage of this new <code>classlist</code> helper is relatively straightforward. Since it accepts both a space-separated string
-or an iterable of <span class="caps">CSS</span> class names, a macro can wrap anything the caller would pass it as a value for <code>class</code> attribute:</p>
-<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  </span><span class="cp">{%</span> <span class="k">set</span> <span class="nv">classes</span> <span class="o">=</span> <span class="nv">classlist</span><span class="o">(</span><span class="nv">class</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  </span><span class="c">{# ... #}</span><span class="x"></span>
-</pre></div>
-
-
-<p>The <code>classlist</code> is capable of producing the complete <code>class</code> attribute syntax (i.e. <code>class="..."</code>), or omit it entirely
-if it would be empty. All we need to do is evaluate it using the normal Jinja expression&nbsp;syntax:</p>
-<div class="highlight"><pre><span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot; </span><span class="cp">{{</span> <span class="nv">classes</span> <span class="cp">}}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
-</pre></div>
-
-
-<p>Before that, though, we may want to include some additional classes that are specific to our macro.
-The <code>button</code> macro, for example, needs to add the <a href="http://getbootstrap.com/css/#buttons">Bootstrap-specific</a>
-<code>btn</code> and <code>btn-$STYLE</code> classes to the <code>&lt;button&gt;</code> element it produces<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre><span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">classes.add</span><span class="o">(</span><span class="s1">&#39;btn&#39;</span><span class="o">,</span> <span class="s1">&#39;btn-&#39;</span> <span class="o">+</span> <span class="nv">style</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>After executing this statement, the final <code>class</code> attribute contains both the caller-provided classes,
-as well those two that were added&nbsp;explicitly.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Believe it or not, we can finally
-<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content">center the content vertically</a>
-without much of an issue!&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>The <code>{% do %}</code> block in Jinja allows to execute statements (such as function calls) without evaluating values
-they return. It is not exposed by default,
-but <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment.add_extension">adding</a> a standard
-<a href="http://jinja.pocoo.org/docs/dev/extensions/#expression-statement"><code>jinja2.ext.do</code> extension</a> to the <code>Environment</code>
-makes it available.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist">Continue reading</a>
   </div>
 </article>
 

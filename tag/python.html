@@ -63,6 +63,251 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
+    <p>
+      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
+<p>For a long time, I resisted the appeal of various incremental improvements
+that early 3.x releases offered.
+And the world agreed with me:
+a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
+<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
+<p>As if to compensate for years of &#8220;good enough&#8221;,
+Python 3 development team has given in to a steadily accelerating feature creep.
+Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
+(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
+but it nevertheless causes an increasingly wide functional gap
+between the 2.x and 3.x&nbsp;series.</p>
+<p>Starting from around Python 3.5, this gap becomes really noticeable,
+even when partially bridged with many excellent backports.
+The ecosystem support is also mostly there,
+at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
+<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
+<p>Given all those portents,
+even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
+For better or for worse, 3.x is how Python will look like in the coming years and decades.
+Might as well prepare for&nbsp;it.</p>
+<p>In this post, I will discuss some important issues
+one should be aware of before trying to switch from Python 2 to 3.
+I won&#8217;t be talking about all the minute changes and additions,
+but cover the more significant, broader concepts
+that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
+<p>The two concepts I&#8217;ll be mentioning here are
+<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
+<h4>Unicode&nbsp;handling</h4>
+<p>You have probably heard it before.
+Python 3 was going to solve your Unicode problems once and for all.
+You haven&#8217;t believed it, of course,
+like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
+<p>Still, it may be rather surprising to learn
+that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
+<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
+<p>In any case, either version of Python gets the most important thing about Unicode right.
+They both distinguish, at the type level,
+between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
+The type that holds the latter is called <code>bytes</code> in both versions,
+while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
+<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
+where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
+<p>But where Python 2 does poorly is in the choice of defaults.
+You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
+That <code>str</code> is a fully functional string type,
+even though it can only contain <span class="caps">ASCII</span> characters.
+Moreover, it is also the <em>default</em>:
+quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
+<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
+<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
+If you already deal with Unicode correctly in your programs
+&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
+your main benefit will be not having to write that <code>u""</code> quotes anymore.
+Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
+rather than letting you write &#8220;working&#8221; programs
+that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
+<h4>Laziness by&nbsp;default</h4>
+<p>The second major change that Python 3 brings is of similar nature.
+It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
+<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
+are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
+Included in these are functions like <code>map</code> or <code>filter</code>,
+as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
+<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
+<ul>
+<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
+<li><code>xrange</code> is now just <code>range</code></li>
+<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
+</ul>
+<p>and so&nbsp;on.</p>
+<p>In some cases, this is exactly what happens.
+For example, there is virtually no downside to the new implementation of <code>range</code>,
+especially considering the way it is used most&nbsp;often.</p>
+<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
+Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
+their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
+i.e. the most simplistic and limited flavor of Python iterables.
+Working with them is trickier and more error-prone than with lists,
+which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
+that generators expose us&nbsp;to.</p>
+<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
+by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
+and using its functions in place of the built-ins.
+What you could gain in return was increased performance, and a lesser memory footprint.
+All those benefits came from making the computations <em>lazy</em>
+and refraining from storage of the intermediate&nbsp;results.</p>
+<p>In Python 3, however, laziness is <em>preordained</em>.
+Even if we don&#8217;t need or care about the aforementioned perks,
+we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
+<p>One option is to embrace lazy evaluation fully,
+and adapt to handling unspecified iterables throughout our code bases.<br>
+The risk is an increased frequency of bugs stemming from generator misuse &#8212;
+including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
+deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
+<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
+wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
+in order to &#8220;sanitize&#8221; them for later (re)use.<br>
+Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
+</pre></div>
+
+
+<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
+    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
+    <span class="c"># ...the rest of a long function...</span>
+</pre></div>
+
+
+<p>Even if you choose the first path, and somehow use lazy generators everywhere,
+conversions are still required at the serialization&nbsp;boundaries:</p>
+<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
+</pre></div>
+
+
+<p>At least in this case, the lazy iterable will vocally fail with an exception,
+rather than silently doing nothing (in case of repeated iteration)
+or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
+<h4>from __future__ import&nbsp;doubts</h4>
+<p>So, here they are: the highlights of Python 3.
+If you are disappointed they all turned out to be mixed blessings,
+don&#8217;t worry: you are
+<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
+<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
+<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
+<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
+<p>The truth is that Python 3 is more finnicky, less forgiving,
+and much less beginner-friendly than its predecessor.
+Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
+by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
+<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
+Perhaps it&#8217;s not a coincidence
+that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
+has passed between the first public version of Python (0.9)
+and the release of Python 3.0.
+By no conceivable means it is a toy language anymore,
+and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
+<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
+<p>It&#8217;s becoming harder to claim the language favors simplicity
+over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
+It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
+is the <em>obvious</em> way to do it.<br>
+It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
+and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
+<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
+The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
+But who knows? Maybe after two decades,
+a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
+<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
+are about to get&nbsp;in!</p>
+      <a class="btn" href="http://xion.io/post/code/python3-primer.html#python3-primer">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">str.startswith() with tuple&nbsp;argument</a></h2>
+    <p>
+      Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/tuples.html">tuples</a>      &#8226; <a href="http://xion.io/post/code/python-startswith-tuple.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a little known trick that&#8217;s applicable to Python&#8217;s <a href="http://bugs.python.org/issue1491485"><code>startswith</code></a>
+and <a href="http://bugs.python.org/issue1491485"><code>endswith</code></a> methods of <code>str</code> (and <code>unicode</code>).</p>
+<p>Suppose you&#8217;re checking whether a string starts with some&nbsp;prefix:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">):</span>
+    <span class="c"># totally an URL</span>
+</pre></div>
+
+
+<p>You eventually add more possible prefixes (or suffixes) to your&nbsp;condition:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;https://&#39;</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Later on you notice the repetition and refactor it into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">]</span>
+<span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or if you&#8217;re feeling extra&nbsp;functional:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">,</span> <span class="n">SCHEMES</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Turns out, however, that <code>startswith</code> (and <code>endswith</code>) support this use case natively.
+Rather than passing just a single string as the argument,
+you can provide a <em>tuple</em> of strings&nbsp;instead:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Either method will then check the original string against every element of the passed tuple.
+Both will only return <code>True</code> if <em>at least one</em> of the strings is recognized as prefix/suffix.
+As you can see, that&#8217;s exactly what we would previously do with <code>any</code>.</p>
+<p>Somewhat surprisingly, however, the feature only works for actual <em>tuples</em>.
+Trying to pass a seemingly equivalent iterable &#8212; a <code>list</code> or <code>set</code>, for example &#8212;
+will be met with interpreter&#8217;s&nbsp;refusal:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">is_jpeg</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">([</span><span class="s">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s">&#39;.jpeg&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre>TypeError: endswith first arg must be str, unicode, or tuple, not list
+</pre></div>
+
+
+<p>If you dig into it, there doesn&#8217;t seem to be a compelling reason for this behavior.
+The <a href="http://bugs.python.org/issue1491485">relevant feature request</a> talks about
+consistency with the built-in <code>isinstance</code> function,
+but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
+<p>In any case, this can be worked around without much&nbsp;difficulty:</p>
+<div class="highlight"><pre><span class="n">PROTOCOLS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http&#39;</span><span class="p">,</span> <span class="s">&#39;https&#39;</span><span class="p">,</span> <span class="s">&#39;ftp&#39;</span><span class="p">,</span> <span class="s">&#39;git&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="s">&#39;://&#39;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">PROTOCOLS</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
+      <a class="btn" href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
     <p>
       Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -584,7 +829,7 @@ is syntactically valid even <em>with</em> the extra characters. As a result, <co
 incorrect definition. It should have been of a lambda contained within a tuple, but tuple is apparently what the lambda
 <em>returns</em>.</p>
 <p>You may say that this is the sharp end of a narrow edge case, and anyone who defines functions like that deserves all
-the trouble they get. And sure, I wouldn&#8217;t mind if we just threw hands in the air and tell them we&#8217;re simply unable
+the trouble they get. And sure, I wouldn&#8217;t mind if we just threw hands in the air and told them we&#8217;re simply unable
 to retrieve the source here. But my opinion is that it doesn&#8217;t justify serving them obviously <em>wrong</em>&nbsp;results!</p>
 <h4>A halting&nbsp;problem</h4>
 <p>Not if we can help it, anyway. Have a look at the expected source code and the one we&#8217;ve extracted, side by&nbsp;side:</p>
@@ -674,7 +919,7 @@ manner.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="J
     <p>
       Posted on Sun 20 March 2016 in <a href="http://xion.io/category/news.html">News</a>
       &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/testing.html">testing</a>,      <a href="http://xion.io/tag/mock.html">mock</a>,      <a href="http://xion.io/tag/argument-matchers.html">argument matchers</a>      &#8226; <a href="http://xion.io/post/news/callee-intro.html#disqus_thread">Leave a comment</a>
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/testing.html">testing</a>,      <a href="http://xion.io/tag/mocking.html">mocking</a>,      <a href="http://xion.io/tag/argument-matchers.html">argument matchers</a>      &#8226; <a href="http://xion.io/post/news/callee-intro.html#disqus_thread">Leave a comment</a>
     </p>
   </header>
   <div>
@@ -875,168 +1120,6 @@ are permitted as long as nothing in the public interface changes.&#160;<a class=
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Retry idiom for&nbsp;Python</a></h2>
-    <p>
-      Posted on Wed 27 January 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/exceptions.html">exceptions</a>,      <a href="http://xion.io/tag/else.html">else</a>      &#8226; <a href="http://xion.io/post/code/python-retry-idiom.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>A relatively little known feature of Python is the <code>else</code> block for control flow statements other than <code>if</code>.</p>
-<p>If you haven&#8217;t heard about it before, you can provide such a block for both <code>while</code> and <code>for</code> loops,
-as well as any variant of the <code>try</code> statement, Its functionality is roughly analogous in both&nbsp;cases:</p>
-<ul>
-<li>in loops, the <code>else</code> block is executed if the loop didn&#8217;t exit abnormally (i.e. with <code>break</code>)</li>
-<li>in <code>try</code> constructs, the <code>else</code> block runs if <em>no</em> exception&nbsp;happened</li>
-</ul>
-<p>Likely because of the unique semantics that don&#8217;t exist in other languages, neither of those constructs has been seen much
-in real world code. Recently, however, I&#8217;ve found they can be combined into a very pythonic pattern
-that&#8217;s also quite&nbsp;useful.</p>
-<h4>The&nbsp;trick</h4>
-<p>Say you have a task that won&#8217;t always succeed. Perhaps it&#8217;s a request made to a janky server, or other network operartion
-that&#8217;s prone to timeouts. Since failures are likely to be transient, you&#8217;d like to retry it several more times before
-giving up&nbsp;permanently.</p>
-<p>With <code>try</code>/<code>except</code> block, you can detect those half-expected failures. With a simple loop, you can repeat the attempt
-for as many times as you deem feasible. Combined, they can solve the problem rather&nbsp;neatly:</p>
-<div class="highlight"><pre><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">MAX_RETRIES</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="c"># ... do stuff ...</span>
-    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
-        <span class="c"># ... log it, sleep, etc. ...</span>
-        <span class="k">continue</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">break</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
-</pre></div>
-
-
-<h4>But&nbsp;why?</h4>
-<p>What&#8217;s the deal with the <code>else</code>s here, though? Are they both&nbsp;necessary?</p>
-<p>The simple answer is of course no. <code>else</code> after either a loop or  <code>try</code>/<code>except</code> block is always a <em>syntactic sugar</em>.
-Any code that contains it can be transformed into an equivalent snippet that utilizes different techniques to achieve
-the same&nbsp;effect.</p>
-<p>But this view isn&#8217;t very useful, for many of the essential features in any programming languages can be dismissed
-as superfluous using this reasoning. The real question is whether the above idiom is more readable and understandable
-than the&nbsp;alternatives.</p>
-<p>To that, I posit, the answer is: <em>absolutely</em>.</p>
-<h4>Desugaring</h4>
-<p>Without the double <code>else</code>, this example would have to be written in a considerably more convoluted&nbsp;way:</p>
-<div class="highlight"><pre><span class="n">retries</span> <span class="o">=</span> <span class="n">MAX_RETRIES</span>
-<span class="k">while</span> <span class="n">retries</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="c"># ... do stuff ...</span>
-        <span class="k">break</span>
-    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
-        <span class="c"># ... log it, sleep, etc. ...</span>
-        <span class="n">retries</span> <span class="o">-=</span> <span class="mi">1</span>
-<span class="k">if</span> <span class="n">retries</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
-</pre></div>
-
-
-<p>Although at first glance the difference may be minuscule, this version adds significant extra busywork the programmer
-has to pay careful attention&nbsp;to:</p>
-<ul>
-<li>The <code>retries</code> variable now has to be explicit, because the final conditional statement must look at its&nbsp;value.</li>
-<li>We can&#8217;t use a <code>for</code> loop anymore (e.g. <code>for retries in range(MAX_RETRIES)</code>), because we wouldn&#8217;t distinguish the
-&#8220;success at last try&#8221; and &#8220;retry limit exceeded&#8221; cases: they&#8217;d both result in <code>retries</code> equal to <code>MAX_RETRIES - 1</code>
-after the loop<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</li>
-<li>As a result, we have to remember to decrement the counter ourselves upon an&nbsp;error.</li>
-</ul>
-<p>Additionally, the <code>break</code> is easy to miss amidst the actual logic within the <code>try</code> block, both for developer
-who writes the code and for any subsequent readers. An alternative is to move it outside of the <code>try</code>/<code>except</code> clause,
-but that in turn reintroduces <code>continue</code> into the <code>except</code> branch and further complicates the whole&nbsp;flow.</p>
-<p>In short, the desugared version is more error-prone (all those off-by-ones!) and also quite&nbsp;inscrutable.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Or to <code>1</code>, if we count from <code>MAX_RETRIES</code> down to zero.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-furl.html#python-furl"><span class="caps">URL</span> library for&nbsp;Python</a></h2>
-    <p>
-      Posted on Fri 27 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/url.html">URL</a>,      <a href="http://xion.io/tag/furl.html">furl</a>      &#8226; <a href="http://xion.io/post/code/python-furl.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Python has many <a href="https://docs.python.org/3/library/">batteries included</a>, but a few things are still conspicuously&nbsp;missing.</p>
-<p>One of them is a standardized and convenient approach to <span class="caps">URL</span> manipulation, akin to the
-<a href="http://docs.oracle.com/javase/7/docs/api/java/net/URI.html"><code>URI</code> class</a> in Java.
-There are some functions in <a href="https://docs.python.org/2/library/urllib.html"><code>urllib</code></a>, of course
-(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their <span class="caps">HTTP</span>-related
-comrades, they prove rather verbose and somewhat&nbsp;clunky.</p>
-<p><span class="caps">HTTP</span>, however, is solved by the <a href="http://python-requests.org/">Requests</a> package, so you may wonder
-if there is some analogous package for <span class="caps">URL</span> operations. The answer is affirmative, and the library in question is,
-quite whimsically, called <a href="https://github.com/gruns/furl"><em>furl</em></a>.</p>
-<h4><span class="caps">URL</span> in a&nbsp;wrap</h4>
-<p>The sole interesting part of the <em>furl</em> interface is the <code>furl</code> class. It represents a single <span class="caps">URL</span>, broken down to
-its constituents, with properties and methods for both reading them out and replacing with new&nbsp;values.</p>
-<p>Thanks to this handy (and quite obvious) abstraction, common <span class="caps">URL</span> operations become quite simple and&nbsp;self-documenting:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">furl</span> <span class="kn">import</span> <span class="n">furl</span>
-
-
-<span class="k">def</span> <span class="nf">to_absolute</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">base</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;If given ``url`` is a relative path,</span>
-<span class="sd">    make it relative to the ``base``.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">furled</span><span class="o">.</span><span class="n">scheme</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">furl</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
-    <span class="k">return</span> <span class="n">url</span>
-
-
-<span class="k">def</span> <span class="nf">is_same_origin</span><span class="p">(</span><span class="o">*</span><span class="n">urls</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Check whether URLs are from the same origin (host:port).&quot;&quot;&quot;</span>
-    <span class="n">origins</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">netloc</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">furl</span><span class="p">,</span> <span class="n">urls</span><span class="p">))</span>
-    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span>
-
-
-<span class="k">def</span> <span class="nf">get_facebook_username</span><span class="p">(</span><span class="n">profile_url</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Get Facebook user ID from their profile URL.&quot;&quot;&quot;</span>
-    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">profile_url</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">furled</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="s">&#39;facebook.com&#39;</span> <span class="ow">or</span>
-            <span class="n">furled</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.facebook.com&#39;</span><span class="p">)):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;not a Facebook URL: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">profile_url</span><span class="p">,))</span>
-    <span class="k">return</span> <span class="n">furled</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-
-<span class="c"># etc.</span>
-</pre></div>
-
-
-<p>This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string&nbsp;interpolation:</p>
-<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">?</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BASE_URL</span><span class="p">,</span> <span class="n">urlencode</span><span class="p">(</span><span class="n">query_params</span><span class="p">))</span>
-</pre></div>
-
-
-<p>Besides looking unpythonically ugly, it&#8217;s also inflexible and error-prone. If <code>BASE_URL</code> gains some innate query string
-params (<code>'http://example.com/?a=b'</code>), this method will start producing completely invalid <code>url</code>s (with two question marks,
-e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
-<p>The equivalent in <em>furl</em> has none of these&nbsp;flaws:</p>
-<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">BASE_URL</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
-</pre></div>
-
-
-<h4>The full&nbsp;package</h4>
-<p>To see the full power of <em>furl</em>, I recommend having a look at its
-<a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
-      <a class="btn" href="http://xion.io/post/code/python-furl.html#python-furl">Continue reading</a>
   </div>
 </article>
 

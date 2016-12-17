@@ -63,6 +63,168 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Retry idiom for&nbsp;Python</a></h2>
+    <p>
+      Posted on Wed 27 January 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/exceptions.html">exceptions</a>,      <a href="http://xion.io/tag/else.html">else</a>      &#8226; <a href="http://xion.io/post/code/python-retry-idiom.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>A relatively little known feature of Python is the <code>else</code> block for control flow statements other than <code>if</code>.</p>
+<p>If you haven&#8217;t heard about it before, you can provide such a block for both <code>while</code> and <code>for</code> loops,
+as well as any variant of the <code>try</code> statement, Its functionality is roughly analogous in both&nbsp;cases:</p>
+<ul>
+<li>in loops, the <code>else</code> block is executed if the loop didn&#8217;t exit abnormally (i.e. with <code>break</code>)</li>
+<li>in <code>try</code> constructs, the <code>else</code> block runs if <em>no</em> exception&nbsp;happened</li>
+</ul>
+<p>Likely because of the unique semantics that don&#8217;t exist in other languages, neither of those constructs has been seen much
+in real world code. Recently, however, I&#8217;ve found they can be combined into a very pythonic pattern
+that&#8217;s also quite&nbsp;useful.</p>
+<h4>The&nbsp;trick</h4>
+<p>Say you have a task that won&#8217;t always succeed. Perhaps it&#8217;s a request made to a janky server, or other network operartion
+that&#8217;s prone to timeouts. Since failures are likely to be transient, you&#8217;d like to retry it several more times before
+giving up&nbsp;permanently.</p>
+<p>With <code>try</code>/<code>except</code> block, you can detect those half-expected failures. With a simple loop, you can repeat the attempt
+for as many times as you deem feasible. Combined, they can solve the problem rather&nbsp;neatly:</p>
+<div class="highlight"><pre><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">MAX_RETRIES</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># ... do stuff ...</span>
+    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
+        <span class="c"># ... log it, sleep, etc. ...</span>
+        <span class="k">continue</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
+</pre></div>
+
+
+<h4>But&nbsp;why?</h4>
+<p>What&#8217;s the deal with the <code>else</code>s here, though? Are they both&nbsp;necessary?</p>
+<p>The simple answer is of course no. <code>else</code> after either a loop or  <code>try</code>/<code>except</code> block is always a <em>syntactic sugar</em>.
+Any code that contains it can be transformed into an equivalent snippet that utilizes different techniques to achieve
+the same&nbsp;effect.</p>
+<p>But this view isn&#8217;t very useful, for many of the essential features in any programming languages can be dismissed
+as superfluous using this reasoning. The real question is whether the above idiom is more readable and understandable
+than the&nbsp;alternatives.</p>
+<p>To that, I posit, the answer is: <em>absolutely</em>.</p>
+<h4>Desugaring</h4>
+<p>Without the double <code>else</code>, this example would have to be written in a considerably more convoluted&nbsp;way:</p>
+<div class="highlight"><pre><span class="n">retries</span> <span class="o">=</span> <span class="n">MAX_RETRIES</span>
+<span class="k">while</span> <span class="n">retries</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># ... do stuff ...</span>
+        <span class="k">break</span>
+    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
+        <span class="c"># ... log it, sleep, etc. ...</span>
+        <span class="n">retries</span> <span class="o">-=</span> <span class="mi">1</span>
+<span class="k">if</span> <span class="n">retries</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Although at first glance the difference may be minuscule, this version adds significant extra busywork the programmer
+has to pay careful attention&nbsp;to:</p>
+<ul>
+<li>The <code>retries</code> variable now has to be explicit, because the final conditional statement must look at its&nbsp;value.</li>
+<li>We can&#8217;t use a <code>for</code> loop anymore (e.g. <code>for retries in range(MAX_RETRIES)</code>), because we wouldn&#8217;t distinguish the
+&#8220;success at last try&#8221; and &#8220;retry limit exceeded&#8221; cases: they&#8217;d both result in <code>retries</code> equal to <code>MAX_RETRIES - 1</code>
+after the loop<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</li>
+<li>As a result, we have to remember to decrement the counter ourselves upon an&nbsp;error.</li>
+</ul>
+<p>Additionally, the <code>break</code> is easy to miss amidst the actual logic within the <code>try</code> block, both for developer
+who writes the code and for any subsequent readers. An alternative is to move it outside of the <code>try</code>/<code>except</code> clause,
+but that in turn reintroduces <code>continue</code> into the <code>except</code> branch and further complicates the whole&nbsp;flow.</p>
+<p>In short, the desugared version is more error-prone (all those off-by-ones!) and also quite&nbsp;inscrutable.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Or to <code>1</code>, if we count from <code>MAX_RETRIES</code> down to zero.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-furl.html#python-furl"><span class="caps">URL</span> library for&nbsp;Python</a></h2>
+    <p>
+      Posted on Fri 27 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/url.html">URL</a>,      <a href="http://xion.io/tag/furl.html">furl</a>      &#8226; <a href="http://xion.io/post/code/python-furl.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Python has many <a href="https://docs.python.org/3/library/">batteries included</a>, but a few things are still conspicuously&nbsp;missing.</p>
+<p>One of them is a standardized and convenient approach to <span class="caps">URL</span> manipulation, akin to the
+<a href="http://docs.oracle.com/javase/7/docs/api/java/net/URI.html"><code>URI</code> class</a> in Java.
+There are some functions in <a href="https://docs.python.org/2/library/urllib.html"><code>urllib</code></a>, of course
+(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their <span class="caps">HTTP</span>-related
+comrades, they prove rather verbose and somewhat&nbsp;clunky.</p>
+<p><span class="caps">HTTP</span>, however, is solved by the <a href="http://python-requests.org/">Requests</a> package, so you may wonder
+if there is some analogous package for <span class="caps">URL</span> operations. The answer is affirmative, and the library in question is,
+quite whimsically, called <a href="https://github.com/gruns/furl"><em>furl</em></a>.</p>
+<h4><span class="caps">URL</span> in a&nbsp;wrap</h4>
+<p>The sole interesting part of the <em>furl</em> interface is the <code>furl</code> class. It represents a single <span class="caps">URL</span>, broken down to
+its constituents, with properties and methods for both reading them out and replacing with new&nbsp;values.</p>
+<p>Thanks to this handy (and quite obvious) abstraction, common <span class="caps">URL</span> operations become quite simple and&nbsp;self-documenting:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">furl</span> <span class="kn">import</span> <span class="n">furl</span>
+
+
+<span class="k">def</span> <span class="nf">to_absolute</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;If given ``url`` is a relative path,</span>
+<span class="sd">    make it relative to the ``base``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">furled</span><span class="o">.</span><span class="n">scheme</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">furl</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+    <span class="k">return</span> <span class="n">url</span>
+
+
+<span class="k">def</span> <span class="nf">is_same_origin</span><span class="p">(</span><span class="o">*</span><span class="n">urls</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check whether URLs are from the same origin (host:port).&quot;&quot;&quot;</span>
+    <span class="n">origins</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">netloc</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">furl</span><span class="p">,</span> <span class="n">urls</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">get_facebook_username</span><span class="p">(</span><span class="n">profile_url</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get Facebook user ID from their profile URL.&quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">profile_url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">furled</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="s">&#39;facebook.com&#39;</span> <span class="ow">or</span>
+            <span class="n">furled</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.facebook.com&#39;</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;not a Facebook URL: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">profile_url</span><span class="p">,))</span>
+    <span class="k">return</span> <span class="n">furled</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="c"># etc.</span>
+</pre></div>
+
+
+<p>This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string&nbsp;interpolation:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">?</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BASE_URL</span><span class="p">,</span> <span class="n">urlencode</span><span class="p">(</span><span class="n">query_params</span><span class="p">))</span>
+</pre></div>
+
+
+<p>Besides looking unpythonically ugly, it&#8217;s also inflexible and error-prone. If <code>BASE_URL</code> gains some innate query string
+params (<code>'http://example.com/?a=b'</code>), this method will start producing completely invalid <code>url</code>s (with two question marks,
+e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
+<p>The equivalent in <em>furl</em> has none of these&nbsp;flaws:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">BASE_URL</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+</pre></div>
+
+
+<h4>The full&nbsp;package</h4>
+<p>To see the full power of <em>furl</em>, I recommend having a look at its
+<a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
+      <a class="btn" href="http://xion.io/post/code/python-furl.html#python-furl">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Celery task in a Flask request&nbsp;context</a></h2>
     <p>
       Posted on Tue 03 November 2015 in <a href="http://xion.io/category/code.html">Code</a>

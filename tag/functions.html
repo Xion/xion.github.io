@@ -63,6 +63,106 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-optional-args.html#rust-optional-args">Optional arguments in Rust&nbsp;1.12</a></h2>
+    <p>
+      Posted on Thu 29 September 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/parameters.html">parameters</a>,      <a href="http://xion.io/tag/functions.html">functions</a>      &#8226; <a href="http://xion.io/post/code/rust-optional-args.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Today&#8217;s <a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html">announcement of Rust 1.12</a> contains,
+among other things, this innocous little&nbsp;tidbit:</p>
+<blockquote>
+<p><code>Option</code> implements <code>From</code> for its contained&nbsp;type</p>
+</blockquote>
+<p>If you&#8217;re not very familiar with it,
+<code>From</code> is a basic <a href="https://doc.rust-lang.org/std/convert/trait.From.html">converstion trait</a>
+which any Rust type can implement.
+By doing so, it defines how to create its values <em>from</em> some other type &#8212; hence its&nbsp;name.</p>
+<p>Perhaps the most widespread application of this trait (and its <code>from</code> method)
+is allocating owned <code>String</code> objects from literal <code>str</code> values:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">hello</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Hello, world!&quot;</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>What the change above means is that we can do similar thing with the <code>Option</code> type:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">maybe_int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>At a first glance, this doesn&#8217;t look like a big deal at all.
+For one, this syntax is much more wordy than the traditional <code>Some(42)</code>,
+so it&#8217;s not very clear what benefits it&nbsp;offers.</p>
+<p>But this first impression is rather deceptive.
+In many cases, this change can actually <em>reduce</em> the number of times we have to type <code>Some(x)</code>,
+allowing us to replace it with just <code>x</code>.
+That&#8217;s because this new <code>impl</code> brings Rust quite a bit closer to having <em>optional function arguments</em>
+as a first class feature in the&nbsp;language.</p>
+<p>Until now, a function defined like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>was the closest Rust had to default argument values.
+While this works perfectly &#8212; and is bolstered by compile-time checks! &#8212;
+callers are unfortunately required to build the <code>Option</code> objects&nbsp;manually:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="mi">42</span><span class="p">));</span><span class="w">  </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">None</span><span class="p">);</span><span class="w">      </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w">        </span><span class="c1">// error!</span>
+</pre></div>
+
+
+<p>After <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>, however, this can change for the better.
+<em>Much</em> better, in fact, for the last line above can be made valid.
+All that is necessary is to take advantage of this new <code>impl</code> in the function&nbsp;definition:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="n">x</span><span class="p">).</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Unfortunately, this results in quite a bit of complexity,
+up to and including the <code>where</code> clause: a telltale sign of convoluted, generic code.
+Still, this trade-off may be well worth it,
+as a function defined once can be called many times throughout the code base,
+and possibly across multiple crates if it&#8217;s a part of the public <span class="caps">API</span>.</p>
+<p>But we can do better than this.
+Indeed, using the <code>From</code> trait to constrain argument types is just complicating things for no good reason.
+What we should so instead is use the symmetrical trait, <a href="https://doc.rust-lang.org/std/convert/trait.Into.html"><code>Into</code></a>,
+and take advantage of its standard <code>impl</code>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="n">U</span><span class="o">:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Once we translate it to the <code>Option</code> case (now that <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>),
+we can switch the trait bounds around and get rid of the <code>where</code> clause&nbsp;completely:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;&gt;&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">into</span><span class="p">().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As a small bonus, the function body has also gotten a little&nbsp;simpler.</p>
+<hr />
+<p>So, should you go wild and change all your functions taking <code>Option</code>als to look like this?&#8230;
+Well, technically you can, although the benefits may not outweigh the downsides
+for small, private functions that are called&nbsp;infrequently.</p>
+<p>On the other hand, if you can afford to only support Rust 1.12 and up,
+this technique can make it much more pleasant to use the external <span class="caps">API</span> of your&nbsp;crates.</p>
+<p>What&#8217;s best is the <em>full backward compatibility</em> with any callers that still pass <code>Some(x)</code>:
+for them, the old syntax will continue to work exactly like before.
+Also note that the Rust compiler is smart about eliding the no-op conversion calls like the <code>Into::into</code> above,
+so you shouldn&#8217;t observe any changes in the performance department&nbsp;either.</p>
+<p>And who knows, maybe at some point Rust makes the final leap, and allows skipping the <code>None</code>s?&#8230;</p>
+      <a class="btn" href="http://xion.io/post/code/rust-optional-args.html#rust-optional-args">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-get-lambda-code.html#python-get-lambda-code">Source code of a Python&nbsp;lambda</a></h2>
     <p>
       Posted on Tue 19 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -212,7 +312,7 @@ is syntactically valid even <em>with</em> the extra characters. As a result, <co
 incorrect definition. It should have been of a lambda contained within a tuple, but tuple is apparently what the lambda
 <em>returns</em>.</p>
 <p>You may say that this is the sharp end of a narrow edge case, and anyone who defines functions like that deserves all
-the trouble they get. And sure, I wouldn&#8217;t mind if we just threw hands in the air and tell them we&#8217;re simply unable
+the trouble they get. And sure, I wouldn&#8217;t mind if we just threw hands in the air and told them we&#8217;re simply unable
 to retrieve the source here. But my opinion is that it doesn&#8217;t justify serving them obviously <em>wrong</em>&nbsp;results!</p>
 <h4>A halting&nbsp;problem</h4>
 <p>Not if we can help it, anyway. Have a look at the expected source code and the one we&#8217;ve extracted, side by&nbsp;side:</p>

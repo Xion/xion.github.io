@@ -63,6 +63,324 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/bash-flappy-bird.html#bash-flappy-bird">Flappy Bird in 1234 bytes of&nbsp;Bash</a></h2>
+    <p>
+      Posted on Thu 25 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/bash.html">Bash</a>,      <a href="http://xion.io/tag/shell-scripting.html">shell scripting</a>,      <a href="http://xion.io/tag/game-programming.html">game programming</a>,      <a href="http://xion.io/tag/flappy-bird.html">Flappy Bird</a>      &#8226; <a href="http://xion.io/post/code/bash-flappy-bird.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Contrary to an infamous opinion from a bygone era,
+<span class="caps">640KB</span> is not really sufficient for anyone anymore.
+A typical website exceeds that easily,
+and executable programs are usually measured in&nbsp;megabytes.</p>
+<p>But what if you only had 1234 <em>bytes</em> to work&nbsp;with?&#8230;</p>
+<p>A friend of mine, <a href="http://gynvael.coldwind.pl/?blog=1&amp;lang=en">Gynvael Coldwind</a>,
+organized a game programming compo<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> that had precisely this limitation.
+Unlike most demoscene ones, however, the size limit here
+applies to either the final binary <em>or</em> its source code.
+This can be chosen at the participant&#8217;s&nbsp;discretion.</p>
+<p>Since my currently favorite compiled language produces
+<a href="https://lifthrasiir.github.io/rustlog/why-is-a-rust-executable-large.html">the exact opposite of small binaries</a>,
+I was quite intrigued by the source code option.
+But as the rules say, the final game must run
+on a <em>clean</em> installation (only standard packages) of either Windows or Ubuntu Linux.
+The choice of viable languages and technologies was therefore rather&nbsp;limited.</p>
+<p>It was time to get <em>a little</em>&nbsp;creative.</p>
+<h4>Game&nbsp;theory</h4>
+<p>What must an environment provide to be a suitable platform for game development?
+Not much, really. We only need to be able&nbsp;to:</p>
+<ul>
+<li>put stuff on the&nbsp;screen</li>
+<li>react to user&nbsp;input</li>
+<li>execute time-dependent&nbsp;logic</li>
+</ul>
+<p>You could arguably get away without the last one,
+but the kind of games you would end up with
+had gone out of fashion about <a href="https://en.wikipedia.org/wiki/Zork">half a century ago</a>.
+For the &#8220;real&#8221; arcade games, we really ought to run our code at least a dozen times per&nbsp;second.</p>
+<p>There&#8217;s only a handful of standard technologies that allow all of this out of the&nbsp;box.</p>
+<p>I&#8217;m a wee bit out of touch with Windows these days
+but on Linux, there&#8217;s one thing that I really wanted to take for a serious spin.
+And luckily for me, it also has one extremely terse language to go hand in hand&nbsp;with.</p>
+<p>I&#8217;m talking, of course, about the <strong><span class="caps">ANSI</span> terminal</strong> that can be scripted in Bash.
+If there ever was anything that worked anywhere by default,
+then this got to be it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4>&#8230;put into&nbsp;practice</h4>
+<p>Note that I&#8217;ve stressed the &#8220;terminal&#8221; part.
+The shell itself is a neat instrument,
+but (perhaps surprisingly) it doesn&#8217;t actually concern itself
+with displaying anything on the&nbsp;screen.</p>
+<p>This has traditionally been the job of a <em>terminal emulator</em>.
+To this end, it has a couple of <a href="http://wiki.bash-hackers.org/scripting/terminalcodes">special codes</a>
+that are undoubtedly useful for an aspiring indie shell game developer.
+They are what allows us to display things in a specific position on the screen,
+complete with chosen color, background color, and (text)&nbsp;style.</p>
+<p>So this nails down our first requisite&nbsp;feature.</p>
+<p>As for the second one, the vanilla <a href="http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_08_02.html"><code>read</code> command</a>
+supports everything we may need for handling user input.
+The only real &#8220;trick&#8221; is passing the <code>-n</code> flag
+which makes it wait for a specific number of characters (e.g. one)
+rather than a whole line ending with <em>Enter</em>.
+Add a few more flags &#8212; like the one that prevents text from being echoed back to the console &#8212;
+and you can make a rudimentary input&nbsp;loop:</p>
+<div class="highlight"><pre><span class="nv">KEY</span><span class="o">=</span><span class="s1">&#39;\0&#39;</span>
+<span class="k">while</span> :<span class="p">;</span> <span class="k">do</span>
+    <span class="nb">read</span> -rsn <span class="m">1</span> KEY
+<span class="k">done</span>
+</pre></div>
+
+
+<p>I can imagine, however, that you&#8217;d want to do other things besides just waiting for input.
+Stuff like &#8220;updating the game state&#8221; and &#8220;drawing the next frame&#8221;
+is generally considered pretty important in&nbsp;games.</p>
+<p>Normally, we would deal with those things in between checking for input events,
+leading to a particular structure of the so-called <a href="http://gameprogrammingpatterns.com/game-loop.html">real-time loop</a>.</p>
+<p>But the shell doesn&#8217;t really handle input via &#8220;events&#8221;.
+Instead, you just ask for some text and wait until you get it.
+There is no &#8220;peek mode&#8221; that&#8217;d allow to squeeze in some rendering logic before the next key&nbsp;press.</p>
+<p>What do we do, then, with a tight loop that leaves us no wiggle&nbsp;room?&#8230;</p>
+<p>Why, we take a crowbar and pry it&nbsp;open!</p>
+<h5>(Don&#8217;t) be&nbsp;alarmed</h5>
+<p>Let&#8217;s start by noticing that to run some code whenever there is nothing else to do
+has a rough equivalent of running it <em>periodically</em>.
+This isn&#8217;t an exactly new observation:
+the <a href="https://developer.mozilla.org/en-US/docs/Web/API/WindowTimers/setTimeout"><code>setTimeout</code> function</a> in JavaScript
+has been the basis of &#8220;real-time&#8221; animation
+since the 90s era of falling snowflakes, and up to the contemporary browser games<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Neither does the shell nor the hosting terminal support anything like <code>setTimeout</code>, though.
+But fortunately, they don&#8217;t need to: Linux itself does.
+And it accomplishes it quite effortlessly, due to the sole fact of <em>being an operating system</em>.
+All we have to do is access some of its capabilities directly from the shell&nbsp;script:</p>
+<div class="highlight"><pre><span class="nv">KEY</span><span class="o">=</span><span class="s1">&#39;\0&#39;</span>
+<span class="nv">DT</span><span class="o">=</span>0.05  <span class="c"># timeout value in seconds</span>
+
+tick<span class="o">()</span> <span class="o">{</span>
+    <span class="c"># .. do stuff ...</span>
+    <span class="o">(</span> sleep <span class="nv">$DT</span><span class="p">;</span> <span class="nb">kill </span>ALRM <span class="nv">$$</span> <span class="o">)</span><span class="p">&amp;</span>
+<span class="o">}</span>
+
+<span class="nb">trap </span>tick ALRM
+tick
+<span class="k">while</span> :<span class="p">;</span> <span class="k">do</span>
+    <span class="nb">read</span> -rsn <span class="m">1</span> KEY
+<span class="k">done</span>
+</pre></div>
+
+
+<p>What we&#8217;re doing here is set up the <code>tick</code> function to be
+a <em><a href="https://en.wikipedia.org/wiki/Unix_signal">signal</a> handler</em>.
+A callback, if you&nbsp;will.</p>
+<p>Inside of this callback, we can do all the state updates and drawing we need,
+as long as we follow it with &#8220;scheduling&#8221; of the next <code>tick</code> call.
+As a direct equivalent of a <code>setTimeout</code> invocation, this can be done&nbsp;by:</p>
+<ul>
+<li>starting a subshell to run in the background (with <code>&amp;</code>)</li>
+<li>letting it sleep for however long we want to delay the next&nbsp;update</li>
+<li>sending a signal to the main script (<code>kill $$</code>)</li>
+</ul>
+<p>The signal we chose is of course <code>SIGALRM</code><sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+Technically, however, it can be anything,
+as long as we can set up a <code>trap</code> to actually handle&nbsp;it.</p>
+<p>In any case, success! Bash is officially a game programming&nbsp;platform!</p>
+<h4>Integration in&nbsp;parts</h4>
+<p>And so having figured out the technicalities,
+I was faced with the crucial dilemma: <em>what</em> game could I actually&nbsp;write?</p>
+<p>Nothing too complicated, that&#8217;s for sure.
+After the initial scaffolding has used up about 1/4 of the harsh size limit,
+I knew that radical simplicity was the order of the&nbsp;day.</p>
+<p>And so I went for possibly <a href="https://en.wikipedia.org/wiki/Flappy_Bird">the most trivial game ever</a>.</p>
+<p style="text-align: center">
+    <img src="https://upload.wikimedia.org/wikipedia/en/5/52/Flappy_Bird_gameplay.png" alt="flap flap"></br>
+    <small>Sorry, Pong!</small>
+</p>
+
+<p>Then, after hours of (<em>ahem</em>) <a href="https://www.flappybird.com/">meticulous research</a>,
+I managed to reverse-engineer the core&nbsp;mechanic:</p>
+<ul>
+<li>let the bird fall down with a constant&nbsp;acceleration</li>
+<li>to jump, give it some upwards-facing&nbsp;velocity</li>
+</ul>
+<p>Actually <a href="https://github.com/Xion/flappybash/blob/0372ef9173c921ff79c64553974cea0b02c2bb3f/flappybash.sh">coding this</a>
+in Bash was mostly a matter of finding out how to perform floating-point calculations.
+Rather unsurprisingly, this is done through
+<a href="https://en.wikipedia.org/wiki/Bc_(programming_language)#Using_bc_in_shell_scripts">an external program</a>,
+while truncating of the fractional part involves &#8212; wait for it &#8212;
+<a href="http://unix.stackexchange.com/a/167059"><em>string formatting</em></a>.</p>
+<h4>Pipe&nbsp;dream</h4>
+<p>Based on the above nuggets of Stack Overflow wisdom,
+you&#8217;ve probably figured out that Bash isn&#8217;t exactly what you would call <em>a programming language</em>.
+With a little bit of perseverance, however, we can make it do our bidding&#8230;
+<em>some</em> fraction of the&nbsp;time.</p>
+<p>So far, I had the player character &#8212; a beautiful red rectangle &#8212;
+fall down under the constant force of gravity, and maybe ascend if the Space key has been pressed.
+But a heroic protagonist necessitates the presence of formidable adversaries,
+so my next step was to figure out how to implement this crucial gameplay&nbsp;mechanic.</p>
+<p>Which one?&#8230; Pipes, of&nbsp;course.</p>
+<p>Pipes in <em>Bash</em>.</p>
+<p style="text-align: center">
+    <img src="http://xion.io/images/irony-sign.jpg" alt="...ahem">
+</p>
+
+<p>It was pretty evident I&#8217;m gonna need to represent them somehow,
+and Bash isn&#8217;t exactly known for its strong repertoire of data structures.
+Starting from version 4.0, it does however have <a href="http://tldp.org/LDP/abs/html/arrays.html">arrays</a>,
+so there is at least something we can work&nbsp;with.</p>
+<p>Let&#8217;s not get <em>too</em> carried away, though.
+The somewhat obvious idea of mirroring the entire game field in a (pseudo) 2D array
+of pipe/not-pipe turned out to be completely unworkable.
+The fill rate of most (all?) terminal emulators is nowhere near sufficient
+to permit redrawing of the whole screen <em>and</em> maintaining <span class="caps">FPS</span> value above the slideshow&nbsp;threshold.</p>
+<p><a href="https://github.com/Xion/flappybash/commit/467fe6429fa8dcc7005f5324278804243204ec9a">What I went with instead</a>
+was a 1D array for the pipe itself, and a separate variable to denote its horizontal position.
+Working from there, it wasn&#8217;t too hard to
+<a href="https://github.com/Xion/flappybash/commit/5e3281e408767eab2ade2fa2f9299fee60681bdc">make it move</a>,
+and eventually to check for its collision with the player&nbsp;object.</p>
+<h4>Fitting&nbsp;in</h4>
+<p>That, of course,
+was <a href="https://github.com/Xion/flappybash/commit/ff3260e1dd5fa61695310578091ff922acf06e71">the most important milestone</a>.
+<br/>
+I added <em>an objective</em>.</br>
+It was <em>an actual game</em>.</p>
+<p>And I still had about 100 bytes&nbsp;left!</p>
+<p>Speaking of size, this is probably a good moment
+to talk about making the most of those meager 1234 bytes.
+It&#8217;s not exactly surprising that it was possible mostly thanks to <em>minification</em>.</p>
+<p>While it&#8217;s extremely popular for JavaScript,
+the same abundance of minification utilities cannot be expected when it comes of shell scripts.
+Still, &#8220;bash minification&#8221; does return some useful search results,
+and <a href="http://bash-minifier.appspot.com/">one of them</a> is what I used to shrink the final&nbsp;script.</p>
+<p>Obviously, it didn&#8217;t go without some trouble.
+Since the minifier does little more than to swap newlines for semicolons,
+it got a few bugs that had to be ironed out.
+No big deal, really:
+a small batch of
+<a href="https://github.com/Xion/flappybash/commit/a9556bbef8245bd1ce849e1bffd175412934ef9d">handcrafted, artisanal Python</a>
+was enough to paper over the&nbsp;issues.</p>
+<p>The other technique you can use to slim down is <em>obfuscation</em>, i.e.
+<a href="https://github.com/Xion/flappybash/commit/f2683785a8049fc385e5c6705f66dbb835ad84bc">shortening of the identifiers</a>.
+As the minifier didn&#8217;t offer this feature natively, I had to take care of it&nbsp;myself.</p>
+<p>This lead to adding such interesting assignments as this <code>p</code>:</p>
+<div class="highlight"><pre><span class="nv">p</span><span class="o">=</span><span class="nb">printf</span>
+</pre></div>
+
+
+<p>which absolutely shouldn&#8217;t be confused with <em>this</em> <code>p</code>:</p>
+<div class="highlight"><pre><span class="c"># put text at given position: p $x $y $text</span>
+p<span class="o">()</span> <span class="o">{</span> <span class="nb">echo</span> -en <span class="s2">&quot;\e[</span><span class="nv">$2</span><span class="s2">;</span><span class="si">${</span><span class="nv">1</span><span class="si">}</span><span class="s2">f</span><span class="nv">$3</span><span class="s2">&quot;</span><span class="p">;</span> <span class="o">}</span>
+</pre></div>
+
+
+<p>The reason it works is that in <span class="caps">POSIX</span> shells,
+variables and functions effectively form two separate namespaces.
+Their members are thus referred to in two different&nbsp;ways:</p>
+<div class="highlight"><pre>p <span class="nv">$X</span> <span class="nv">$Y</span> <span class="s2">&quot;\e[1;37;41mB&quot;</span>  <span class="c"># call the p() function</span>
+<span class="nv">$p</span> <span class="s2">&quot;\e[?25l&quot;</span>  <span class="c"># expand the p variable (i.e. call `printf`)</span>
+</pre></div>
+
+
+<p>Notice how functions have longer definitions but shorter usage,
+while the opposite is true for variables.
+Who can now say that Bash doesn&#8217;t find balance in all&nbsp;things?</p>
+<h4>Auditory&nbsp;sensations</h4>
+<p>Like I mentioned before, thanks to those and similar tricks
+I had managed to carve out about a hundred or so bytes of free&nbsp;space.</p>
+<p>Now, what could you possibly do with such a staggering&nbsp;amount?</p>
+<p style="text-align: center">
+    <img src="http://xion.io/images/lawrence-office-space.jpg" alt="Two tweets at the same time!"></br>
+    <small>&#8230;no, that won&#8217;t even be <em>one</em> tweet.</small>
+</p>
+
+<p>Well, let&#8217;s add some <em>sound effects</em>, shall&nbsp;we?</p>
+<p>Before you think that&#8217;s preposterous, remember the <a href="https://en.wikipedia.org/wiki/Bell_character">terminal bell</a>.
+Sounding the bell is as simple as printing the <code>"\a"</code> character (<span class="caps">ASCII</span> 7),
+which for this reason is also known as <code>BEL</code>:</p>
+<div class="highlight"><pre><span class="nb">echo</span> -e <span class="s2">&quot;\a&quot;</span>
+</pre></div>
+
+
+<p>Unfortunately, most terminal emulators silence the actual sound,
+and replace it with a visual indicator &#8212; typically a bell <em>icon</em>.
+If we want to make speakers reliably emit audible phenomena,
+we sadly have to look&nbsp;elsewhere.</p>
+<p>Fortunately, modern Linux systems handle the sound card somewhat better
+than you may have remembered from a few years ago.
+This is usually thanks to <a href="https://en.wikipedia.org/wiki/Advanced_Linux_Sound_Architecture"><span class="caps">ALSA</span></a>,
+a dedicated subsystem in the Linux kernel, and its numerous userspace&nbsp;complements.</p>
+<p>One of them is the inconspicuous <code>speaker-test</code> binary
+which, well, does exactly what it says on the&nbsp;can:</p>
+<div class="highlight"><pre>speaker-test  <span class="c"># play some noise through the speakers</span>
+</pre></div>
+
+
+<p>You can make it play a <span class="caps">WAV</span> file, too,
+but the most interesting option is to synthesize a <em>sine wave</em>.
+By adjusting its frequency, it&#8217;s easy to play higher and lower tones,
+forming the building blocks for more complex&nbsp;sounds.</p>
+<p>What you cannot control is the tone&#8217;s duration.
+That&#8217;s not a big problem, though, since we can run <code>speaker-test</code> in a separate process
+and then just <em><code>kill</code> it dead</em>:</p>
+<div class="highlight"><pre><span class="c"># play a sine wave (requires ALSA): s $frequency $duration</span>
+s<span class="o">()</span> <span class="o">{</span> <span class="o">(</span> speaker-test &gt;<span class="nv">$n</span> -t sine -f <span class="nv">$1</span> <span class="o">)</span><span class="p">&amp;</span> <span class="nv">_p</span><span class="o">=</span><span class="nv">$!</span><span class="p">;</span> sleep <span class="nv">$2</span><span class="p">;</span> <span class="nb">kill</span> -9 <span class="nv">$_p</span><span class="p">;</span> <span class="o">}</span>
+</pre></div>
+
+
+<p><a href="https://github.com/Xion/flappybash/commit/3f259418f3d6167492b7d849c659dfcee0c6aa3d">I&#8217;ve used this approach</a>
+to play a simple, two-tone sound
+whenever the player successfully overcomes a pipe obstacle.
+And I would&#8217;ve probably taken it further if &#8220;<code>speaker_test</code>&#8221; wasn&#8217;t such a damn <em>long</em> string.
+Unfortunately, it was one identifier I couldn&#8217;t afford to shorten,
+and this had put a stop to my ambitious plan of improvising <a href="https://www.sadtrombone.com/">a sad trombone</a>
+upon player&#8217;s failure&nbsp;:(</p>
+<h4>;&nbsp;done</h4>
+<p>It wouldn&#8217;t be right to say I wasn&#8217;t very happy with <a href="https://github.com/Xion/flappybash">the results</a>, though.
+All in all, it was <a href="https://github.com/Xion/flappybash/commits/master">the most fun</a>
+I had with coding in quite some time,
+and definitely the most amusing Bash script I&#8217;ve ever&nbsp;written.</p>
+<p style="text-align: center">
+    <img src="http://xion.io/images/flappybash.jpg" alt="FLAPPY BASH">
+</p>
+
+<p>It also got me curious what other games people have implemented purely as shell scripts.
+To my disappointment, there hadn&#8217;t been all that many.
+Of those I could find, this <a href="http://bruxy.regnet.cz/web/linux/EN/housenka-bash-game/">Snake clone</a>
+in about <span class="caps">7KB</span> of (unobfuscated) Bash
+is probably the most polished&nbsp;one.</p>
+<p>As you can see then, this is clearly an under-appreciated platform
+that evidently displays a lot of potential!
+If you want to create games that are both very portable
+and <em>extremely</em> space-efficient,
+Bash is definitely a technology you should have a closer look at&nbsp;;-)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Here&#8217;s the original announcement post <a href="http://gynvael.coldwind.pl/?lang=pl&amp;id=624">in Polish</a>
+and its somewhat understandable
+<a href="https://translate.google.com/translate?sl=auto&amp;tl=en&amp;js=y&amp;prev=_t&amp;hl=en&amp;ie=UTF-8&amp;u=http%3A%2F%2Fgynvael.coldwind.pl%2F%3Flang%3Dpl%26id%3D624&amp;edit-text=&amp;act=url">Google-translated version</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Yes, I&#8217;m ignoring the elephant in the room which is the web browser.
+It&#8217;s probably because a pile of minified JavaScript doesn&#8217;t strike me as very interesting anymore :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Nowadays, though,
+the <a href="https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame"><code>requestAnimationFrame</code> function</a>
+is closer to the actual continuous processing in the background.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Regular programs could simply call <a href="http://man7.org/linux/man-pages/man2/alarm.2.html">the <code>alarm</code> function</a>
+instead of forking a subprocess. But then again, regular programs could just run a normal game loop.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/bash-flappy-bird.html#bash-flappy-bird">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Pipe `xargs` into&nbsp;`find`</a></h2>
     <p>
       Posted on Sun 03 April 2016 in <a href="http://xion.io/category/code.html">Code</a>

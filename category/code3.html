@@ -63,6 +63,866 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">let: binding for&nbsp;Knockout</a></h2>
+    <p>
+      Posted on Wed 18 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/knockout.html">Knockout</a>,      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/web-frontend.html">web frontend</a>,      <a href="http://xion.io/tag/data-binding.html">data binding</a>      &#8226; <a href="http://xion.io/post/code/knockout-let-binding.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://knockoutjs.com/">Knockout</a> is a JavaScript &#8220;framework&#8221; that has always lurked in the shadows of other,
+more flashy ones. Even in the days of its relative novelty, the likes of Backbone or Ember had seemed to garner more
+widespread interest among frontend developers. Today, this hasn&#8217;t changed much, the difference being mainly
+that the spotlight is now taken by new actors (<em>*cough*</em> <a href="https://facebook.github.io/react/">React</a> <em>*cough*</em>).</p>
+<p>But Knockout has a loyal following, and for good reasons. Possibly the most imporant one is why I&#8217;ve put the word
+&#8220;framework&#8221; in quotes. Knockout is, first and foremost, a <em>data binding</em> library: it doesn&#8217;t do much else besides
+tying <span class="caps">DOM</span> nodes to JavaScript&nbsp;objects.</p>
+<p>This quality makes it both easy to learn and simple to integrate. In fact, it can very well live in just some small
+compartments of your web application, mingling easily with any server-side templating mechanism you might be using.
+It also interplays effortlessly with other <span class="caps">JS</span> libraries, and sticks very well to
+<a href="http://stackoverflow.com/q/30766900/434799">whatever duct tape you use</a> to hold your frontend stack&nbsp;together.</p>
+<p>Lastly, it&#8217;s also quite extensible. We can, for example, create our own
+<a href="http://knockoutjs.com/documentation/binding-syntax.html">bindings</a> rather easily, extending the declarative language
+used to describe relationship between the data and <span class="caps">UI</span>.</p>
+<p>In this post, I&#8217;m going to demonstrate this by implementing a very simple <code>let:</code> binding &#8212;
+a kind of &#8220;assignment&#8221; of an expression to a&nbsp;name.</p>
+<h4>From Knockout <code>with:</code> bluff</h4>
+<p>Out of box, Knockout proffers the <a href="http://knockoutjs.com/documentation/with-binding.html"><code>with:</code> binding</a>,
+a quite similar mechanism. How it may be somewhat problematic is analogous to the
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/with">widely discouraged <code>with</code> statement</a>
+in JavaScript itself. Namely, it blends several namespaces together, making it harder to determine which object
+is being referred to. As a result, the code is more prone to&nbsp;errors.</p>
+<p>On the other hand, freeing the developer from repeating long and complicated expressions is obviously valuable.
+Perhaps reducing them to nil is not the right approach, though, so how about we just shorten them
+to a more manageable length? Well, that&#8217;s exactly what the <code>let:</code> binding is meant to&nbsp;do:</p>
+<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">data-bind=</span><span class="s">&quot;let: { addr: currentUser.personalInfo.address }&quot;</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line1&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- ko if: addr.line2 --&gt;</span>
+    <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line2&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- /ko --&gt;</span>
+  <span class="nt">&lt;p&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.city&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>,
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.region&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
+  <span class="nt">&lt;/p&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.country&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</pre></div>
+
+
+<p>Making it happen turns out to be pretty&nbsp;easy.</p>
+<h4>Binding&nbsp;contract</h4>
+<p>To define a Knockout binding, up to two things are needed. We have to specify what the library should&nbsp;do:</p>
+<ul>
+<li>when the binding is first applied to a <span class="caps">DOM</span> node (the <code>init</code> method)</li>
+<li>when any of the <a href="http://knockoutjs.com/documentation/observables.html">observed values</a> changes (the <code>update</code> method)</li>
+</ul>
+<p>Not every binding has to implement both methods. In our cases, only the <code>init</code> is necessary, because all we have to do
+is modify the <em>binding context</em>.</p>
+<p>What&#8217;s that? Shortly speaking, a <a href="http://knockoutjs.com/documentation/binding-context.html">binding context</a>,
+is an object holding all the data you can potentially bind to your <span class="caps">DOM</span> nodes. Think of it as a namespace, or local scope:
+whatever&#8217;s in there can be used directly inside <code>data-bind</code> attributes.</p>
+<h4><code>let:</code> it&nbsp;go</h4>
+<p>Therefore, all that the <code>let:</code> binding has to do is to extend the context with a mapping passed to it as an argument.
+Well, almost&nbsp;all:</p>
+<div class="highlight"><pre><span class="nx">ko</span><span class="p">.</span><span class="nx">bindingHandlers</span><span class="p">[</span><span class="s1">&#39;let&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nx">init</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">valueAccessor</span><span class="p">,</span> <span class="nx">allBindings</span><span class="p">,</span> <span class="nx">viewModel</span><span class="p">,</span> <span class="nx">bindingContext</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">innerContext</span> <span class="o">=</span> <span class="nx">bindingContext</span><span class="p">.</span><span class="nx">extend</span><span class="p">(</span><span class="nx">valueAccessor</span><span class="p">);</span>
+        <span class="nx">ko</span><span class="p">.</span><span class="nx">applyBindingsToDescendants</span><span class="p">(</span><span class="nx">innerContext</span><span class="p">,</span> <span class="nx">element</span><span class="p">);</span>
+        <span class="k">return</span> <span class="p">{</span> <span class="nx">controlsDescendantBindings</span><span class="o">:</span> <span class="kc">true</span> <span class="p">};</span>
+    <span class="p">}</span>
+<span class="p">};</span>
+</pre></div>
+
+
+<p>The resulting <code>innerContext</code> is a copy of the original <code>bindingContext</code>, augmented with additional properties from
+the argument of <code>let:</code> (those are available through <code>valueAccessor</code>). Once we have it, though, we need to handle it
+in a little special&nbsp;way.</p>
+<p>Normally, Knockout is processing all bindings recursively, pasing down the same <code>bindingContext</code> (which ultimately
+comes from the root <code>viewModel</code>). But since we want to locally alter the context, we also need to interrupt this regular
+way and take care of the lower-level <span class="caps">DOM</span> nodes&nbsp;ourselves.</p>
+<p>This is exactly what the overly-long <code>ko.applyBindingsToDescendants</code> function is doing. The only caveat is that Knockout
+has to be <a href="http://knockoutjs.com/documentation/custom-bindings-controlling-descendant-bindings.html">told explicitly</a>
+about our intentions through the <code>return</code> value from <code>init</code>. Otherwise, it would try to apply the <em>original</em>
+<code>bindingContext</code> recursively, which in our case would amount to applying it <strong>twice</strong>.
+<code>{ controlsDescendantBindings: true }</code> prevents Knockout from doing so&nbsp;erroneously.</p>
+      <a class="btn" href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Turn SQLAlchemy queries into literal <span class="caps">SQL</span></a></h2>
+    <p>
+      Posted on Thu 12 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>,      <a href="http://xion.io/tag/sql.html">SQL</a>,      <a href="http://xion.io/tag/databases.html">databases</a>      &#8226; <a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Like I mentioned in the <a href="http://xion.io/post/code/sqlalchemy-regex-filters.html">post about adding regular expression support</a>,
+the nice thing about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a> is the clean, layered structure of various abstractions
+it&nbsp;utilizes.</p>
+<p>Regretably, though, we know that <a href="https://en.wikipedia.org/wiki/Leaky_abstraction">software abstractions tend to leak</a>.
+Inn particular, any <span class="caps">ORM</span> seem to be a poster child of this rule, especially in the popular opinion among
+<a href="https://www.reddit.com/r/programming/search?q=ORM&amp;restrict_sr=on">developer crowds</a>.
+By design, they&#8217;re intended to hide at least <em>some</em> details of the operations on a database,
+but those very details can be quite critical at times. There are situations when we simply want to know
+what <em>exactly</em> is going on, and how all those model classes and mappers and relationships translate
+to the actual <span class="caps">SQL</span>&nbsp;code.</p>
+<p>To make it a little more concrete, let&#8217;s focus on the SQLAlchemy <code>Query</code> class. Given such a query, we&#8217;d like to get
+the final <span class="caps">SQL</span> representation of it, the one that&#8217;s ultimately sent to the database, It could be useful
+for any number of things, from logging<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> to profiling, or just displaying in the web page&#8217;s footer,
+or even solely for prototyping in the Python <span class="caps">REPL</span>.</p>
+<p>In other words, we want to turn&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">some_email</span><span class="p">)</span>
+</pre></div>
+
+
+<p>into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">SELECT</span> <span class="n">users</span><span class="p">.</span><span class="n">id</span> <span class="k">FROM</span> <span class="n">users</span> <span class="k">WHERE</span> <span class="n">users</span><span class="p">.</span><span class="n">email</span> <span class="o">=</span> <span class="p">:</span><span class="mi">1</span>
+</pre></div>
+
+
+<p>regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related
+<code>JOIN</code>s it&nbsp;involves.</p>
+<h4>It&#8217;s a&nbsp;dialect</h4>
+<p>There is one aspect we cannot really universalize, though. It&#8217;s the specific <em>database backend</em> that SQLAlchemy
+should compile our query for. Shrugging off syntactical and semantical differences between database engines
+is one thing that using an <span class="caps">ORM</span> can potentially buy us, but if we want to get down to the <span class="caps">SQL</span> level,
+we need to be specific about&nbsp;it.</p>
+<p>In SQLAlchemy&#8217;s parlance, any specific variant of the <span class="caps">SQL</span> language is called a <em>dialect</em>. Most of the time,
+you&#8217;ll be interested in the particular dialect your database of choice is using. This is easily obtainable from
+the <a href="docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session">database <code>Session</code></a>:</p>
+<div class="highlight"><pre><span class="n">dialect</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
+</pre></div>
+
+
+<p>The resulting
+<a href="http://docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Dialect"><code>Dialect</code> object</a>
+is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of
+the database backends it supports. For our purposes, though, it can be treated as a completely opaque&nbsp;token.</p>
+<h4>Compile <span class="amp">&amp;</span>&nbsp;unwrap</h4>
+<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representation of our <code>Query</code>.
+Or, to be more precise, the compiled version of the query&#8217;s
+<a href="docs.sqlalchemy.org/en/latest/core/selectable.html#sqlalchemy.sql.expression.Select"><code>Select</code> statement</a></p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="s">&#39;foo@example.com&#39;</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="k">print</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span><span class="p">))</span>
+<span class="n">SELECT</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span>
+<span class="n">FROM</span> <span class="n">users</span>
+<span class="n">WHERE</span> <span class="n">users</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="o">%</span><span class="p">(</span><span class="n">email_1</span><span class="p">)</span><span class="n">s</span>
+</pre></div>
+
+
+<p>Perhaps unsurprisingly, even after compilation the result is still just <em>another object</em>:
+the <a href="docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Compiled"><code>Compiled</code> one</a>.
+As you can see, however, the actual <span class="caps">SQL</span> text is just its <code>__str__</code><span class="quo">&#8216;</span>ing representation, which we can <code>print</code> directly
+or obtain with <code>str()</code> or <code>unicode()</code>.</p>
+<h4><code>Query.to_sql</code></h4>
+<p>But obviously, we don&#8217;t want to type the above incantations every time we need to take a peek at the generated <span class="caps">SQL</span>
+for an <span class="caps">ORM</span> query. Probably the best solution is to extend the <code>Query</code> class so that it offers this additional
+functionality under a new&nbsp;method:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
+
+
+<span class="k">class</span> <span class="nc">Query</span><span class="p">(</span><span class="n">_Query</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Custom, enhanced SQLALchemy Query class.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">to_sql</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return a literal SQL representation of the query.&quot;&quot;&quot;</span>
+        <span class="n">dialect</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">dialect</span><span class="p">))</span>
+</pre></div>
+
+
+<p>This new <code>Query</code> class needs then be passed as
+<a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.params.query_cls"><code>query_cls</code> argument</a>
+to the constructor of <code>Session</code>. Details may vary a little bit depending on how exactly your application is set up,
+but in most cases, it should be <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">easy enough to figure out</a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>If you&#8217;re only interested in indiscriminate logging of all queries, setting the
+<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine.params.echo"><code>echo</code> parameter</a>
+in <a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine"><code>create_engine</code></a> may be sufficient.
+Another alternative is to look directly at the
+<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#configuring-logging">logging configuration options</a>
+for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Celery task in a Flask request&nbsp;context</a></h2>
+    <p>
+      Posted on Tue 03 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/celery.html">Celery</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/queue.html">queue</a>,      <a href="http://xion.io/tag/request-context.html">request context</a>      &#8226; <a href="http://xion.io/post/code/celery-include-flask-request-context.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://celeryproject.org">Celery</a> is an asynchronous task worker that&#8217;s frequently used for background processing
+in Python web apps. Rather than performing a time-consuming task within the request loop, we delegate it to a <em>queue</em>
+so that a <em>worker process</em> can pick it up when ready. The immediate benefit is much better latency for the end user.
+Pros also include easier scalability, since you can adjust the number of workers to your task&nbsp;load.</p>
+<p>Examples of tasks that are usually best done in the background vary from fetching data through a third-party <span class="caps">API</span>
+to sending emails, and from pushing mobile notifications to pruning the database of stale records. Anything that may
+take more than a couple hundred milliseconds to complete &#8212; and isn&#8217;t absolutely essential to the current <span class="caps">HTTP</span> request &#8212;
+is typically a good candidate for asynchronous&nbsp;processing.</p>
+<p>In Celery, workers are just regular Python processes, often running the exact same code that&#8217;s powering the app&#8217;s web
+frontend<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. But unlike most of that code, they aren&#8217;t servicing any <span class="caps">HTTP</span> requests &#8212; they simply run some function
+with given arguments, both specified by whomever sent a task for execution. Indeed, those functions don&#8217;t even <em>know</em>
+who or what asked for them to be&nbsp;executed.</p>
+<p>Neat, right? It is what we usually compliment as <em>decoupling</em>, or separation of concerns. They are valuable qualities even
+regardless of the <span class="caps">UI</span> and scaling benefits mentioned&nbsp;earlier.</p>
+<h4>Not quite&nbsp;web</h4>
+<p>But those qualities come with a trade-off. Task code is no longer a web frontend code: it doesn&#8217;t run within the
+comfy environment of our web framework of choice. Losing it may be quite unnerving, actually, because in a typical
+web application there will be many things tied directly to the <span class="caps">HTTP</span> request pipeline. After all, this is what web
+applications <em>do</em> &#8212; respond to <span class="caps">HTTP</span> requests &#8212; so it often makes perfect sense e.g. to marry the request flow
+with database transactions, committing or rolling those back according to <span class="caps">HTTP</span> status code that the app&nbsp;produced.</p>
+<p>Tasks may also require a database, though, if only to
+<a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#state">assert the expected state of the world</a>.
+Similar goes for memcache, a Redis instance, or basically any resource used by the frontend code.
+Alas, it&#8217;s quite possible <em>the very reason</em> we delegate work to a task is to shift lengthy interactions with those
+external systems away from the <span class="caps">UI</span>. Obviously, we&#8217;re going to need them for&nbsp;that!</p>
+<h4>Fake a&nbsp;request</h4>
+<p>So one way or another, our tasks will most likely need some initialization and/or cleanup code. And since it&#8217;s probably
+the same code that most <span class="caps">HTTP</span> request handlers require and use already, why not just <em>pretend we&#8217;re handling a request
+after all</em>?</p>
+<p>In <a href="http://flask.pocoo.org">Flask</a>, we can pull that off rather easily.
+The <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.test_request_context"><code>test_request_context</code> method</a>
+is conveniently provided to allow for faking the <em>request context</em> &#8212; that is, an execution environment for <span class="caps">HTTP</span> handlers.
+Like the name suggest, it is used mostly <a href="http://flask.pocoo.org/docs/0.10/testing/">for testing</a>, but there is nothing
+stopping us from using it in tasks run by&nbsp;Celery.</p>
+<p>We probably don&#8217;t want to call it directly, though. What would be better is to have Celery prepare the context first,
+and then run the task code as if it was an <span class="caps">HTTP</span> handler. For even better results, the context would preserve information
+extracted from the <em>actual <span class="caps">HTTP</span> request</em>, one that has sent the task for execution. Moving some work to the background
+would then be a trivial matter, for both the task and the original handler would operate within the same&nbsp;environment.</p>
+<p>Convenient? I believe so. And as I&#8217;ll demonstrate next, it isn&#8217;t very complicated to implement&nbsp;either.</p>
+<h4>Wrap the&nbsp;decorator?</h4>
+<p>At least one piece of the solution should stand out as pretty obvious. Since our intention is to wrap the task&#8217;s code
+in some additional packaging &#8212; the request context &#8212; it seems fairly natural to write our own <code>@task</code> decorator:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">functools</span>
+
+<span class="kn">from</span> <span class="nn">myapp</span> <span class="kn">import</span> <span class="n">app</span><span class="p">,</span> <span class="n">celery</span>
+
+
+<span class="k">def</span> <span class="nf">task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Decorator function to apply to Celery tasks.</span>
+<span class="sd">    Executes the actual task inside Flask&#39;s test request context.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Actual decorator.&quot;&quot;&quot;</span>
+        <span class="nd">@celery.task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nd">@functools.wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">wrapped</span>
+
+    <span class="k">return</span> <span class="n">decorator</span>
+</pre></div>
+
+
+<p>Here, <code>app</code> is the <a href="http://flask.pocoo.org/docs/0.10/api/#application-object"><code>Flask</code> application</a>, and <code>celery</code> is the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery-application-objects"><code>Celery</code> object</a>
+that&#8217;s often configured alongside&nbsp;it.</p>
+<h4>The <code>Task</code> class</h4>
+<p>While this technique will give us <em>a</em> request context inside the task code, it won&#8217;t be <em>the</em> request context
+from which the task has been sent for execution. To replicate that context correctly, we need additional support
+on the sender&nbsp;side.</p>
+<p>Internally, Celery is converting every function we annotate with <code>@task</code> decorator into a subclass of
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task"><code>Celery.app.task.Task</code></a>.
+This process can be customized, for example by providing an explicit <code>base=</code> parameter to <code>@task</code> which
+specifies a <a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#custom-task-classes">custom <code>Task</code> subclass</a>
+to use in place of the default one. Within that subclass, we&#8217;re free to override any functionality that we need&nbsp;to.</p>
+<p>In our case, we&#8217;ll scrape the current request context from Flask for all relevant information,
+and later use it to recreate the context in the task&nbsp;code.</p>
+<p>But before we get to that, let&#8217;s just create the <code>Task</code> subclass and move the above execution logic to it.
+This way, users won&#8217;t have to use a completely new <code>@task</code> decorator which would needlessly couple them to a specific
+<code>Celery</code> app&nbsp;instance:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">celery</span> <span class="kn">import</span> <span class="n">Task</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for tasks that run inside a Flask request context.&quot;&quot;&quot;</span>
+    <span class="n">abstract</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Instead, they can either set this class as <code>base=</code> for a specific&nbsp;task:</p>
+<div class="highlight"><pre><span class="nd">@celery.task</span><span class="p">(</span><span class="n">base</span><span class="o">=</span><span class="n">RequestContextTask</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sync_user_data</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or make it into new default for all their&nbsp;tasks:</p>
+<div class="highlight"><pre><span class="n">celery</span> <span class="o">=</span> <span class="n">Celery</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="n">celery</span><span class="o">.</span><span class="n">Task</span> <span class="o">=</span> <span class="n">RequestContextTask</span>
+</pre></div>
+
+
+<h4>Invocation&nbsp;patterns</h4>
+<p>When the frontend asks for a task to be executed, it most often uses the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.delay"><code>Task.delay</code> method</a>.
+It will package a payload contaning task arguments, and send it off through a <em>broker</em> &#8212;
+usually an <a href="https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol"><span class="caps">AMQP</span></a>-based queue,
+such as <a href="https://www.rabbitmq.com/">RabbitMQ</a> &#8212; so that a Celery worker can pick it up and actually&nbsp;execute.</p>
+<p>But there are other means of task invocation. We can even run it
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.apply">&#8220;in place&#8221;</a>,
+locally and synchronously, which is especially useful for various testing scenarios. Lastly, a task can also be
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.retry">retried</a> from within
+its own code, terminating its current run and scheduling another attempt for some future&nbsp;date.</p>
+<p>Obviously, for the <code>RequestContextTask</code> to be useful, it needs to behave correctly in every situation.
+Therefore we need to cover all the entry points I&#8217;ve mentioned &#8212;
+the asynchronous call, a synchronous invocation, and a task&nbsp;retry:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">apply_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply_async</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">retry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Note that <code>Task.apply_async</code> is being called internally by <code>Task.delay</code>,
+so it&#8217;s only that first method that we have to&nbsp;override.</p>
+<h4>Context in a&nbsp;box</h4>
+<p>As you can deduce right away, the Flask-related magic is meant to go in the <code>_include_context</code> method.
+The idea is to prepare arguments for the eventual invocation of <code>Flask.test_request_context</code>,
+and pass them through an extra task parameter.
+Those arguments are relatively uncomplicated: they are just a medley of various pieces of information
+that we can easily obtain from the Flask&#8217;s <code>request</code> object:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">has_request_context</span><span class="p">,</span> <span class="n">request</span>
+
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="n">CONTEXT_ARG_NAME</span> <span class="o">=</span> <span class="s">&#39;_flask_request_context&#39;</span>
+
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">_include_request_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Includes all the information about current HTTP request context</span>
+<span class="sd">        as an additional argument to the task.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;path&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
+            <span class="s">&#39;base_url&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">url_root</span><span class="p">,</span>
+            <span class="s">&#39;method&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
+            <span class="s">&#39;headers&#39;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="s">&#39;?&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="s">&#39;query_string&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">[(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s">&#39;?&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):]</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">]</span> <span class="o">=</span> <span class="n">context</span>
+</pre></div>
+
+
+<p>On the worker side, we simply unpack them and recreate the&nbsp;context:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">make_response</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">call</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">):</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">call</span><span class="p">()</span>
+            <span class="n">app</span><span class="o">.</span><span class="n">process_response</span><span class="p">(</span><span class="n">make_response</span><span class="p">(</span><span class="n">result</span> <span class="ow">or</span> <span class="s">&#39;&#39;</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+
+
+<p>The only tricky part is calling
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.process_response"><code>Flask.process_response</code></a> at the end.
+We need to do that for the <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.after_request"><code>@after_request</code> hooks</a>
+to execute correctly. This is quite crucial, because those hooks are where you&#8217;d normally put important cleanup code,
+like commit/rollback of the database&nbsp;transaction.</p>
+<h4>Complete&nbsp;solution</h4>
+<p>To see how all those code snippets fit together, see <a href="https://gist.github.com/Xion/46d739b980af14a0d3ea">this gist</a>.
+You may also want to have a look at
+<a href="http://flask.pocoo.org/docs/0.10/patterns/celery/">the article on Celery integration</a> in Flask docs for some tips on
+how to integrate it with your own&nbsp;project.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This isn&#8217;t strictly necessary, as Celery supports sending tasks for execution
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery.Celery.send_task">by explicit name</a>.
+For that request to reach the worker, however,
+the <a href="http://docs.celeryproject.org/en/latest/configuration.html#broker-url">task broker configuration</a>
+must be correctly shared between sender and the worker.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></a></h2>
+    <p>
+      Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/enums.html">enums</a>,      <a href="http://xion.io/tag/serialization.html">serialization</a>      &#8226; <a href="http://xion.io/post/code/python-enums-are-ok.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Little over two years ago, I was writing about
+<a href="http://xion.org.pl/2013/05/13/we-dont-need-no-enums-in-python/">my skepticism</a> towards the
+<a href="https://www.python.org/dev/peps/pep-0435/">addition of enum types to Python</a>. My stance has changed somewhat since then,
+and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent
+in the circumstances involving any kind of persistence,
+from <a href="https://docs.python.org/2/library/pickle.html">pickling</a> to&nbsp;databases.</p>
+<p>I will elaborate on that through the rest of this&nbsp;post.</p>
+<h4>Revision</h4>
+<p>First, let&#8217;s recap (or perhaps introduce) the important facts about enums in Python. An <em>enum</em>, or an enumeration type,
+is a special class that inherits from <code>enum.Enum</code><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> and defines one or more&nbsp;constants:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+
+<span class="k">class</span> <span class="nc">Cutlery</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">knife</span> <span class="o">=</span> <span class="s">&#39;knife&#39;</span>
+    <span class="n">fork</span> <span class="o">=</span> <span class="s">&#39;fork&#39;</span>
+    <span class="n">spoon</span> <span class="o">=</span> <span class="s">&#39;spoon&#39;</span>
+</pre></div>
+
+
+<p>Their values are then converted into singleton objects with distinct identity.
+They available as attributes of the enumeration&nbsp;type:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>As a shorthand for when the values themselves are not important, the <code>Enum</code> class can be directly invoked
+with constant names as&nbsp;strings:</p>
+<div class="highlight"><pre><span class="n">Cutlery</span> <span class="o">=</span> <span class="n">Enum</span><span class="p">(</span><span class="s">&#39;Cutlery&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<p>Resulting class offers some useful <span class="caps">API</span> that we&#8217;d expect from an enumeration type in any programming&nbsp;language:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">Cutlery</span><span class="p">)</span>
+<span class="p">[</span><span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span><span class="p">:</span> <span class="s">&#39;knife&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span><span class="p">]</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">Cutlery</span><span class="p">]</span>
+<span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">]</span>
+<span class="o">&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span> <span class="ow">in</span> <span class="n">Cutlery</span>
+<span class="bp">True</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spoon&#39;</span><span class="p">)</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spork&#39;</span><span class="p">)</span>
+<span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+<span class="c"># (...)</span>
+<span class="ne">ValueError</span><span class="p">:</span> <span class="s">&#39;spork&#39;</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">a</span> <span class="n">valid</span> <span class="n">Cutlery</span>
+</pre></div>
+
+
+<h4>How it was done&nbsp;previously</h4>
+<p>Of course, there is nothing really groundbreaking about assigning some values to &#8220;constants&#8221;. It&#8217;s been done like that
+since times immemorial, and quite often those constants have been grouped within finite&nbsp;sets.</p>
+<p>Here&#8217;s an example of a comment model in some imaginary <span class="caps">ORM</span>, complete with a status&nbsp;&#8220;enumeration&#8221;:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="n">APPROVED</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+    <span class="n">REJECTED</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+    <span class="n">IN_REVIEW</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+    <span class="n">STATES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">([</span><span class="n">APPROVED</span><span class="p">,</span> <span class="n">REJECTED</span><span class="p">,</span> <span class="n">IN_REVIEW</span><span class="p">])</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">String</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="n">STATES</span><span class="p">)</span>
+
+<span class="c"># usage</span>
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Boo&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">IN_REVIEW</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Converting it to use an <code>Enum</code> is relatively&nbsp;straightforward:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="n">approved</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+        <span class="n">rejected</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+        <span class="n">in_review</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">State</span><span class="p">])</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Meh.&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span><span class="o">.</span><span class="n">value</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>It is not apparent, though, if there is any immediate benefit of doing so. True, we no longer need to define the <code>STATES</code>
+set explicitly, but saving on this bit of boilerplate is balanced out by having to access the enum&#8217;s <code>value</code>
+when assigning it to a string&nbsp;property.</p>
+<p>All in all, it seems like a wash &#8212; though at least we&#8217;ve established that enums are <em>no worse</em> than their alternatives&nbsp;:)</p>
+<h4>Enums are&nbsp;interoperable</h4>
+<p>Obviously, this doesn&#8217;t exactly sound like high praise. Thing is, we haven&#8217;t really replaced the previous solution
+<em>completely</em>. Remnants of it still linger in the way the <code>state</code> property is declared. Even though it&#8217;s supposed to hold
+enum constants, it is defined as string, which at this point is more of an implementation detail of how those constants
+are&nbsp;serialized.</p>
+<p>What were really need here is a kind of <code>EnumProperty</code> that&#8217;d allow us to work solely with enum objects.
+Before the introduction of a standard <code>Enum</code> base, however, there was little incentive for ORMs and other similiar
+libraries to provide such a functionality. But now, it makes much more sense to support enums as first-class citizens,
+at least for data exchange and serialization, because users can be expected to already prefer the standard <code>Enum</code>
+in their own&nbsp;code.</p>
+<p>Thus, the previous example changes into something along these&nbsp;lines:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">EnumProperty</span><span class="p">(</span><span class="n">State</span><span class="p">)</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Yay!&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span>  <span class="c"># no .value!</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Details of <code>EnumProperty</code>, or some equivalent construct, are of course specific to any given data management library.
+In SQLAlchemy, for example, a <a href="https://gist.github.com/Xion/5564b907e5f4e883511c">custom column type</a>
+can handle the necessary serialization and deserialization between Python code and <span class="caps">SQL</span> queries,
+allowing you to define your models like this<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="c"># ...</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">255</span><span class="p">))</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">EnumType</span><span class="p">(</span><span class="n">State</span><span class="p">,</span> <span class="n">impl</span><span class="o">=</span><span class="n">String</span><span class="p">(</span><span class="mi">32</span><span class="p">)))</span>
+
+<span class="c"># usage like above</span>
+</pre></div>
+
+
+<p>In any case, the point is to have Python code operate solely on enum objects, while the persistence layer takes
+care of converting between them and their serializable&nbsp;values.</p>
+<h4>Enums are&nbsp;extensible</h4>
+<p>The other advantage <code>Enum</code>s have over loose collections of constants is that they are proper <em>types</em>.
+Like all user-defined types in Python, they can have additional methods and properties defined on their instances,
+or even on the type&nbsp;itself.</p>
+<p>Although this capability is (by default) not as powerful as e.g. in Java &#8212; where <em>each enum constant</em> can
+<a href="https://gist.github.com/chandrasekhar4u/431839b9eac715c08b71">override a method in its own way</a> &#8212; it can nevertheless
+be quite convenient at times. Typical use cases include constant&nbsp;classification:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_horizontal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_vertical</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">)</span>
+</pre></div>
+
+
+<p>and&nbsp;conversion:</p>
+<div class="highlight"><pre>    <span class="k">def</span> <span class="nf">as_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+</pre></div>
+
+
+<p>For the latter, it would be handy to have the Java&#8217;s ability to
+<a href="https://docs.oracle.com/javase/tutorial/java/javaOO/enum.html">attach additional data</a> to an enum constant.
+As it turns out, Python supports this feature natively in a very similar way.
+We simply have to override enum&#8217;s <code>__new__</code> method to parse out any extra values from the initializer
+and turn them into attributes of the enum&nbsp;instance:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">keycode</span><span class="p">,</span> <span class="n">vector</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">)</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_value_</span> <span class="o">=</span> <span class="n">keycode</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">vector</span> <span class="o">=</span> <span class="n">vector</span>
+        <span class="k">return</span> <span class="n">obj</span>
+</pre></div>
+
+
+<p>It&#8217;s possible, in fact, to insert any arbitrary computation here that yields the final <code>_value_</code> of an enum constant<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
+This trick can be used to, for example, construct enums that
+<a href="https://docs.python.org/3/library/enum.html#autonumber">automatically number themselves</a>.</p>
+<p>Finally, we can add static methods, class methods, or <a href="http://stackoverflow.com/a/3203659">class properties</a> to the
+<code>Enum</code> subclass, just like we would do with any other&nbsp;class:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">MyEnum</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="nd">@classproperty</span>
+    <span class="k">def</span> <span class="nf">__values__</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">cls</span><span class="p">]</span>
+</pre></div>
+
+
+<h4>Enums just&nbsp;are</h4>
+<p>All these things are possible primarly because of the most notable aspect of Python enums: their existence
+as an <em>explicit concept</em>. A syntactically unorganized bunch of constants cannot offer half of the highlighted features
+because there is nowhere to pin them&nbsp;on.</p>
+<p>For that reason alone, using enums as an explicit &#8212; rather than implicit &#8212; pattern seems worthwhile.
+The one benefit we&#8217;re certain to reap is better code structure through separation of important&nbsp;concepts.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The <code>enum</code> module is part of the Python standard library
+<a href="https://docs.python.org/3/library/enum.html">since version 3.4</a>
+but <a href="https://pypi.python.org/pypi/enum/">a fully functional backport</a> is available for Python 2.x as well.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>It is even possible to instruct SQLAlchemy how to map Python enums to
+<a href="http://www.postgresql.org/docs/9.1/static/datatype-enum.html"><code>ENUM</code> types</a> in database engines that support it,
+but details are outside of the scope of this article.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>If you&#8217;re fine with the enum&#8217;s <code>value</code> being the <em>whole</em> tuple (everything after the <code>=</code> sign),
+you can override <code>__init__</code> instead of <code>__new__</code>
+(cf. <a href="https://docs.python.org/3/library/enum.html#planet">the planet example</a> from standard docs).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
+    <p>
+      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
+in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
+<code>div.content</code>, and other presentational elements are still a common fact of life.
+Unless you&#8217;re one of the cool kids who use <a href="http://webcomponents.org/">Web Components</a> with
+<a href="https://www.polymer-project.org">Polymer</a>, your main option for abstracting this boilerplate away
+is defining some more general <a href="http://jinja.pocoo.org/docs/dev/templates/#macros">template macros</a>.</p>
+<p>As with any kind of abstraction, it&#8217;s crucial to balance broad applicability with a potential for finely-tuned
+customization. In the case of wrapping <span class="caps">HTML</span> snippets in Jinja macros, an easy way to maintain flexibility is to allow
+the caller to specify some crucial attributes of the root&nbsp;element:</p>
+<div class="highlight"><pre><span class="c">{#</span>
+<span class="c">  Renders the markup for a &lt;button&gt; from Twitter Bootstrap.</span>
+<span class="c">#}</span><span class="x"></span>
+<span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">        class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}{%</span> <span class="k">if</span> <span class="nv">class</span> <span class="cp">%}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">class</span> <span class="cp">}}{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x">&quot;</span>
+<span class="x">        </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+<span class="x">    </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
+<span class="x">  &lt;/button&gt;</span>
+<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>An element <code>id</code> would be a good example, and in the above macro it&#8217;s handled implicility
+thanks to the <code>{{ kwargs|xmlattr }}</code> stanza.</p>
+<p><code>class</code>, however, is not that simple, because a macro like that usually needs to supply some <span class="caps">CSS</span> classes of its own.
+The operation of combining them with additional ones, passed by the caller, is awfully textual and error-prone.
+It&#8217;s easy, for example, to forget about the crucial space and run two class names&nbsp;together.</p>
+<p>As if <span class="caps">CSS</span> wasn&#8217;t difficult enough to debug&nbsp;already!</p>
+<h4>Let them have&nbsp;list</h4>
+<p>The root cause for any of those problems is working at a level that&#8217;s too low for the task.
+The value for a <code>class</code> attribute may be <em>encoded</em> as string, but it&#8217;s fundamentally a <em>list of tokens</em>.
+In the modern <span class="caps">DOM</span> <span class="caps">API</span>, for example, it is represented
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/classList">as exactly that</a>: a <code>DOMTokenList</code>.</p>
+<p>I&#8217;ve found it helpful to replicate a similar mechanism in Jinja templates. The result is a <code>ClassList</code> wrapper
+whose code I quote here in&nbsp;full:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">MutableSet</span>
+
+
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Data structure for holding, and ultimately returning as a single string,</span>
+<span class="sd">    a set of identifiers that should be managed like CSS classes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Constructor.</span>
+<span class="sd">        :param arg: A single class name or an iterable thereof.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span>
+        <span class="k">elif</span> <span class="n">arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s">&quot;expected a string or string iterable, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">class_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span>
+
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">discard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__html__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&#39;class=&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
+</pre></div>
+</td></tr></table>
+
+<p>To make it work with <a href="http://flask.pocoo.org">Flask</a>, adorn the class with
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.template_global"><code>Flask.template_global</code> decorator</a>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">myflaskapp</span> <span class="kn">import</span> <span class="n">app</span>
+
+<span class="nd">@app.template_global</span><span class="p">(</span><span class="s">&#39;classlist&#39;</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Otherwise, if you&#8217;re working with a raw <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment">Jinja <code>Environment</code></a>,
+simply add <code>ClassList</code> to its <a href="http://jinja.pocoo.org/docs/dev/api/#global-namespace">global namespace</a>&nbsp;directly:</p>
+<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">globals</span><span class="p">[</span><span class="s">&#39;classlist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ClassList</span>
+</pre></div>
+
+
+<p>In either case, I recommend following the apparent Jinja convention of naming template symbols
+as <code>lowercasewithoutspaces</code>.</p>
+<h4>Becoming&nbsp;classy</h4>
+<p>Usage of this new <code>classlist</code> helper is relatively straightforward. Since it accepts both a space-separated string
+or an iterable of <span class="caps">CSS</span> class names, a macro can wrap anything the caller would pass it as a value for <code>class</code> attribute:</p>
+<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="cp">{%</span> <span class="k">set</span> <span class="nv">classes</span> <span class="o">=</span> <span class="nv">classlist</span><span class="o">(</span><span class="nv">class</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="c">{# ... #}</span><span class="x"></span>
+</pre></div>
+
+
+<p>The <code>classlist</code> is capable of producing the complete <code>class</code> attribute syntax (i.e. <code>class="..."</code>), or omit it entirely
+if it would be empty. All we need to do is evaluate it using the normal Jinja expression&nbsp;syntax:</p>
+<div class="highlight"><pre><span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot; </span><span class="cp">{{</span> <span class="nv">classes</span> <span class="cp">}}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+</pre></div>
+
+
+<p>Before that, though, we may want to include some additional classes that are specific to our macro.
+The <code>button</code> macro, for example, needs to add the <a href="http://getbootstrap.com/css/#buttons">Bootstrap-specific</a>
+<code>btn</code> and <code>btn-$STYLE</code> classes to the <code>&lt;button&gt;</code> element it produces<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">classes.add</span><span class="o">(</span><span class="s1">&#39;btn&#39;</span><span class="o">,</span> <span class="s1">&#39;btn-&#39;</span> <span class="o">+</span> <span class="nv">style</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>After executing this statement, the final <code>class</code> attribute contains both the caller-provided classes,
+as well those two that were added&nbsp;explicitly.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Believe it or not, we can finally
+<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content">center the content vertically</a>
+without much of an issue!&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>The <code>{% do %}</code> block in Jinja allows to execute statements (such as function calls) without evaluating values
+they return. It is not exposed by default,
+but <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment.add_extension">adding</a> a standard
+<a href="http://jinja.pocoo.org/docs/dev/extensions/#expression-statement"><code>jinja2.ext.do</code> extension</a> to the <code>Environment</code>
+makes it available.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/sqlalchemy-regex-filters.html#sqlalchemy-regex-filters">Regular expression filters in&nbsp;SQLAlchemy</a></h2>
     <p>
       Posted on Wed 14 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -730,716 +1590,6 @@ except that all your Jinja macro files will now be monitored for&nbsp;changes.</
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/memcached-purge-local.html#memcached-purge-local">Purging local&nbsp;Memcached</a></h2>
-    <p>
-      Posted on Sat 19 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/memcache.html">memcache</a>,      <a href="http://xion.io/tag/memcached.html">Memcached</a>,      <a href="http://xion.io/tag/expect.html">expect</a>,      <a href="http://xion.io/tag/caching.html">caching</a>,      <a href="http://xion.io/tag/scripting.html">scripting</a>,      <a href="http://xion.io/tag/tcl.html">Tcl</a>      &#8226; <a href="http://xion.io/post/code/memcached-purge-local.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://memcached.org/">Memcached</a> is a ubiquitous caching solution, most commonly used to speed things up
-in web application backends. You deploy it as a separate binary and have your application servers talk to it
-before querying a database, calling a third party <span class="caps">API</span> over <span class="caps">HTTP</span>, or performing some other time-consuming I/O operation.
-Since it stores data in memory, as its name obviously suggests, it can be orders of magnitude faster than anything
-that may have to hit a spinning disk (like a database) or an unreliable, external&nbsp;network.</p>
-<p>From the point of view of a developer, using Memcached is pretty simple.
-There exist <a href="https://code.google.com/p/memcached/wiki/Clients">numerous libraries</a> that wrap its protocol in a neat,
-language-appropriate <span class="caps">API</span>. It does put another requirement on the development environment, of course: you need to have
-a working memcached deamon in the background if you want the local server to hit code paths where it retrieves data
-from memcache<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Thankfully, it&#8217;s an extremely popular piece of software, present in basically all
-<a href="https://code.google.com/p/memcached/wiki/NewInstallFromPackage">package repositories</a>,
-so having it up and running is just one <code>apt-get install</code> or <code>brew install</code> away.</p>
-<h4>How to&nbsp;flush</h4>
-<p>It&#8217;s a little dated and finicky piece of software, too. Once you have its local instance used for a while,
-there comes a time when you&#8217;d like to purge all its contents and have your server(s) fill it up again.
-Rather than restarting the daemon (which is system-specific procedure that may require root privileges),
-you&#8217;d like to just issue the <code>flush_all</code> command to&nbsp;it.</p>
-<p>This <em>should</em> be easy. Unlike <a href="http://redis.io/">Redis</a>, however, memcached doesn&#8217;t come with a dedicated <span class="caps">CLI</span> client.
-In theory, it doesn&#8217;t have to, because you can talk to it over just <code>telnet</code>:</p>
-<div class="highlight"><pre><span class="nv">$ </span>telnet localhost 11211
-Trying 127.0.0.1...
-Connected to localhost.
-Escape character is <span class="s1">&#39;^]&#39;</span>.
-flush_all
-OK
-^<span class="o">]</span>
-
-telnet&gt; quit
-Connection closed.
-</pre></div>
-
-
-<p>But going through this rigmarole every time we want to flush memcache gets a bit tedious after a while.
-An obvious attempt at automating it will, however,&nbsp;fail:</p>
-<div class="highlight"><pre><span class="nv">$ </span><span class="nb">echo</span> <span class="s2">&quot;flush_all\n&quot;</span> <span class="p">|</span> telnet localhost 11211
-Trying 127.0.0.1...
-Connected to localhost.
-Escape character is <span class="s1">&#39;^]&#39;</span>.
-Connection closed by foreign host.
-</pre></div>
-
-
-<p>Turns out the you cannot just bombard memcached with <code>flush_all</code> (or any other command) while the connection
-is being established. You can of course try adding a <code>sleep</code> to allow it some time, but this is inherently unreliable,
-especially when connecting to remote&nbsp;servers.</p>
-<p>The most successful approach I&#8217;ve managed to find is to automate not the raw data exchange,
-but the <em>interactive <code>telnet</code> session itself</em>. By that I mean invoking a <code>telnet</code> command, observing its output
-and reacting to it &#8212; just like a human would do, but in a scripted, automated&nbsp;way.</p>
-<h4>Nobody expects the Telnet&nbsp;instrumentation</h4>
-<p>There is a dedicated Unix program for scripting just this kind of <span class="caps">CLI</span> interactions. It&#8217;s decidedly more obscure
-than mere <code>echo</code> or pipes, but should nonetheless be available for any modern (or ancient) Unix system,
-from Linuxes to <span class="caps">OSX</span>. Its name is <code>expect</code> and &#8212; if installed<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> &#8212; the usual place you can find it is
-<code>/usr/bin</code> or <code>/usr/local/bin</code>.</p>
-<p><code>expect</code> accepts commands and scripts written in <a href="https://en.wikipedia.org/wiki/Tcl">Tcl</a> &#8212; a scripting language
-whose syntax looks a bit like a mix of <span class="caps">PHP</span> and Objective-C. It&#8217;s a fully featured language with all the usual
-programming constructs you&#8217;d normally want but <code>expect</code> enhances it further with instructions dedicated to spawning
-external processes, reading their output, and sending input in&nbsp;response.</p>
-<p>In fact, the main commands of the <code>expect</code> program are <code>spawn</code>, <code>expect</code>, and <code>send</code>. Mashing them together,
-we can easily nail the crucial part of our memcache-purging&nbsp;script:</p>
-<div class="highlight"><pre><span class="c">#!/usr/bin/expect</span>
-
-<span class="nv">spawn</span> telnet localhost <span class="mi">11211</span><span class="k">;</span>
-<span class="nv">expect</span> <span class="s2">&quot;Connected to localhost&quot;</span><span class="k">;</span>
-<span class="nv">send</span> <span class="s2">&quot;flush_all\n&quot;</span><span class="k">;</span>
-</pre></div>
-
-
-<p>This performs the actual flush but the <code>telnet</code> session/process is kept open afterwards.
-Once the <code>expect</code> program ends (after finishing our script), that process may get orphaned and hog system resources.
-To prevent that, we should behave like a good Unix citizen and <em>wait</em> for our child processes to&nbsp;terminate:</p>
-<div class="highlight"><pre><span class="nv">wait</span><span class="k">;</span>
-</pre></div>
-
-
-<p>But obviously, this will never happen, because we&#8217;ve never instructed the <code>telnet</code> process to&nbsp;end!</p>
-<h4>Escape&nbsp;artist</h4>
-<p>Your first instinct may be to send <code>^C</code> (<span class="caps">SIGINT</span>) or <code>^D</code> (end-of-file) to the <code>telnet</code> process
-but this won&#8217;t work either. Everything we type inside an active Telnet session is sent to the remote server,
-and that includes those two key&nbsp;chords.</p>
-<p>Authors of the <code>telnet</code> program were of course aware of this problem. As a countermeasure, they introduced the concept
-of an <em>escape character</em> that allows the user to control the Telnet connection itself &#8212; including, but not limited to,
-its termination. When encountered in the input stream, the escape character causes <code>telnet</code> to temporally suspend
-its normal operation, &#8220;escaping&#8221; from the client-server session to a simple command shell of the <code>telnet</code> program itself.
-(This is indicated by the <code>telnet&gt;</code> prompt).</p>
-<p>The default escape character is <code>^]</code>, which can be easily typed on a keyboard using the key combination <em>Ctrl+]</em>.
-The <code>expect</code> program, however, only simulates typing real characters. Coupled with some syntactical quirks of the Tcl
-language, this makes the usage of <code>^]</code> as an escape character rather cumbersome, to say the&nbsp;least.</p>
-<p>Fortunately, this default can be changed rather easily with an <code>-e</code> flag to the <code>telnet</code> application.
-After setting it to something more common but still outside of the memcache protocol &#8212; such as the exclamation mark &#8212;
-we are now able to <code>send</code> it without an&nbsp;issue:</p>
-<div class="highlight"><pre><span class="c">#!/usr/bin/expect</span>
-
-<span class="k">set</span> escapechar <span class="o">!</span><span class="k">;</span>
-
-<span class="nv">spawn</span> telnet <span class="o">-</span>e <span class="nv">$escapechar</span> localhost <span class="mi">11211</span><span class="k">;</span>
-<span class="nv">expect</span> <span class="s2">&quot;Connected to localhost&quot;</span><span class="k">;</span>
-<span class="nv">send</span> <span class="s2">&quot;flush_all\n&quot;</span><span class="k">;</span>
-
-<span class="nv">send</span> <span class="nv">$escapechar</span><span class="k">;</span>
-<span class="nv">expect</span> <span class="s2">&quot;telnet&gt;&quot;</span><span class="k">;</span>
-<span class="nv">send</span> <span class="s2">&quot;quit\n&quot;</span><span class="k">;</span>
-<span class="nv">wait</span><span class="k">;</span>
-</pre></div>
-
-
-<p>The script will also terminate despite <code>wait</code>ing for the <code>telnet</code> process to finish, which means everything has been
-shut down&nbsp;gracefully.</p>
-<h4>Production-ready</h4>
-<p>As a final touch, it&#8217;d be nice to make our solution work with any memcache server and not just <em>localhost</em>.
-You can see it done in <a href="https://gist.github.com/Xion/624979b05e0411324eb1">this gist</a>: the script accepts
-two optional arguments (host <span class="amp">&amp;</span> port) and uses it when spawning the <code>telnet</code> process.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>It probably goes without saying that any value in the memcache, as well as the entire memcached server (or servers),
-must be treated as potentially unavailable at any time. A properly written application server should still be able
-to service all requests &#8212; if only a little slower &#8212; without any (mem)caching at all.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>On all distros, as well as in Homebrew for <span class="caps">OSX</span>, it should be available as a package with a totally uncreative
-name of <code>expect</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/memcached-purge-local.html#memcached-purge-local">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">mailto: URLs in&nbsp;JavaScript</a></h2>
-    <p>
-      Posted on Tue 15 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/email.html">email</a>,      <a href="http://xion.io/tag/url.html">URL</a>      &#8226; <a href="http://xion.io/post/code/js-mailto-urls.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Though not as popular as back in the days, <code>mailto:</code> URLs are sometimes still the best way
-&#8212; and most certainly the easiest &#8212; to enable users to send emails from a web application. Typically, they are used
-in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
-<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com&quot;</span><span class="nt">&gt;</span>Send email<span class="nt">&lt;/a&gt;</span>
-</pre></div>
-
-
-<p>Depending on the operating system and browser settings, clicking on such a link could invoke a different mail client.
-In the past, this could cause much confusion if the user has never used its local email application (e.g. Outlook),
-but nowadays browsers are increasingly doing the right thing and presenting a choice of possible options.
-This includes the various web applications from popular email providers. User can thus choose &#8212; say &#8212; Gmail, and have
-all subsequent <code>mailto:</code> links take them to a <em>Compose Mail</em> view&nbsp;there.</p>
-<p>Given those developments, it&#8217;s possible that soon those URLs won&#8217;t be as quaint as they used to be ;)
-In any case, I think it&#8217;s worthwhile to have a few <code>mailto:</code> tricks up our sleeve for when they turn out to be
-an appropriate solution for the task at&nbsp;hand.</p>
-<h4>Triggering them in&nbsp;JavaScript</h4>
-<p>In the example above, I&#8217;ve used a <code>mailto:</code> <span class="caps">URL</span> directly in some <span class="caps">HTML</span> markup. For the most part, however, those URLs
-behave like any other and support a lot of the same functionality that <code>http://</code> URLs&nbsp;do:</p>
-<div class="highlight"><pre><span class="kd">function</span> <span class="nx">sendEmail</span><span class="p">(</span><span class="nx">address</span><span class="p">)</span> <span class="p">{</span>
-    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nx">address</span><span class="p">;</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>Predictably, calling this <code>sendEmail</code> function is equivalent to clicking on a <code>mailto:</code> link. This additional level
-of indirection, however, may be enough to fool some web crawlers that look for email addresses to spam. Its effectiveness
-depends largely on how radically we&#8217;re going to obfuscate the <code>address</code> argument in the actual&nbsp;invocation.</p>
-<p>More importantly, though, a function like that can be part of some more complicated logic. The only limitation is
-the same one that restricts where and when it&#8217;s possible to <code>window.open</code> another browser window. Namely, it has to be
-called in a direct response to a <span class="caps">UI</span> action triggered by the user (a button click would be a good&nbsp;example).</p>
-<h4>Customization</h4>
-<p>In their simplest form, <code>mailto:</code> URLs aren&#8217;t terribly interesting, since their only parameter is the address of a sole recipient. Fortunately, this isn&#8217;t where their capabilities end: it&#8217;s possible to customize other email fields as well,
-such as the subject or even body<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>Somewhat surprisingly, all this can be done in a manner that&#8217;s more typical for <code>http://</code> <span class="caps">URL</span>: with query string
-parameters. Right after the recipient&#8217;s address, we can drop a question mark and add some ampersand-separated
-key-value&nbsp;pairs:</p>
-<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com?subject=Hi&amp;amp;body=Hello%20John!&quot;</span><span class="nt">&gt;</span>
-  Say hello to John!
-<span class="nt">&lt;/a&gt;</span>
-</pre></div>
-
-
-<p>A more programmatic approach is of course also possible. One thing we need to remember, though, is the proper escaping
-of input values in order to make them safe to put inside an <span class="caps">URL</span><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
-The <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent"><code>encodeURIComponent</code> function</a> can be used for this&nbsp;purpose:</p>
-<div class="highlight"><pre><span class="kd">function</span> <span class="nx">getMailtoUrl</span><span class="p">(</span><span class="nx">to</span><span class="p">,</span> <span class="nx">subject</span><span class="p">,</span> <span class="nx">body</span><span class="p">)</span> <span class="p">{</span>
-    <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="p">[];</span>
-    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">subject</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;subject=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">subject</span><span class="p">));</span>
-    <span class="p">}</span>
-    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">body</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;body=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">body</span><span class="p">))</span>
-    <span class="p">}</span>
-
-    <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">to</span><span class="p">);</span>
-    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">url</span> <span class="o">+=</span> <span class="s1">&#39;?&#39;</span> <span class="o">+</span> <span class="nx">args</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;&amp;&#39;</span><span class="p">);</span>
-    <span class="p">}</span>
-    <span class="k">return</span> <span class="nx">url</span><span class="p">;</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>In theory, almost any of the numerous <a href="https://en.wikipedia.org/wiki/Email#Header_fields">email headers</a> can be specified
-this way. However, support may vary across browsers, especially since some of the headers
-(like <a href="https://en.wikipedia.org/wiki/Blind_carbon_copy">the <code>Bcc:</code> one</a>) are subject to certain security
-or privacy considerations. Personally, I wouldn&#8217;t recommend relying on anything besides
-<code>subject=</code> and <code>body=</code>, with a possible addition of <code>cc=</code> for
-<a href="https://en.wikipedia.org/wiki/Carbon_copy">the <code>Cc:</code>header </a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>By <a href="http://www.ietf.org/rfc/rfc2368.txt"><span class="caps">RFC</span> 2368</a>, only <em>text/plain</em> email body can be specified this way.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Note that this is unrelated to the <em><span class="caps">HTML</span></em> escaping of <code>&amp;</code> character as <code>&amp;amp;</code> entity in the previous example.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Query string authentication in&nbsp;Requests</a></h2>
-    <p>
-      Posted on Fri 11 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/requests.html">Requests</a>,      <a href="http://xion.io/tag/http.html">HTTP</a>,      <a href="http://xion.io/tag/authentication.html">authentication</a>      &#8226; <a href="http://xion.io/post/code/requests-query-string-auth.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://python-requests.org">Requests</a> is a widely used Python library that provides a nicer <span class="caps">API</span> for writing <span class="caps">HTTP</span> clients
-than the standard <code>urllib2</code> module does. It deals with authentication in an especially concise way: through
-a simple <code>auth=</code> argument, rather than a
-<a href="https://gist.github.com/kennethreitz/973705">separate password manager <span class="amp">&amp;</span> authentication handler</a> or other such&nbsp;nonsense.</p>
-<p>There are <a href="http://docs.python-requests.org/en/latest/user/authentication/">several possible ways</a>
-to authenticate an <span class="caps">HTTP</span> call with Requests, and it&#8217;s pretty easy to
-<a href="http://docs.python-requests.org/en/latest/user/authentication/#new-forms-of-authentication">implement our own approach</a>
-if the server requires it. All the built-in ways, however, as well as
-<a href="http://docs.python-requests.org/en/latest/user/advanced/#custom-authentication">the examples of custom implementations</a>,
-are heavily biased towards using <span class="caps">HTTP</span> headers to transmit the necessary credentials (such as username/password
-or some kind of opaque&nbsp;token).</p>
-<h4>Non-standard&nbsp;auth</h4>
-<p>This is actually quite reasonable: the most popular authentication methods, including OAuth 1.0 <span class="amp">&amp;</span> 2.0, use <span class="caps">HTTP</span> headers
-either primarily or&nbsp;exclusively.</p>
-<p>Not every <span class="caps">HTTP</span> <span class="caps">API</span> follows this convention, though. Sometimes, credentials are put in other parts of the request,
-commonly the <span class="caps">URL</span> itself. It may seem like a bad idea at first but it can also be perfectly acceptable:
-credentials don&#8217;t have to expose secrets of any particular <em>user</em> of the remote&nbsp;system.</p>
-<p><a href="http://steamcommunity.com/dev">Steam <span class="caps">API</span></a> is a good example here. Calling any of
-<a href="https://developer.valvesoftware.com/wiki/Steam_Web_API#Interfaces_and_method">its endpoints</a> requires providing
-an <span class="caps">API</span> key but it grants no special rights to access data of any particular Steam user. All the information
-it returns is already visible on their public profile<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>For those special authentication schemes, Requests necessitate rolling out our own implementation.
-Thankfully, doing so is mostly pretty&nbsp;straightforward.</p>
-<h4>Simple&nbsp;example</h4>
-<p>All Requests&#8217; authenticators are callable objects inheriting from <code>requests.auth.AuthBase</code> class.
-Writing your own is hence a matter of defining a subclass of <code>AuthBase</code> with at least a <code>__call__</code> method:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">SillyAuth</span><span class="p">(</span><span class="n">AuthBase</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;X-ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;im valid so auth is yes&#39;</span>
-        <span class="k">return</span> <span class="n">request</span>
-
-<span class="c"># usage</span>
-<span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;http://example.com&#39;</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">SillyAuth</span><span class="p">())</span>
-</pre></div>
-
-
-<p>The job of an authenticator is to modify the <code>request</code> so that it includes appropriate credentials in whatever form
-necessary to have them accepted by the remote server. Like I&#8217;ve mentioned before, <span class="caps">HTTP</span> headers are the most common option,
-but the request can be modified in other ways as&nbsp;well.</p>
-<h4>Query string&nbsp;parameters</h4>
-<p>One problem with modifying a query string, though, is that it&#8217;s a part of request <span class="caps">URL</span>. By the time it reaches
-authenticators, the Requests library has already merged any additional query params into it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. Including more params
-will thus require modifying the <span class="caps">URL</span>.</p>
-<p>Though it may sound like a risky endeavour involving string manipulations that are fraught with security issues,
-it&#8217;s not really <em>that</em> bad at all. In fact, the Requests library provides an <span class="caps">API</span> to do exactly&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">QueryStringAuth</span><span class="p">(</span><span class="n">AuthBase</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Authenticator that attaches a set of query string parameters</span>
-<span class="sd">    (e.g. an API key) to the request.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span>
-
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
-            <span class="n">request</span><span class="o">.</span><span class="n">prepare_url</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">request</span>
-</pre></div>
-
-
-<p>Albeit <a href="http://docs.python-requests.org/en/latest/api/#requests.PreparedRequest.prepare_url">scantly documented</a>,
-the <code>prepare_url</code> method will take an existing <span class="caps">URL</span> and a dictionary of query string params, and outfit the request
-with a brand new <span class="caps">URL</span> that contains those params neatly&nbsp;encoded.</p>
-<p>Full implementation of <code>QueryStringAuth</code> is a <a href="https://gist.github.com/Xion/9c1bbbc287d4443dbaf5">little more involved</a>
-than the snippet above, because we should like to replicate all the idiosyncracies of how
-<a href="http://docs.python-requests.org/en/latest/user/quickstart/#passing-parameters-in-urls">regular Requests <span class="caps">API</span></a>
-handles query string params. Some of them &#8212; like allowing both strings and lists as param values &#8212; are taken care of
-by <code>prepare_url</code> itself, but the rest should be dealt with on our&nbsp;own.</p>
-<h4>Usage</h4>
-<p>To finish up, let&#8217;s use this authenticator to call Steam <span class="caps">API</span> and return a
-<a href="https://developer.valvesoftware.com/wiki/Steam_Web_API#GetOwnedGames_.28v0001.29">list of games</a>
-that a given user owns but hasn&#8217;t played&nbsp;yet:</p>
-<div class="highlight"><pre><span class="n">STEAM_API_KEY</span> <span class="o">=</span> <span class="s">&#39;a1b2c3d4e5f6g7h8i9j&#39;</span>  <span class="c"># not a real one, of course</span>
-
-
-<span class="k">def</span> <span class="nf">get_steam_backlog</span><span class="p">(</span><span class="n">steam_id</span><span class="p">):</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="s">&#39;http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/&#39;</span>
-    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s">&#39;steamid&#39;</span><span class="p">:</span> <span class="n">steam_id</span><span class="p">,</span>
-        <span class="s">&#39;include_appinfo&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-    <span class="p">}</span>
-
-    <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-        <span class="n">url</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">QueryStringAuth</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">STEAM_API_KEY</span><span class="p">))</span>
-    <span class="n">games</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;response&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;games&#39;</span><span class="p">,</span> <span class="p">())</span>
-
-    <span class="k">for</span> <span class="n">game</span> <span class="ow">in</span> <span class="n">games</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">game</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;playtime_forever&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">):</span>
-            <span class="k">continue</span>
-        <span class="k">yield</span> <span class="n">game</span><span class="p">[</span><span class="s">&#39;name&#39;</span><span class="p">]</span>
-</pre></div>
-
-
-<p>We could&#8217;ve put <code>STEAM_API_KEY</code> directly in <code>params</code>, of course. Singling it out explicitly as an authentication
-detail, however, makes the code clearer and plays nicely with more advanced features of Requests,
-such as <a href="http://docs.python-requests.org/en/latest/user/advanced/#session-objects">sessions</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>It can be said that only in this case we&#8217;re dealing with exclusively <em>authentication</em>, whereas the others
-also perform <em>authorization</em>. I wouldn&#8217;t quibble too much about those details. The fact that both terms are often
-shortened to &#8220;auth&#8221; doesn&#8217;t exactly help with distinguishing them anyway.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>In fact, what <code>AuthBase.__call__</code> receives is a special
-<a href="http://docs.python-requests.org/en/latest/user/advanced/#prepared-requests"><code>PreparedRequest</code> object</a> which contains
-the exact bytes that&#8217;ll be sent to the server. Most of the higher level abstractions offered by the Requests library
-(like form data or <span class="caps">JSON</span> request body) has been compiled to raw octets at this point. This is done to allow
-some authenticators (like OAuth) to analyze the full request payload and sign it cryptographically
-as a part of their flow.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/flask-auto-error-pages.html#flask-auto-error-pages">Automatic error pages in&nbsp;Flask</a></h2>
-    <p>
-      Posted on Tue 08 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/http.html">HTTP</a>,      <a href="http://xion.io/tag/errors.html">errors</a>      &#8226; <a href="http://xion.io/post/code/flask-auto-error-pages.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In <a href="http://flask.pocoo.org">Flask</a>, a popular web framework for Python, it&#8217;s pretty easy to implement custom handlers
-for specific <span class="caps">HTTP</span> errors. All you have to do is to write a function and annotate it with the <code>@errorhandler</code> decorator:</p>
-<div class="highlight"><pre><span class="nd">@app.errorhandler</span><span class="p">(</span><span class="mi">404</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">not_found</span><span class="p">(</span><span class="n">error</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;errors/404.html&#39;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Albeit simple, the above example is actually very realistic. There&#8217;s rarely anything else to do in response to serious
-request error than to send back some <span class="caps">HTML</span> with an appropriate message. If you have more handlers like that, though,
-you&#8217;ll notice they get pretty repetitive: for each erroneous <span class="caps">HTTP</span> status code (404, 403, 400, etc.),
-pick a corresponding template and simply render&nbsp;it.</p>
-<p>Which is, of course, why we&#8217;d want to deal with all in a little smarter way and with less&nbsp;boilerplate.</p>
-<h4>Just add a&nbsp;template</h4>
-<p>Ideally, we would like to avoid writing any Python code at all for each individual error handler. Since all we&#8217;re doing
-revolves around predefined templates, let&#8217;s just define the handlers automatically based on the <span class="caps">HTML</span> files&nbsp;themselves.</p>
-<p>Assuming we store them in the same template directory &#8212; say, <code>errors/</code> &#8212; and name their files after
-numeric status codes (e.g. <em>404.html</em>), getting all those codes is quite simple<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span><span class="p">,</span> <span class="n">PurePath</span>
-
-<span class="kn">from</span> <span class="nn">mywebapp</span> <span class="kn">import</span> <span class="n">app</span>
-
-
-<span class="c">#: Path to the directory where HTML templates for error pages are stored.</span>
-<span class="n">ERRORS_DIR</span> <span class="o">=</span> <span class="n">PurePath</span><span class="p">(</span><span class="s">&#39;errors&#39;</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">get_supported_error_codes</span><span class="p">():</span>
-    <span class="sd">&quot;&quot;&quot;Returns an iterable of HTTP status codes for which we have</span>
-<span class="sd">    a custom error page templates defined.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">error_templates_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="n">ERRORS_DIR</span><span class="p">)</span>
-
-    <span class="n">potential_error_templates</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">entry</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">error_templates_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_file</span><span class="p">())</span>
-    <span class="k">for</span> <span class="n">template</span> <span class="ow">in</span> <span class="n">potential_error_templates</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">code</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">template</span><span class="o">.</span><span class="n">stem</span><span class="p">)</span>  <span class="c"># e.g. 404.html</span>
-        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-            <span class="k">pass</span>  <span class="c"># could be some base.html template, or similar</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">:</span>
-                <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="s">&quot;Found error template for non-error HTTP status </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
-                <span class="k">continue</span>
-            <span class="k">yield</span> <span class="n">code</span>
-</pre></div>
-</td></tr></table>
-
-<p>Once we have them, we can try wiring up the handlers programmatically and making them do the right&nbsp;thing.</p>
-<h4>One function to handle them&nbsp;all</h4>
-<p>Although I&#8217;ve used a plural here, in reality we only need a single handler, as it&#8217;ll be perfectly capable of
-dealing with any <span class="caps">HTTP</span> error we bind it to. To help distinguishing between the different status codes,
-Flask by default invokes our error handlers with an
-<a href="http://werkzeug.pocoo.org/docs/0.10/exceptions/#werkzeug.exceptions.HTTPException"><code>HTTPException</code></a> argument
-that has the <code>code</code> as an&nbsp;attribute:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">render_template</span>
-<span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">TemplateNotFound</span>
-
-
-<span class="k">def</span> <span class="nf">error_handler</span><span class="p">(</span><span class="n">error</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Universal handler for all HTTP errors.</span>
-
-<span class="sd">    :param error: :class:`~werkzeug.exceptions.HTTPException`</span>
-<span class="sd">                  representing the HTTP error.</span>
-
-<span class="sd">    :return: HTTP response to be returned</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">code</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">error</span><span class="p">,</span> <span class="s">&#39;code&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">code</span><span class="p">:</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-            <span class="s">&quot;Got spurious argument to HTTP error handler: </span><span class="si">%r</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
-
-    <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s">&quot;HTTP error </span><span class="si">%s</span><span class="s">, rendering error page&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
-    <span class="n">template</span> <span class="o">=</span> <span class="n">ERRORS_DIR</span> <span class="o">/</span> <span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">.html&#39;</span> <span class="o">%</span> <span class="n">code</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">template</span><span class="p">)),</span> <span class="n">code</span>
-    <span class="k">except</span> <span class="n">TemplateNotFound</span><span class="p">:</span>
-        <span class="c"># shouldn&#39;t happen if the handler has been wired up properly</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">fatal</span><span class="p">(</span><span class="s">&quot;Missing template for HTTP error page: </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">template</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
-
-<span class="c">#: Response emitted when an error occurs in the error handler itself.</span>
-<span class="n">FATAL_ERROR_RESPONSE</span> <span class="o">=</span> <span class="p">(</span><span class="s">&quot;Internal Server Error&quot;</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>
-</pre></div>
-</td></tr></table>
-
-<p>Catching <code>TemplateNotFound</code> exception is admittedly a little paranoid here, as it can occur pretty much exclusively
-due to a programming error elsewhere. Feel free to treat it as a failed assertion about application&#8217;s internal state
-and e.g. convert to <code>AssertionError</code> if&nbsp;desirable.</p>
-<h4>The&nbsp;setup</h4>
-<p>The final step is to actually set up the&nbsp;handler(s):</p>
-<div class="highlight"><pre><span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">get_supported_error_codes</span><span class="p">():</span>
-    <span class="n">app</span><span class="o">.</span><span class="n">errorhandler</span><span class="p">(</span><span class="n">code</span><span class="p">)(</span><span class="n">error_handler</span><span class="p">)</span>
-</pre></div>
-
-
-<p>It may look a bit wonky, but it&#8217;s just a simple desugaring of the standard Python decorator syntax from the first example.
-There exists a more direct approach of putting the handler inside <code>app.error_handler_spec</code> dictionary,
-but it is <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.errorhandler">discouraged by Flask documentation</a>.</p>
-<p>Where to put the above code, though? I posit it&#8217;s perfectly fine to place in the module&#8217;s global scope,
-because the error handlers (and other request handlers) are traditionally defined at import time&nbsp;anyway.</p>
-<p>Also notice that the default error handling we&#8217;ve defined here doesn&#8217;t preclude more specialized variants
-for select <span class="caps">HTTP</span> codes. All you have to do is ensure that your custom <code>@app.errorhandler</code> definition occurs
-<em>after</em> the above&nbsp;loop.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Note that I&#8217;m using the <a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a> here
-&#8212; and you should, too, since it&#8217;s all around awesome. However, it is only a part of the standard library
-since Python 3.4, so you will most likely need to get <a href="https://pypi.python.org/pypi/pathlib/">the backport</a> first.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/flask-auto-error-pages.html#flask-auto-error-pages">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/go-decorated-functions.html#go-decorated-functions">Decorated functions in&nbsp;Go</a></h2>
-    <p>
-      Posted on Fri 04 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/go.html">Go</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/decorators.html">decorators</a>      &#8226; <a href="http://xion.io/post/code/go-decorated-functions.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>One of the downsides of working with a simple and minimalistic programming language such as <a href="http://golang.org">Go</a>
-is that <a href="http://blog.atte.ro/2015/08/29/golang-code-reuse.html">abstracting for code reuse</a>
-is often rather challenging. What&#8217;s brought up most often in this context is Go&#8217;s lack of support for generics
-(higher order&nbsp;types).</p>
-<p>But here I wanted to talk about a different mechanism that &#8212; unlike generics &#8212; can be transplanted to Go
-quite successfully: function&nbsp;decorators.</p>
-<h4>Canonical&nbsp;example</h4>
-<p>Decorators are most commonly found in Python (where they can be applied not just to functions, but also classes),
-but have syntactical analogues in Java (annotations), C# (attributes), and a few other&nbsp;languages.</p>
-<p>A <em>decorator</em> looks like a modifier adorning a function definition, distinguished by its initial <code>@</code> sign:</p>
-<div class="highlight"><pre><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/home&#39;</span><span class="p">)</span>
-<span class="nd">@login_required</span>
-<span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Even if you&#8217;re not familiar with the <a href="http://flask.pocoo.org">particular web framework</a> this request handler is meant for
-&#8212; or indeed, the Python language itself &#8212; it shouldn&#8217;t be too difficult to figure out what purpose the two decorators&nbsp;serve.</p>
-<p>What&#8217;s really important is that their goals are neatly separated from essential logic of the request&nbsp;handler:</p>
-<ul>
-<li>it doesn&#8217;t have to explicitly check if the user is logged in &#8212; it has the <code>@login_required</code> decorator</li>
-<li>it doesn&#8217;t have to be separately registered in some
-<a href="https://docs.djangoproject.com/en/1.8/topics/http/urls/#example">centalized <span class="caps">URL</span> routing choke point</a> &#8212;
-it has the <code>@app.route</code> decorator&nbsp;instead</li>
-</ul>
-<p>Such <em>separation of concerns</em> is a desirable quality in software, because it makes it easier
-to reason about different aspects of the&nbsp;system.</p>
-<h4>Under the&nbsp;hood</h4>
-<p>Behind this synctactic sugar and lofty phrasing, the code above is still perfectly equivalent
-to its undecorated&nbsp;version:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
-        <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="s">&quot;Login Required&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
-
-<span class="n">app</span><span class="o">.</span><span class="n">add_url_route</span><span class="p">(</span><span class="s">&#39;/home&#39;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">home</span><span class="p">)</span>
-</pre></div>
-
-
-<p>No source code transformations take place, either: <code>@login_required</code> doesn&#8217;t actually &#8220;inject&#8221; the <code>if</code> statement
-at the beginning of <code>home</code> function. What happens instead is that it takes the whole function and <em>wraps it</em>
-in a new one which also contains the crucial&nbsp;check:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">login_required</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Grossly simplified version of a decorator enforcing user login.&quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
-            <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="s">&quot;Login Required&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">wrapped</span>
-</pre></div>
-
-
-<p>Given this definition, decorating <code>home</code> simply means passing it to the <code>login_required</code> function, and calling its result
-a new <code>home</code>:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
-
-<span class="n">home</span> <span class="o">=</span> <span class="n">login_required</span><span class="p">(</span><span class="n">home</span><span class="p">)</span>
-</pre></div>
-
-
-<p>As you&#8217;ve probably guessed, the <code>@</code> syntax is nothing else than a syntatic sugar for the above.
-But how sweet a sugar it&nbsp;is!</p>
-<p><small>(The <code>@app.route</code> decorator is simultaneously simpler and more complicated. I recommend having a direct look at
-<a href="https://github.com/mitsuhiko/flask/blob/2446ca63a8d840a35ea4eac02672b24a6fcf406f/flask/app.py#L1040">its source code</a>
-for more insight).</small></p>
-<h4>What gophers can&nbsp;learn</h4>
-<p>Unlike Python, in Go, we are out of luck when it comes to dedicated language support for decorators.
-However, the general principle still applies: we can decorate functions by writing &#8212; <em>ahem</em> &#8212; decorator&nbsp;functions.</p>
-<p>Consider, for example, a trivial <code>net/http</code> request&nbsp;handler:</p>
-<div class="highlight"><pre><span class="kd">func</span> <span class="nx">hello</span><span class="p">(</span><span class="nx">w</span> <span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span> <span class="nx">r</span> <span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="p">{</span>
-    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Fprint</span><span class="p">(</span><span class="nx">w</span><span class="p">,</span> <span class="s">&quot;Hello, world!\n&quot;</span><span class="p">)</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>Any real web application will have many similar handlers. They are usually wired to their corresponding <span class="caps">URL</span> paths
-during program&nbsp;startup:</p>
-<div class="highlight"><pre><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-    <span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/hello&quot;</span><span class="p">,</span> <span class="nx">hello</span><span class="p">)</span>
-    <span class="c1">// ...</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>This approach to routing configuration provides an opportunity to decorate some (or all) of the request handlers with
-any auxiliary functionality that the application may&nbsp;require.</p>
-<h4>Handler in, handler&nbsp;out</h4>
-<p>To do that, though, we need to write the necessary decorator functions first. For a simplest possible example,
-let&#8217;s create one that automatically fills in the <code>Server:</code> header of <span class="caps">HTTP</span> response with the name and version
-of our web&nbsp;application:</p>
-<div class="highlight"><pre><span class="kd">func</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">h</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="kd">func</span><span class="p">(</span><span class="nx">w</span> <span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span> <span class="nx">r</span> <span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">w</span><span class="p">.</span><span class="nx">Header</span><span class="p">().</span><span class="nx">Set</span><span class="p">(</span><span class="s">&quot;Server&quot;</span><span class="p">,</span> <span class="s">&quot;HelloServer v0.0.1&quot;</span><span class="p">)</span>
-        <span class="nx">h</span><span class="p">(</span><span class="nx">w</span><span class="p">,</span> <span class="nx">r</span><span class="p">)</span>
-    <span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>Using it is then a simple matter of wrapping the original handler in a decorator&nbsp;call:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/hello&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">hello</span><span class="p">))</span>
-</pre></div>
-
-
-<p>As it both accepts and returns a <code>http.HandlerFunc</code> &#8212; a function type matching request handlers&#8217; signatures &#8212;
-we don&#8217;t need anything else to be able to wrap our handlers in as many decorators as&nbsp;necessary:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">index</span><span class="p">))</span>
-<span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/home&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">LoginRequired</span><span class="p">(</span><span class="nx">home</span><span class="p">)))</span>
-<span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/share&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">LoginRequired</span><span class="p">(</span><span class="nx">CsrfProtected</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Share</span><span class="p">))))</span>
-</pre></div>
-
-
-<p>It&#8217;s possible simply by the means of ordinary function&nbsp;composition.</p>
-<h4>Going&nbsp;meta</h4>
-<p>Looking at the last line of the example above &#8212; which is made-up but could very well come from actual production code
-&#8212; you probably can&#8217;t help but notice that stacking function calls like that creates a somewhat messy amalgamation
-of parentheses. Beyond three or four items, a decorator chain such as this one becomes rather unwieldy to&nbsp;follow.</p>
-<p>If we&#8217;re concerned about readability, it&#8217;s possible to alleviate the issue by taking another step up
-the abstraction ladder. Rather than composing the decorators explicitly, we can write a function that does it for&nbsp;us:</p>
-<div class="highlight"><pre><span class="kd">type</span> <span class="nx">HttpHandlerDecorator</span> <span class="kd">func</span><span class="p">(</span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span>
-
-<span class="kd">func</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">h</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">,</span> <span class="nx">decors</span> <span class="o">...</span><span class="nx">HttpHandlerDecorator</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span> <span class="p">{</span>
-    <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">decors</span> <span class="p">{</span>
-        <span class="nx">d</span> <span class="o">:=</span> <span class="nx">decors</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="nx">decors</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="nx">i</span><span class="p">]</span>  <span class="c1">// iterate in reverse</span>
-        <span class="nx">h</span> <span class="p">=</span> <span class="nx">d</span><span class="p">(</span><span class="nx">h</span><span class="p">)</span>
-    <span class="p">}</span>
-    <span class="k">return</span> <span class="nx">h</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>and thus eliminate all the&nbsp;parentheses:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/share&quot;</span><span class="p">,</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Share</span><span class="p">,</span>
-    <span class="nx">WithServerHeader</span><span class="p">,</span> <span class="nx">LoginRequired</span><span class="p">,</span> <span class="nx">CsrfProtected</span><span class="p">))</span>
-</pre></div>
-
-
-<p>This technique proves especially valuable if the decorators themselves are&nbsp;parameterized:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/notifications&quot;</span><span class="p">,</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Notifications</span><span class="p">,</span>
-    <span class="nx">WithServerHeader</span><span class="p">,</span> <span class="nx">LoginRequired</span><span class="p">,</span> <span class="nx">Cached</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Duration</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">*</span><span class="nx">time</span><span class="p">.</span><span class="nx">Minute</span><span class="p">)))</span>
-</pre></div>
-
-
-<p>In practice, you may find it valuable to wrap the complete <code>http.HandleFunc</code> call to accept a request handler
-along with its decorator chain, or the equivalent of such a call in any of the numerous
-<a href="https://corner.squareup.com/2014/05/evaluating-go-frameworks.html">Go web frameworks</a>.</p>
-      <a class="btn" href="http://xion.io/post/code/go-decorated-functions.html#go-decorated-functions">Continue reading</a>
   </div>
 </article>
 

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Here’s a little known trick that’s applicable to Python’s startswith and endswith methods of str (and unicode). Suppose you’re checking whether a string starts with some prefix: if s.startswith(&#39;http://&#39;): # totally an URL You eventually add more possible prefixes (or suffixes) to your condition: if s.startswith(&#39;http://&#39;) or s.startswith(&#39;https://&#39;): # ... Later on you notice the repetition and refactor it into something like this: SCHEMES = [&#39;http://&#39;, &#39;https://&#39;, &#39;ftp://&#39;, &#39;git://&#39;] if any(s.startswith(p) for p in SCHEMES): # ... or if you’re feeling extra functional: if any(map(s.startswith, SCHEMES)): # ... Turns out, however, that startswith (and endswith) support this use case natively. Rather than passing just a single string as the argument, you can provide a tuple of strings instead: SCHEMES = (&#39;http://&#39;, &#39;https://&#39;, &#39;ftp://&#39;, &#39;git://&#39;) if s.startswith(SCHEMES): # ... Either method will then check the original string against every element of the passed tuple. Both will only return True if at least one of the strings is recognized as prefix/suffix. As you can see, that’s exactly what we would previously do with any. Somewhat surprisingly, however, the feature only works for actual tuples. Trying to pass a seemingly equivalent iterable — a list or set, for example — will be met with interpreter’s refusal: &gt;&gt;&gt; is_jpeg = filename.endswith([&#39;.jpg&#39;, &#39;.jpeg&#39;]) TypeError: endswith first arg must be str, unicode, or tuple, not list If you dig into it, there doesn’t seem to be a compelling reason for this behavior. The relevant feature request talks about consistency with the built-in isinstance function, but it’s quite difficult to see how those two are related. In any case, this can be worked around without much difficulty: PROTOCOLS = (&#39;http&#39;, &#39;https&#39;, &#39;ftp&#39;, &#39;git&#39;) if s.startswith(tuple(p + &#39;://&#39; for p in PROTOCOLS)): # ... though ideally, you’d want to pack the prefixes in a tuple to begin with." />
+<meta name="keywords" content="Python, strings, tuples">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="str.startswith() with tuple argument"/>
+<meta property="og:description" content="Here’s a little known trick that’s applicable to Python’s startswith and endswith methods of str (and unicode). Suppose you’re checking whether a string starts with some prefix: if s.startswith(&#39;http://&#39;): # totally an URL You eventually add more possible prefixes (or suffixes) to your condition: if s.startswith(&#39;http://&#39;) or s.startswith(&#39;https://&#39;): # ... Later on you notice the repetition and refactor it into something like this: SCHEMES = [&#39;http://&#39;, &#39;https://&#39;, &#39;ftp://&#39;, &#39;git://&#39;] if any(s.startswith(p) for p in SCHEMES): # ... or if you’re feeling extra functional: if any(map(s.startswith, SCHEMES)): # ... Turns out, however, that startswith (and endswith) support this use case natively. Rather than passing just a single string as the argument, you can provide a tuple of strings instead: SCHEMES = (&#39;http://&#39;, &#39;https://&#39;, &#39;ftp://&#39;, &#39;git://&#39;) if s.startswith(SCHEMES): # ... Either method will then check the original string against every element of the passed tuple. Both will only return True if at least one of the strings is recognized as prefix/suffix. As you can see, that’s exactly what we would previously do with any. Somewhat surprisingly, however, the feature only works for actual tuples. Trying to pass a seemingly equivalent iterable — a list or set, for example — will be met with interpreter’s refusal: &gt;&gt;&gt; is_jpeg = filename.endswith([&#39;.jpg&#39;, &#39;.jpeg&#39;]) TypeError: endswith first arg must be str, unicode, or tuple, not list If you dig into it, there doesn’t seem to be a compelling reason for this behavior. The relevant feature request talks about consistency with the built-in isinstance function, but it’s quite difficult to see how those two are related. In any case, this can be worked around without much difficulty: PROTOCOLS = (&#39;http&#39;, &#39;https&#39;, &#39;ftp&#39;, &#39;git&#39;) if s.startswith(tuple(p + &#39;://&#39; for p in PROTOCOLS)): # ... though ideally, you’d want to pack the prefixes in a tuple to begin with."/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/python-startswith-tuple.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2016-06-28 09:56:00-07:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Python"/>
+<meta property="article:tag" content="strings"/>
+<meta property="article:tag" content="tuples"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; str.startswith() with tuple argument</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="python-startswith-tuple">str.startswith() with tuple&nbsp;argument</h1>
+    <p>Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Here&#8217;s a little known trick that&#8217;s applicable to Python&#8217;s <a href="http://bugs.python.org/issue1491485"><code>startswith</code></a>
+and <a href="http://bugs.python.org/issue1491485"><code>endswith</code></a> methods of <code>str</code> (and <code>unicode</code>).</p>
+<p>Suppose you&#8217;re checking whether a string starts with some&nbsp;prefix:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">):</span>
+    <span class="c"># totally an URL</span>
+</pre></div>
+
+
+<p>You eventually add more possible prefixes (or suffixes) to your&nbsp;condition:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;https://&#39;</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Later on you notice the repetition and refactor it into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">]</span>
+<span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or if you&#8217;re feeling extra&nbsp;functional:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">,</span> <span class="n">SCHEMES</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Turns out, however, that <code>startswith</code> (and <code>endswith</code>) support this use case natively.
+Rather than passing just a single string as the argument,
+you can provide a <em>tuple</em> of strings&nbsp;instead:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Either method will then check the original string against every element of the passed tuple.
+Both will only return <code>True</code> if <em>at least one</em> of the strings is recognized as prefix/suffix.
+As you can see, that&#8217;s exactly what we would previously do with <code>any</code>.</p>
+<p>Somewhat surprisingly, however, the feature only works for actual <em>tuples</em>.
+Trying to pass a seemingly equivalent iterable &#8212; a <code>list</code> or <code>set</code>, for example &#8212;
+will be met with interpreter&#8217;s&nbsp;refusal:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">is_jpeg</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">([</span><span class="s">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s">&#39;.jpeg&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre>TypeError: endswith first arg must be str, unicode, or tuple, not list
+</pre></div>
+
+
+<p>If you dig into it, there doesn&#8217;t seem to be a compelling reason for this behavior.
+The <a href="http://bugs.python.org/issue1491485">relevant feature request</a> talks about
+consistency with the built-in <code>isinstance</code> function,
+but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
+<p>In any case, this can be worked around without much&nbsp;difficulty:</p>
+<div class="highlight"><pre><span class="n">PROTOCOLS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http&#39;</span><span class="p">,</span> <span class="s">&#39;https&#39;</span><span class="p">,</span> <span class="s">&#39;ftp&#39;</span><span class="p">,</span> <span class="s">&#39;git&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="s">&#39;://&#39;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">PROTOCOLS</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/python.html">Python</a>
+      <a href="http://xion.io/tag/strings.html">strings</a>
+      <a href="http://xion.io/tag/tuples.html">tuples</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2016 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "str.startswith() with tuple argument",
+  "headline": "str.startswith() with tuple argument",
+  "datePublished": "2016-06-28 09:56:00-07:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/python-startswith-tuple.html",
+  "description": "Here’s a little known trick that’s applicable to Python’s startswith and endswith methods of str (and unicode). Suppose you’re checking whether a string starts with some prefix: if s.startswith('http://'): # totally an URL You eventually add more possible prefixes (or suffixes) to your condition: if s.startswith('http://') or s.startswith('https://'): # ... Later on you notice the repetition and refactor it into something like this: SCHEMES = ['http://', 'https://', 'ftp://', 'git://'] if any(s.startswith(p) for p in SCHEMES): # ... or if you’re feeling extra functional: if any(map(s.startswith, SCHEMES)): # ... Turns out, however, that startswith (and endswith) support this use case natively. Rather than passing just a single string as the argument, you can provide a tuple of strings instead: SCHEMES = ('http://', 'https://', 'ftp://', 'git://') if s.startswith(SCHEMES): # ... Either method will then check the original string against every element of the passed tuple. Both will only return True if at least one of the strings is recognized as prefix/suffix. As you can see, that’s exactly what we would previously do with any. Somewhat surprisingly, however, the feature only works for actual tuples. Trying to pass a seemingly equivalent iterable — a list or set, for example — will be met with interpreter’s refusal: >>> is_jpeg = filename.endswith(['.jpg', '.jpeg']) TypeError: endswith first arg must be str, unicode, or tuple, not list If you dig into it, there doesn’t seem to be a compelling reason for this behavior. The relevant feature request talks about consistency with the built-in isinstance function, but it’s quite difficult to see how those two are related. In any case, this can be worked around without much difficulty: PROTOCOLS = ('http', 'https', 'ftp', 'git') if s.startswith(tuple(p + '://' for p in PROTOCOLS)): # ... though ideally, you’d want to pack the prefixes in a tuple to begin with."
+}
+</script></body>
+</html>
