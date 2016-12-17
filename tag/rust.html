@@ -63,6 +63,286 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-iife.html#rust-iife">Simulating exceptions in Rust with <span class="caps">IIFE</span></a></h2>
+    <p>
+      Posted on Sat 17 December 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/iife.html">IIFE</a>,      <a href="http://xion.io/tag/error-handling.html">error handling</a>,      <a href="http://xion.io/tag/exceptions.html">exceptions</a>,      <a href="http://xion.io/tag/closures.html">closures</a>,      <a href="http://xion.io/tag/lambdas.html">lambdas</a>      &#8226; <a href="http://xion.io/post/code/rust-iife.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>While many languages use exceptions for handling errors,
+Rust prefers a slightly different, yet very classical approach: <em>return values</em>.</p>
+<p>Now, they aren&#8217;t exactly the same thing as in C,
+where the error is indicated by a special value within the same return type.
+In Rust, <a href="https://doc.rust-lang.org/std/result/">the <code>Result</code> enum</a> can neatly separate the two,
+in similar vein to how ad-hoc tuples in Go do<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.
+But unlike Go, Rust also offers additional facilities for <em>error propagation</em>,
+including the <a href="https://doc.rust-lang.org/std/macro.try.html"><code>try!</code> macro</a>
+and <a href="https://m4rw3r.github.io/rust-questionmark-operator">the recently stabilized <code>?</code> operator</a>.
+And finally,
+the <code>Result</code> wrappings can be straightforwardly <a href="https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap">unpacked</a>,
+possibly by <a href="https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap_or">defaulting</a> to a known safe&nbsp;value.</p>
+<p>Some conveniences of exceptions may be hard to pass up, though.
+The <code>try</code>-<code>catch</code> construct is evidently one of them,
+and Rust might eventually get it in
+<a href="https://github.com/rust-lang/rfcs/blob/master/text/0243-trait-based-exception-handling.md">one form</a>
+or another.
+Before that happens, however, there is a trick that can often work as an acceptable&nbsp;substitute.</p>
+<h4>Many <code>let</code>s</h4>
+<p>Here&#8217;s an example where it can be very&nbsp;useful.</p>
+<p>Have a look at the following function.
+Its purpose is to retrieve a GitHub login of a user who owns a specific <em>gist</em>
+&#8212; a small sample of code posted to the <em>gists.github.com</em> website<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<p>Let&#8217;s assume we have already talked to GitHub <span class="caps">API</span>
+and received the following <span class="caps">JSON</span> response from its relevant&nbsp;endpoint:</p>
+<div class="highlight"><pre><span class="p">{</span>
+    <span class="nt">&quot;id&quot;</span><span class="p">:</span> <span class="s2">&quot;12345678&quot;</span><span class="p">,</span>
+    <span class="nt">&quot;owner&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="nt">&quot;login&quot;</span><span class="p">:</span> <span class="s2">&quot;Octocat&quot;</span><span class="p">,</span>
+        <span class="err">...</span>
+    <span class="p">}</span>
+    <span class="err">...</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Parsing it is easy: we can do it with
+the <a href="https://crates.io/crates/rustc-serialize"><em>rustc_serialize</em> crate</a>,
+among other options.
+What proves a little more involved is to dig through the <span class="caps">JSON</span> tree
+in order to reach the interesting&nbsp;value:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">rustc_serialize</span><span class="o">::</span><span class="n">json</span><span class="o">::</span><span class="n">Json</span><span class="p">;</span><span class="w"></span>
+
+
+<span class="c-Doc">/// Retrieve the gist owner from a JSON received from</span>
+<span class="c-Doc">/// the /gists/$ID endpoint of the GitHub API.</span>
+<span class="c-Doc">///</span>
+<span class="c-Doc">/// If the gist is anonymous, &quot;anonymous&quot; is returned.</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">gist_owner_from_info</span><span class="p">(</span><span class="n">info</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Json</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">info</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">info</span><span class="p">.</span><span class="n">as_object</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">info</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;owner&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">o</span><span class="o">|</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">as_object</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">owner</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;login&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">l</span><span class="o">|</span><span class="w"> </span><span class="n">l</span><span class="p">.</span><span class="n">as_string</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">                </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">.</span><span class="n">to_owned</span><span class="p">();</span><span class="w"></span>
+<span class="w">            </span><span class="p">}</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="s">&quot;anonymous&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Whew! I guess we&#8217;re lucky we don&#8217;t need to go <em>too</em> deep into that <span class="caps">JSON</span>.
+The code is clearly exhibiting a rightward slant,
+which some people refer to as <a href="https://blog.codinghorror.com/flattening-arrow-code/">the &#8220;arrow code&#8221;</a>,
+Unsurprisingly, it is generally considered bad for&nbsp;readability.</p>
+<p>There are few other ways of writing this, of course,
+including a style reminiscent of JavaScript promises &#8212;
+that is, relying completely on
+<a href="https://doc.rust-lang.org/std/option/enum.Option.html#method.and_then">the <code>and_then</code> method</a>.
+Neither seem very satisfying, though, especially if you compare it with something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">try</span><span class="p">:</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s">&quot;owner&quot;</span><span class="p">][</span><span class="s">&quot;login&quot;</span><span class="p">])</span>
+<span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+    <span class="k">return</span> <span class="s">&quot;anonymous&quot;</span>
+</pre></div>
+
+
+<p>Yes, exceptions are quite useful&nbsp;sometimes.</p>
+<p>So, how can we get something like this in&nbsp;Rust?</p>
+<h4>JavaScript for the&nbsp;rescue</h4>
+<p>Succor comes from an unexpected direction.
+To emulate exceptions &#8212; specifically, the <code>try</code>-<code>catch</code> exception blocks &#8212;
+we can utilize a technique that is most popular in&#8230;&nbsp;JavaScript.</p>
+<p>At least until <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/let">recently</a>,
+JavaScript did not have a block local scope.
+Since every <code>var</code>iable declaration within a function is <em>hoisted</em> to the top of that function,
+it essentially makes function scope the only usable one (besides global, of&nbsp;course).</p>
+<p>As a result, a variety of JavaScript idioms rely on introducing &#8220;superfluous&#8221; <code>function</code>s,
+solely for the purpose of creating a nested scope.
+Many times, those functions are neither named nor stored in any variable;
+rather, they are <em>immediately invoked</em>.</p>
+<blockquote>
+<p>This is what is commonly understood as Immediately Invoked Function Expression,
+or <span class="caps">IIFE</span> for&nbsp;short.</p>
+</blockquote>
+<p>An oft-cited example involves an <span class="caps">IIFE</span> which itself returns another&nbsp;function:</p>
+<div class="highlight"><pre><span class="k">for</span> <span class="p">(</span><span class="kd">var</span> <span class="nx">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="o">++</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">$para</span> <span class="o">=</span> <span class="nx">$</span><span class="p">(</span><span class="s2">&quot;p#&quot;</span> <span class="o">+</span> <span class="nx">i</span><span class="p">);</span>  <span class="c1">// &lt;p id=&quot;0&quot;&gt;, &lt;p id=&quot;1&quot;&gt;, etc.</span>
+    <span class="kd">var</span> <span class="nx">clickHandler</span> <span class="o">=</span> <span class="p">(</span><span class="kd">function</span><span class="p">(</span><span class="nx">i</span><span class="p">)</span> <span class="p">{</span>  <span class="c1">// IIFE!</span>
+        <span class="k">return</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+            <span class="nx">alert</span><span class="p">(</span><span class="s2">&quot;Clicked element no. &quot;</span> <span class="o">+</span> <span class="p">(</span><span class="nx">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">));</span>
+        <span class="p">};</span>
+    <span class="p">})(</span><span class="nx">i</span><span class="p">);</span>
+    <span class="nx">$para</span><span class="p">.</span><span class="nx">on</span><span class="p">(</span><span class="s1">&#39;click&#39;</span><span class="p">,</span> <span class="nx">clickHandler</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>The function expression is necessary here,
+because it allows to control what exactly goes into the <em>closure</em> of the inner function.
+If the <code>clickHandler</code>s were assigned the <code>function() { alert(...) }</code> expression directly,
+they would all close over the same loop counter variable.
+All would then display the exact same&nbsp;message.</p>
+<p>We don&#8217;t need to employ those workarounds in Rust.
+Thanks to local scoping,
+a simple pair of <code>{</code> bracers <code>}</code> would work exactly the same.
+You can imagine a direct rewrite of the above example, though,
+where an anonymous closure is used to similar&nbsp;effect:</p>
+<div class="highlight"><pre><span class="c1">// WARNING: Not idiomatic! (Also not a real DOM library).</span>
+
+<span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="mf">0.</span><span class="p">.</span><span class="mi">10</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">para</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">dom</span><span class="p">.</span><span class="n">find_element_by_id</span><span class="p">(</span><span class="s">&quot;p&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">.</span><span class="n">to_string</span><span class="p">()).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">click_handler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">|</span><span class="n">i</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="o">|</span><span class="n">_</span><span class="o">:</span><span class="w"> </span><span class="n">Event</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">dom</span><span class="p">.</span><span class="n">exec_js</span><span class="p">(</span><span class="o">&amp;</span><span class="n">format</span><span class="o">!</span><span class="p">(</span><span class="w"></span>
+<span class="w">            </span><span class="s">&quot;alert(&#39;Clicked element no. #{}&#39;);&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">));</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}(</span><span class="n">i</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="n">para</span><span class="p">.</span><span class="n">add_event_listener</span><span class="p">(</span><span class="n">Event</span><span class="o">::</span><span class="n">Click</span><span class="p">,</span><span class="w"> </span><span class="n">click_handler</span><span class="p">)</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>In other words, Rust supports IIFEs just&nbsp;fine.</p>
+<h4>Just put a function on&nbsp;it</h4>
+<p>Okay, this is quite amusing and probably pretty neat.
+But does it help us with the error handling story&nbsp;exactly?&#8230;</p>
+<p>Let&#8217;s take another stab at rewriting the <code>gist_owner_from_info</code> routine.
+This time, we&#8217;ll extract the meaty part into a separate function.
+We will also take advantage of one trivial,
+but very useful <a href="https://crates.io/crates/try_opt"><em>try_opt</em> crate</a>
+which is essentially an equivalent of the <code>try!</code> macro for <code>Option</code>s:</p>
+<div class="highlight"><pre><span class="cp">#[macro_use]</span><span class="w"> </span><span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">try_opt</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">gist_owner_from_info</span><span class="p">(</span><span class="n">info</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Json</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">gist_owner_from_info_internal</span><span class="p">(</span><span class="n">info</span><span class="p">).</span><span class="n">unwrap_or</span><span class="p">(</span><span class="s">&quot;anonymous&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">())</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">gist_owner_from_info_internal</span><span class="p">(</span><span class="n">info</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Json</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">info</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">info</span><span class="p">.</span><span class="n">as_object</span><span class="p">());</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">owner</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">info</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;owner&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">o</span><span class="o">|</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">as_object</span><span class="p">()));</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">login</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">owner</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;login&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">l</span><span class="o">|</span><span class="w"> </span><span class="n">l</span><span class="p">.</span><span class="n">as_string</span><span class="p">()));</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">(</span><span class="n">login</span><span class="p">.</span><span class="n">to_owned</span><span class="p">())</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Now this should be a little easier on the eyes.
+(And if you want, you can eschew <code>and_then</code> completely in favor of more <code>try_opt!</code>).</p>
+<p>The downside is that we now have this <code>_internal</code> function
+that&#8217;s awkwardly sticking out.
+We could pull it in, and turn it into an <em>inner</em> function, but why stop half-way?
+Let&#8217;s just make it an <span class="caps">IIFE</span>&nbsp;already:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">gist_owner_from_info</span><span class="p">(</span><span class="n">info</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Json</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="o">||</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">info</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">info</span><span class="p">.</span><span class="n">as_object</span><span class="p">());</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">owner</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">info</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;owner&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">o</span><span class="o">|</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">as_object</span><span class="p">()));</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">login</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">owner</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;login&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">l</span><span class="o">|</span><span class="w"> </span><span class="n">l</span><span class="p">.</span><span class="n">as_string</span><span class="p">()));</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Some</span><span class="p">(</span><span class="n">login</span><span class="p">.</span><span class="n">to_owned</span><span class="p">())</span><span class="w"></span>
+<span class="w">    </span><span class="p">}().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="s">&quot;anonymous&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">())</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Not bad, eh? The analogies with exception handling should be pretty evident, too<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>:</p>
+<ul>
+<li>The closure itself works as a <code>try</code> block, with closure&#8217;s body containing the &#8220;guarded&#8221;&nbsp;code.</li>
+<li>The <code>unwrap</code> family of methods (especially <code>unwrap_or_else</code>) dubs for a <code>catch</code>/<code>except</code> section.</li>
+</ul>
+<p>Sure, we do need <code>try!</code> (or <code>try_opt!</code>) macros to mark instructions
+that may &#8220;throw an exception&#8221;, but with the <code>?</code>-based syntax it shouldn&#8217;t be too big of a deal.
+And when the time comes, this code will be very easy to port to a
+<a href="https://github.com/rust-lang/rfcs/blob/master/text/0243-trait-based-exception-handling.md">trait-based exception handling</a>
+solution that&#8217;s currently in the&nbsp;works.</p>
+<p>Oh, and the best part? Both Rust and the underlying <span class="caps">LLVM</span> are very adept at
+<a href="https://ruudvanasseldonk.com/2016/11/30/zero-cost-abstractions">inlining closures</a>,
+so everything here should compile to optimal&nbsp;code.</p>
+<h4>Bonus: a lifetime&nbsp;conundrum</h4>
+<p>Well, <em>almost</em> optimal.
+There is one more thing left to do before we can call this a truly <em>zero-cost</em>&nbsp;abstraction.</p>
+<p>We need to stop allocating so damn&nbsp;much!</p>
+<p>It should be pretty obvious that
+the function doesn&#8217;t need to create a brand new <code>String</code> every time it&#8217;s called.
+The text is in the input <code>Json</code>, and we take that <code>Json</code> by reference already.
+It&#8217;s only fair we stop creating <code>String</code>s and simply return a <code>&amp;str</code> reference&nbsp;instead.</p>
+<p>In fact, this should be as easy as removing the <code>to_owned</code>/<code>into</code> calls,&nbsp;right?</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">gist_owner_from_info</span><span class="p">(</span><span class="n">info</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Json</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="o">||</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;&amp;</span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">info</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">info</span><span class="p">.</span><span class="n">as_object</span><span class="p">());</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">owner</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">info</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;owner&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">o</span><span class="o">|</span><span class="w"> </span><span class="n">o</span><span class="p">.</span><span class="n">as_object</span><span class="p">()));</span><span class="w"></span>
+<span class="w">        </span><span class="n">owner</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;login&quot;</span><span class="p">).</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">l</span><span class="o">|</span><span class="w"> </span><span class="n">l</span><span class="p">.</span><span class="n">as_string</span><span class="p">()))</span><span class="w"></span>
+<span class="w">    </span><span class="p">}().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="s">&quot;anonymous&quot;</span><span class="p">)</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Wrong, apparently. If you present this code to the compiler,
+it will serve you quite a mouthful of an error,
+including helpful tidbits in the vein of &#8220;expected A, found&nbsp;A&#8221;:</p>
+<div class="highlight"><pre>error[E0495]: cannot infer an appropriate lifetime for autoref due to conflicting requirements
+   --&gt; src/github.rs:3:34
+    |
+  3 |         let info = try_opt!(info.as_object());
+    |                                  ^^^^^^^^^
+    |
+note: first, the lifetime cannot outlive the anonymous lifetime #1 defined on the block at 1:45...
+   --&gt; src/github.rs:1:46
+    |
+  1 | fn gist_owner_from_info(info: &amp;Json) -&gt; &amp;str {
+    |                                              ^
+note: ...so that reference does not outlive borrowed content
+   --&gt; src/github.rs:3:29
+    |
+  3 |         let info = try_opt!(info.as_object());
+    |                             ^^^^
+note: but, the lifetime must be valid for the anonymous lifetime #1 defined on the block at 2:23...
+   --&gt; src/github.rs:2:24
+    |
+  2 |     || -&gt; Option&lt;&amp;str&gt; {
+    |                        ^
+note: ...so that expression is assignable (expected std::option::Option&lt;&amp;str&gt;, found std::option::Option&lt;&amp;str&gt;)
+   --&gt; src/github.rs:5:9
+    |
+  5 |         owner.get(&quot;login&quot;).and_then(|l| l.as_string())
+    |
+</pre></div>
+
+
+<p>The crux of this verbiage is that the Rust compiler is unable to reconcile the lifetime
+of the closure&#8217;s return value, the input, and final result of the&nbsp;function.</p>
+<p>It shouldn&#8217;t really be trying very hard, though, for the lifetime is obvious.
+It&#8217;s the same as the one implicitly attached to the input <code>&amp;Json</code>.
+Seems like in this case, we need to be a little more helpful and label it&nbsp;explicitly:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">gist_owner_from_info</span><span class="o">&lt;</span><span class="nl">&#39;i</span><span class="o">&gt;</span><span class="p">(</span><span class="n">info</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">&#39;i</span><span class="w"> </span><span class="n">Json</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">&amp;</span><span class="n">&#39;i</span><span class="w"> </span><span class="kt">str</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="o">||</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;&amp;</span><span class="n">&#39;i</span><span class="w"> </span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="c1">// (rest as before)</span>
+</pre></div>
+
+
+<p>Voila, this should now compile without any&nbsp;issues.</p>
+<p>Once again, &#8220;Keep calm and add more <code>'lifetimes</code>&#8221; proves to be an effective approach&nbsp;;)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Technically, they aren&#8217;t called tuples there but
+&#8220;<a href="https://golang.org/doc/effective_go.html#multiple-returns">multiple return values</a>&#8220;.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>This is something I needed to do when rewriting
+<a href="https://github.com/Xion/gisht">this Python project of mine</a> to Rust.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>This is also the closest Rust can currently get to a <code>do</code> notation from Haskell,
+at least without any macro-based hacks.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-iife.html#rust-iife">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-optional-args.html#rust-optional-args">Optional arguments in Rust&nbsp;1.12</a></h2>
     <p>
       Posted on Thu 29 September 2016 in <a href="http://xion.io/category/code.html">Code</a>

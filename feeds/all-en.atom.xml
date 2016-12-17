@@ -1,5 +1,270 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-09-29T19:51:00-07:00</updated><entry><title>Optional arguments in Rust 1.12</title><link href="http://xion.io/post/code/rust-optional-args.html" rel="alternate"></link><updated>2016-09-29T19:51:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-09-29:post/code/rust-optional-args.html</id><summary type="html">&lt;p&gt;Today&amp;#8217;s &lt;a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html"&gt;announcement of Rust 1.12&lt;/a&gt; contains,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-12-17T19:09:00+01:00</updated><entry><title>Simulating exceptions in Rust with IIFE</title><link href="http://xion.io/post/code/rust-iife.html" rel="alternate"></link><updated>2016-12-17T19:09:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-17:post/code/rust-iife.html</id><summary type="html">&lt;p&gt;While many languages use exceptions for handling errors,
+Rust prefers a slightly different, yet very classical approach: &lt;em&gt;return values&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Now, they aren&amp;#8217;t exactly the same thing as in C,
+where the error is indicated by a special value within the same return type.
+In Rust, &lt;a href="https://doc.rust-lang.org/std/result/"&gt;the &lt;code&gt;Result&lt;/code&gt; enum&lt;/a&gt; can neatly separate the two,
+in similar vein to how ad-hoc tuples in Go do&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.
+But unlike Go, Rust also offers additional facilities for &lt;em&gt;error propagation&lt;/em&gt;,
+including the &lt;a href="https://doc.rust-lang.org/std/macro.try.html"&gt;&lt;code&gt;try!&lt;/code&gt; macro&lt;/a&gt;
+and &lt;a href="https://m4rw3r.github.io/rust-questionmark-operator"&gt;the recently stabilized &lt;code&gt;?&lt;/code&gt; operator&lt;/a&gt;.
+And finally,
+the &lt;code&gt;Result&lt;/code&gt; wrappings can be straightforwardly &lt;a href="https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap"&gt;unpacked&lt;/a&gt;,
+possibly by &lt;a href="https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap_or"&gt;defaulting&lt;/a&gt; to a known safe&amp;nbsp;value.&lt;/p&gt;
+&lt;p&gt;Some conveniences of exceptions may be hard to pass up, though.
+The &lt;code&gt;try&lt;/code&gt;-&lt;code&gt;catch&lt;/code&gt; construct is evidently one of them,
+and Rust might eventually get it in
+&lt;a href="https://github.com/rust-lang/rfcs/blob/master/text/0243-trait-based-exception-handling.md"&gt;one form&lt;/a&gt;
+or another.
+Before that happens, however, there is a trick that can often work as an acceptable&amp;nbsp;substitute.&lt;/p&gt;
+&lt;h4&gt;Many &lt;code&gt;let&lt;/code&gt;s&lt;/h4&gt;
+&lt;p&gt;Here&amp;#8217;s an example where it can be very&amp;nbsp;useful.&lt;/p&gt;
+&lt;p&gt;Have a look at the following function.
+Its purpose is to retrieve a GitHub login of a user who owns a specific &lt;em&gt;gist&lt;/em&gt;
+&amp;#8212; a small sample of code posted to the &lt;em&gt;gists.github.com&lt;/em&gt; website&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Let&amp;#8217;s assume we have already talked to GitHub &lt;span class="caps"&gt;API&lt;/span&gt;
+and received the following &lt;span class="caps"&gt;JSON&lt;/span&gt; response from its relevant&amp;nbsp;endpoint:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="nt"&gt;&amp;quot;id&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;12345678&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+    &lt;span class="nt"&gt;&amp;quot;owner&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+        &lt;span class="nt"&gt;&amp;quot;login&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;Octocat&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+        &lt;span class="err"&gt;...&lt;/span&gt;
+    &lt;span class="p"&gt;}&lt;/span&gt;
+    &lt;span class="err"&gt;...&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Parsing it is easy: we can do it with
+the &lt;a href="https://crates.io/crates/rustc-serialize"&gt;&lt;em&gt;rustc_serialize&lt;/em&gt; crate&lt;/a&gt;,
+among other options.
+What proves a little more involved is to dig through the &lt;span class="caps"&gt;JSON&lt;/span&gt; tree
+in order to reach the interesting&amp;nbsp;value:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;rustc_serialize&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Json&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+
+&lt;span class="c-Doc"&gt;/// Retrieve the gist owner from a JSON received from&lt;/span&gt;
+&lt;span class="c-Doc"&gt;/// the /gists/$ID endpoint of the GitHub API.&lt;/span&gt;
+&lt;span class="c-Doc"&gt;///&lt;/span&gt;
+&lt;span class="c-Doc"&gt;/// If the gist is anonymous, &amp;quot;anonymous&amp;quot; is returned.&lt;/span&gt;
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;gist_owner_from_info&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Json&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;owner&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;login&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_string&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;anonymous&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Whew! I guess we&amp;#8217;re lucky we don&amp;#8217;t need to go &lt;em&gt;too&lt;/em&gt; deep into that &lt;span class="caps"&gt;JSON&lt;/span&gt;.
+The code is clearly exhibiting a rightward slant,
+which some people refer to as &lt;a href="https://blog.codinghorror.com/flattening-arrow-code/"&gt;the &amp;#8220;arrow code&amp;#8221;&lt;/a&gt;,
+Unsurprisingly, it is generally considered bad for&amp;nbsp;readability.&lt;/p&gt;
+&lt;p&gt;There are few other ways of writing this, of course,
+including a style reminiscent of JavaScript promises &amp;#8212;
+that is, relying completely on
+&lt;a href="https://doc.rust-lang.org/std/option/enum.Option.html#method.and_then"&gt;the &lt;code&gt;and_then&lt;/code&gt; method&lt;/a&gt;.
+Neither seem very satisfying, though, especially if you compare it with something like&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;try&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;owner&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;][&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;login&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;span class="k"&gt;except&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="ne"&gt;KeyError&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ne"&gt;TypeError&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;anonymous&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Yes, exceptions are quite useful&amp;nbsp;sometimes.&lt;/p&gt;
+&lt;p&gt;So, how can we get something like this in&amp;nbsp;Rust?&lt;/p&gt;
+&lt;h4&gt;JavaScript for the&amp;nbsp;rescue&lt;/h4&gt;
+&lt;p&gt;Succor comes from an unexpected direction.
+To emulate exceptions &amp;#8212; specifically, the &lt;code&gt;try&lt;/code&gt;-&lt;code&gt;catch&lt;/code&gt; exception blocks &amp;#8212;
+we can utilize a technique that is most popular in&amp;#8230;&amp;nbsp;JavaScript.&lt;/p&gt;
+&lt;p&gt;At least until &lt;a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/let"&gt;recently&lt;/a&gt;,
+JavaScript did not have a block local scope.
+Since every &lt;code&gt;var&lt;/code&gt;iable declaration within a function is &lt;em&gt;hoisted&lt;/em&gt; to the top of that function,
+it essentially makes function scope the only usable one (besides global, of&amp;nbsp;course).&lt;/p&gt;
+&lt;p&gt;As a result, a variety of JavaScript idioms rely on introducing &amp;#8220;superfluous&amp;#8221; &lt;code&gt;function&lt;/code&gt;s,
+solely for the purpose of creating a nested scope.
+Many times, those functions are neither named nor stored in any variable;
+rather, they are &lt;em&gt;immediately invoked&lt;/em&gt;.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;This is what is commonly understood as Immediately Invoked Function Expression,
+or &lt;span class="caps"&gt;IIFE&lt;/span&gt; for&amp;nbsp;short.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;An oft-cited example involves an &lt;span class="caps"&gt;IIFE&lt;/span&gt; which itself returns another&amp;nbsp;function:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;i&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nx"&gt;i&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="o"&gt;++&lt;/span&gt;&lt;span class="nx"&gt;i&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;$para&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nx"&gt;$&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;p#&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="nx"&gt;i&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;  &lt;span class="c1"&gt;// &amp;lt;p id=&amp;quot;0&amp;quot;&amp;gt;, &amp;lt;p id=&amp;quot;1&amp;quot;&amp;gt;, etc.&lt;/span&gt;
+    &lt;span class="kd"&gt;var&lt;/span&gt; &lt;span class="nx"&gt;clickHandler&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kd"&gt;function&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;i&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;  &lt;span class="c1"&gt;// IIFE!&lt;/span&gt;
+        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="kd"&gt;function&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+            &lt;span class="nx"&gt;alert&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;Clicked element no. &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nx"&gt;i&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;
+        &lt;span class="p"&gt;};&lt;/span&gt;
+    &lt;span class="p"&gt;})(&lt;/span&gt;&lt;span class="nx"&gt;i&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+    &lt;span class="nx"&gt;$para&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="nx"&gt;on&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;click&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nx"&gt;clickHandler&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The function expression is necessary here,
+because it allows to control what exactly goes into the &lt;em&gt;closure&lt;/em&gt; of the inner function.
+If the &lt;code&gt;clickHandler&lt;/code&gt;s were assigned the &lt;code&gt;function() { alert(...) }&lt;/code&gt; expression directly,
+they would all close over the same loop counter variable.
+All would then display the exact same&amp;nbsp;message.&lt;/p&gt;
+&lt;p&gt;We don&amp;#8217;t need to employ those workarounds in Rust.
+Thanks to local scoping,
+a simple pair of &lt;code&gt;{&lt;/code&gt; bracers &lt;code&gt;}&lt;/code&gt; would work exactly the same.
+You can imagine a direct rewrite of the above example, though,
+where an anonymous closure is used to similar&amp;nbsp;effect:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// WARNING: Not idiomatic! (Also not a real DOM library).&lt;/span&gt;
+
+&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mf"&gt;0.&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;para&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;dom&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;find_element_by_id&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;p&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;click_handler&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Event&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;dom&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;exec_js&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;alert(&amp;#39;Clicked element no. #{}&amp;#39;);&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;para&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_event_listener&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Event&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Click&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;click_handler&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;In other words, Rust supports IIFEs just&amp;nbsp;fine.&lt;/p&gt;
+&lt;h4&gt;Just put a function on&amp;nbsp;it&lt;/h4&gt;
+&lt;p&gt;Okay, this is quite amusing and probably pretty neat.
+But does it help us with the error handling story&amp;nbsp;exactly?&amp;#8230;&lt;/p&gt;
+&lt;p&gt;Let&amp;#8217;s take another stab at rewriting the &lt;code&gt;gist_owner_from_info&lt;/code&gt; routine.
+This time, we&amp;#8217;ll extract the meaty part into a separate function.
+We will also take advantage of one trivial,
+but very useful &lt;a href="https://crates.io/crates/try_opt"&gt;&lt;em&gt;try_opt&lt;/em&gt; crate&lt;/a&gt;
+which is essentially an equivalent of the &lt;code&gt;try!&lt;/code&gt; macro for &lt;code&gt;Option&lt;/code&gt;s:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#[macro_use]&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;gist_owner_from_info&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Json&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;gist_owner_from_info_internal&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;anonymous&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;gist_owner_from_info_internal&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Json&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;owner&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;()));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;login&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;login&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_string&lt;/span&gt;&lt;span class="p"&gt;()));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;login&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Now this should be a little easier on the eyes.
+(And if you want, you can eschew &lt;code&gt;and_then&lt;/code&gt; completely in favor of more &lt;code&gt;try_opt!&lt;/code&gt;).&lt;/p&gt;
+&lt;p&gt;The downside is that we now have this &lt;code&gt;_internal&lt;/code&gt; function
+that&amp;#8217;s awkwardly sticking out.
+We could pull it in, and turn it into an &lt;em&gt;inner&lt;/em&gt; function, but why stop half-way?
+Let&amp;#8217;s just make it an &lt;span class="caps"&gt;IIFE&lt;/span&gt;&amp;nbsp;already:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;gist_owner_from_info&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Json&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;||&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;owner&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;()));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;login&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;login&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_string&lt;/span&gt;&lt;span class="p"&gt;()));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;login&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}().&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;anonymous&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Not bad, eh? The analogies with exception handling should be pretty evident, too&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;The closure itself works as a &lt;code&gt;try&lt;/code&gt; block, with closure&amp;#8217;s body containing the &amp;#8220;guarded&amp;#8221;&amp;nbsp;code.&lt;/li&gt;
+&lt;li&gt;The &lt;code&gt;unwrap&lt;/code&gt; family of methods (especially &lt;code&gt;unwrap_or_else&lt;/code&gt;) dubs for a &lt;code&gt;catch&lt;/code&gt;/&lt;code&gt;except&lt;/code&gt; section.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Sure, we do need &lt;code&gt;try!&lt;/code&gt; (or &lt;code&gt;try_opt!&lt;/code&gt;) macros to mark instructions
+that may &amp;#8220;throw an exception&amp;#8221;, but with the &lt;code&gt;?&lt;/code&gt;-based syntax it shouldn&amp;#8217;t be too big of a deal.
+And when the time comes, this code will be very easy to port to a
+&lt;a href="https://github.com/rust-lang/rfcs/blob/master/text/0243-trait-based-exception-handling.md"&gt;trait-based exception handling&lt;/a&gt;
+solution that&amp;#8217;s currently in the&amp;nbsp;works.&lt;/p&gt;
+&lt;p&gt;Oh, and the best part? Both Rust and the underlying &lt;span class="caps"&gt;LLVM&lt;/span&gt; are very adept at
+&lt;a href="https://ruudvanasseldonk.com/2016/11/30/zero-cost-abstractions"&gt;inlining closures&lt;/a&gt;,
+so everything here should compile to optimal&amp;nbsp;code.&lt;/p&gt;
+&lt;h4&gt;Bonus: a lifetime&amp;nbsp;conundrum&lt;/h4&gt;
+&lt;p&gt;Well, &lt;em&gt;almost&lt;/em&gt; optimal.
+There is one more thing left to do before we can call this a truly &lt;em&gt;zero-cost&lt;/em&gt;&amp;nbsp;abstraction.&lt;/p&gt;
+&lt;p&gt;We need to stop allocating so damn&amp;nbsp;much!&lt;/p&gt;
+&lt;p&gt;It should be pretty obvious that
+the function doesn&amp;#8217;t need to create a brand new &lt;code&gt;String&lt;/code&gt; every time it&amp;#8217;s called.
+The text is in the input &lt;code&gt;Json&lt;/code&gt;, and we take that &lt;code&gt;Json&lt;/code&gt; by reference already.
+It&amp;#8217;s only fair we stop creating &lt;code&gt;String&lt;/code&gt;s and simply return a &lt;code&gt;&amp;amp;str&lt;/code&gt; reference&amp;nbsp;instead.&lt;/p&gt;
+&lt;p&gt;In fact, this should be as easy as removing the &lt;code&gt;to_owned&lt;/code&gt;/&lt;code&gt;into&lt;/code&gt; calls,&amp;nbsp;right?&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;gist_owner_from_info&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Json&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;||&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;owner&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;o&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_object&lt;/span&gt;&lt;span class="p"&gt;()));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;owner&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;login&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;l&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_string&lt;/span&gt;&lt;span class="p"&gt;()))&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}().&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;anonymous&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Wrong, apparently. If you present this code to the compiler,
+it will serve you quite a mouthful of an error,
+including helpful tidbits in the vein of &amp;#8220;expected A, found&amp;nbsp;A&amp;#8221;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;error[E0495]: cannot infer an appropriate lifetime for autoref due to conflicting requirements
+   --&amp;gt; src/github.rs:3:34
+    |
+  3 |         let info = try_opt!(info.as_object());
+    |                                  ^^^^^^^^^
+    |
+note: first, the lifetime cannot outlive the anonymous lifetime #1 defined on the block at 1:45...
+   --&amp;gt; src/github.rs:1:46
+    |
+  1 | fn gist_owner_from_info(info: &amp;amp;Json) -&amp;gt; &amp;amp;str {
+    |                                              ^
+note: ...so that reference does not outlive borrowed content
+   --&amp;gt; src/github.rs:3:29
+    |
+  3 |         let info = try_opt!(info.as_object());
+    |                             ^^^^
+note: but, the lifetime must be valid for the anonymous lifetime #1 defined on the block at 2:23...
+   --&amp;gt; src/github.rs:2:24
+    |
+  2 |     || -&amp;gt; Option&amp;lt;&amp;amp;str&amp;gt; {
+    |                        ^
+note: ...so that expression is assignable (expected std::option::Option&amp;lt;&amp;amp;str&amp;gt;, found std::option::Option&amp;lt;&amp;amp;str&amp;gt;)
+   --&amp;gt; src/github.rs:5:9
+    |
+  5 |         owner.get(&amp;quot;login&amp;quot;).and_then(|l| l.as_string())
+    |
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The crux of this verbiage is that the Rust compiler is unable to reconcile the lifetime
+of the closure&amp;#8217;s return value, the input, and final result of the&amp;nbsp;function.&lt;/p&gt;
+&lt;p&gt;It shouldn&amp;#8217;t really be trying very hard, though, for the lifetime is obvious.
+It&amp;#8217;s the same as the one implicitly attached to the input &lt;code&gt;&amp;amp;Json&lt;/code&gt;.
+Seems like in this case, we need to be a little more helpful and label it&amp;nbsp;explicitly:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;gist_owner_from_info&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nl"&gt;&amp;#39;i&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;info&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;&amp;#39;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Json&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;&amp;#39;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;||&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;&amp;#39;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="c1"&gt;// (rest as before)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Voila, this should now compile without any&amp;nbsp;issues.&lt;/p&gt;
+&lt;p&gt;Once again, &amp;#8220;Keep calm and add more &lt;code&gt;'lifetimes&lt;/code&gt;&amp;#8221; proves to be an effective approach&amp;nbsp;;)&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Technically, they aren&amp;#8217;t called tuples there but
+&amp;#8220;&lt;a href="https://golang.org/doc/effective_go.html#multiple-returns"&gt;multiple return values&lt;/a&gt;&amp;#8220;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;This is something I needed to do when rewriting
+&lt;a href="https://github.com/Xion/gisht"&gt;this Python project of mine&lt;/a&gt; to Rust.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;This is also the closest Rust can currently get to a &lt;code&gt;do&lt;/code&gt; notation from Haskell,
+at least without any macro-based hacks.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="IIFE"></category><category term="error handling"></category><category term="exceptions"></category><category term="closures"></category><category term="lambdas"></category></entry><entry><title>Optional arguments in Rust 1.12</title><link href="http://xion.io/post/code/rust-optional-args.html" rel="alternate"></link><updated>2016-09-29T19:51:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-09-29:post/code/rust-optional-args.html</id><summary type="html">&lt;p&gt;Today&amp;#8217;s &lt;a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html"&gt;announcement of Rust 1.12&lt;/a&gt; contains,
 among other things, this innocous little&amp;nbsp;tidbit:&lt;/p&gt;
 &lt;blockquote&gt;
 &lt;p&gt;&lt;code&gt;Option&lt;/code&gt; implements &lt;code&gt;From&lt;/code&gt; for its contained&amp;nbsp;type&lt;/p&gt;
@@ -1017,192 +1282,4 @@ to change the precedence of their own operators,
 as it&amp;#8217;s the case in &lt;a href="https://www.haskell.org/tutorial/functions.html#sect3.2.2"&gt;Haskell&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="syntax"></category><category term="lambda"></category><category term="operators"></category></entry><entry><title>patterns</title><link href="http://xion.io/post/code/rust-patterns-ref.html" rel="alternate"></link><updated>2016-06-02T17:00:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-06-02:post/code/rust-patterns-ref.html</id><summary type="html">&lt;p&gt;Rust is one of those nice languages with &lt;em&gt;pattern matching&lt;/em&gt;.
-If you don&amp;#8217;t know, it can be thought of as a generalization of the &lt;code&gt;switch&lt;/code&gt; statement:
-comparing objects not just by value (or overloaded equality operator, etc.)
-but by &lt;em&gt;structure&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hashmap&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;do_something_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;panic&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Oh noes!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It doesn&amp;#8217;t end here. As you can see above, objects can also be
-&lt;em&gt;destructured&lt;/em&gt; during the match (&lt;code&gt;Some(value)&lt;/code&gt;),
-their parts assigned to &lt;em&gt;bindings&lt;/em&gt; (&lt;code&gt;value&lt;/code&gt;),
-and those bindings can subsequently be used in the &lt;code&gt;match&lt;/code&gt; branch.&lt;/p&gt;
-&lt;p&gt;Neat? Definitely.
-In Rust, pattern matching is bread-and-butter of not only the &lt;code&gt;match&lt;/code&gt; statement,
-but also &lt;code&gt;for&lt;/code&gt;, (&lt;code&gt;if&lt;/code&gt;)&lt;code&gt;let&lt;/code&gt;, and even ordinary function&amp;nbsp;arguments.&lt;/p&gt;
-&lt;h4&gt;Mixing in Rust&amp;nbsp;semantics&lt;/h4&gt;
-&lt;p&gt;For a long time, however, I was somewhat confused as to what happens
-when references and borrowing is involved in matching.
-The two &amp;#8220;operators&amp;#8221; that often occur there are &lt;code&gt;&amp;amp;&lt;/code&gt; (ampersand) and &lt;code&gt;ref&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;You should readily recognize the first one,
-as it is used pervasively in Rust to create references (and reference types).
-The second one quite obviously hints towards references as well.
-Yet those two constructs serve &lt;em&gt;very&lt;/em&gt; different purposes when used within a&amp;nbsp;pattern.&lt;/p&gt;
-&lt;p&gt;To add to the confusion, they are quite often encountered&amp;nbsp;together:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Url&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="c1"&gt;// print query string params of some URL&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Url&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;some_url&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;query_params&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;query_pairs&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[]);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;query_params&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}={}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Lack of one or the other will be (at best) pointed out to you by the compiler,
-along with a suggestion where to add it.
-But addressing problems in this manner can only go so far.
-So how about we delve deeper and see what it&amp;#8217;s really&amp;nbsp;about?&lt;/p&gt;
-&lt;h4&gt;Part of the reference, part of the&amp;nbsp;pattern&lt;/h4&gt;
-&lt;p&gt;Rust is very flexible as to what value can be a subject of pattern matching.
-You would be very hard pressed to find anything that &lt;em&gt;cannot&lt;/em&gt; be used within a &lt;code&gt;match&lt;/code&gt; statement, really.
-Both actual objects and references to objects are perfectly&amp;nbsp;allowed:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="c1"&gt;// ...&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;foo&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;foo&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Matched!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;In the latter case, however, we aren&amp;#8217;t typically interested in the reference itself (like above).
-Instead, we want to determine some facts about the object it &lt;em&gt;points&lt;/em&gt;&amp;nbsp;to:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;foo&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;num&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Matched with number {}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;num&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;As you can see, this is where the ampersand comes into play.
-Just like a type constructor (&lt;code&gt;Some&lt;/code&gt;, &lt;code&gt;Ok&lt;/code&gt;, or &lt;code&gt;Foo&lt;/code&gt; above),
-the &lt;code&gt;&amp;amp;&lt;/code&gt; operator informs the Rust compiler what kind of value we&amp;#8217;re expecting from the match.
-When it sees the ampersand, it knows we&amp;#8217;re looking for &lt;em&gt;references&lt;/em&gt; to certain objects,
-and not for the objects&amp;nbsp;themselves.&lt;/p&gt;
-&lt;p&gt;Why is the distinction between an object and its reference important, though?
-In many other places, Rust is perfectly happy to blur the gap between references and actual objects&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt; &amp;#8212;
-for example when calling most of their&amp;nbsp;methods.&lt;/p&gt;
-&lt;p&gt;Pattern matching, however,
-due to its ability to unpack values into their constituent parts,
-is a &lt;em&gt;destructive&lt;/em&gt; operation. Anything we apply &lt;code&gt;match&lt;/code&gt; (or similar construct) to
-will be &lt;em&gt;moved&lt;/em&gt; into the block by&amp;nbsp;default:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_name&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Alice&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="c1"&gt;// ...&lt;/span&gt;
-&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_name&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello, {}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="n"&gt;do_something_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;maybe_name&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Following the typical &lt;a href="https://doc.rust-lang.org/book/ownership.html"&gt;ownership semantics&lt;/a&gt;,
-this will prevent any subsequent moves and essentially consume the&amp;nbsp;value:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;error: use of partially moved value: `maybe_name` [E0382]
-    do_something_with(maybe_name);
-                      ^~~~~~~~~~
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;So just like the aforementioned type constructors (&lt;code&gt;Some&lt;/code&gt;, etc.),
-the ampersand operator is simply &lt;em&gt;part of the pattern&lt;/em&gt; that we match against.
-And just like with &lt;code&gt;Some&lt;/code&gt; and friends, there is an obvious symmetry here:
-if &lt;code&gt;&amp;amp;&lt;/code&gt; was used to create the value, it needs to be used when unpacking&amp;nbsp;it.&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;The syntax used in a pattern that destructures an object
-is analogous to one used by the expression which created&amp;nbsp;it.&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;h4&gt;Preventing the&amp;nbsp;move&lt;/h4&gt;
-&lt;p&gt;Errors like the one above often contain helpful&amp;nbsp;notes:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;note: `(maybe_name:core::option::Option::Some).0` moved here because it has type `collections::string::String`, which is moved by default
-         Some(n) =&amp;gt; println!(&amp;quot;Hello, {}&amp;quot;, n),
-              ^
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;as well as hints for resolving&amp;nbsp;them:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;help: if you would like to borrow the value instead, use a `ref` binding as shown:
-        Some(ref n) =&amp;gt; println!(&amp;quot;Hello, {}&amp;quot;, n),
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Here&amp;#8217;s where &lt;code&gt;ref&lt;/code&gt; enters the&amp;nbsp;scene.&lt;/p&gt;
-&lt;p&gt;The message tells us that if we add a &lt;code&gt;ref&lt;/code&gt; keyword in the suggested spot,
-we will switch from moving to &lt;em&gt;borrowing&lt;/em&gt; for the &lt;code&gt;match&lt;/code&gt; binding that follows (here, &lt;code&gt;n&lt;/code&gt;).
-It will still capture its value exactly as before,
-but it will no longer assume &lt;em&gt;ownership&lt;/em&gt; of&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;This is the crucial&amp;nbsp;difference.&lt;/p&gt;
-&lt;p&gt;Unlike the ampersand, &lt;code&gt;ref&lt;/code&gt; is &lt;strong&gt;not&lt;/strong&gt; something we match against.
-It doesn&amp;#8217;t affect what values match the pattern it&amp;#8217;s in, and what values don&amp;#8217;t&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;The only thing it changes is how parts of the matched value
-are &lt;em&gt;captured&lt;/em&gt; by the pattern&amp;#8217;s&amp;nbsp;bindings:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;by default, without &lt;code&gt;ref&lt;/code&gt;, they are &lt;em&gt;moved&lt;/em&gt; into the &lt;code&gt;match&lt;/code&gt; arms&lt;/li&gt;
-&lt;li&gt;with &lt;code&gt;ref&lt;/code&gt;, they are &lt;em&gt;borrowed&lt;/em&gt; instead and represented as&amp;nbsp;references&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;Looking at our example, the &lt;code&gt;n&lt;/code&gt; binding in &lt;code&gt;Some(n)&lt;/code&gt; is of type &lt;code&gt;String&lt;/code&gt;:
-the actual field type from the matched structure.
-By contrast, the other &lt;code&gt;n&lt;/code&gt; in &lt;code&gt;Some(ref n)&lt;/code&gt; is a &lt;code&gt;&amp;amp;String&lt;/code&gt; &amp;#8212;
-that is, a &lt;em&gt;reference&lt;/em&gt; to the&amp;nbsp;field.&lt;/p&gt;
-&lt;p&gt;One is a move, the other one is a&amp;nbsp;borrow.&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;&lt;code&gt;ref&lt;/code&gt; annotates pattern bindings to make them borrow rather than move.
-It is &lt;em&gt;not&lt;/em&gt; a part of the pattern as far as matching is&amp;nbsp;concerned.&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;h4&gt;Used&amp;nbsp;together&lt;/h4&gt;
-&lt;p&gt;To finish off, let&amp;#8217;s untangle the confusing example from the beginning of this&amp;nbsp;post:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;query_params&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}={}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;value&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Since we know &lt;code&gt;ref&lt;/code&gt; doesn&amp;#8217;t affect whether or not the pattern matches,
-we could just as well have something like &lt;code&gt;&amp;amp;(a, b)&lt;/code&gt;.
-And this should be quite a bit easier to read:
-it clearly denotes we expect a reference to a 2-tuple of simple objects.
-Not coincidentally,
-such tuples are items from the vector we&amp;#8217;re iterating&amp;nbsp;over.&lt;/p&gt;
-&lt;p&gt;Problem is,
-without the &lt;code&gt;ref&lt;/code&gt;s we will attempt to &lt;em&gt;move&lt;/em&gt; those items into the loop scope.
-But due to the way the vector is iterated over (&lt;code&gt;&amp;amp;query_params&lt;/code&gt;),
-we&amp;#8217;re only &lt;em&gt;borrowing&lt;/em&gt; each item, so this is actually impossible.
-In fact, it would be a classic attempt to move out of a borrowed&amp;nbsp;context.&lt;/p&gt;
-&lt;p&gt;It is also wholly unnecessary.
-The only thing this loop does is printing the items out,
-so accessing them through references is perfectly&amp;nbsp;fine.&lt;/p&gt;
-&lt;p&gt;And this is exactly what the &lt;code&gt;ref&lt;/code&gt; operator gives us.
-Adding the keyword back,
-we will switch from moving the values to just borrowing them&amp;nbsp;instead.&lt;/p&gt;
-&lt;h4&gt;To sum&amp;nbsp;up&lt;/h4&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;p&gt;&lt;code&gt;&amp;amp;&lt;/code&gt; denotes that your pattern &lt;strong&gt;expects a reference&lt;/strong&gt; to an object.
-Hence &lt;code&gt;&amp;amp;&lt;/code&gt; is a part of said pattern:
-&lt;code&gt;&amp;amp;Foo&lt;/code&gt; matches &lt;em&gt;different&lt;/em&gt; objects than &lt;code&gt;Foo&lt;/code&gt; does.&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;&lt;code&gt;ref&lt;/code&gt; indicates that you want a &lt;strong&gt;reference to an unpacked value&lt;/strong&gt;.
-It is &lt;em&gt;not&lt;/em&gt; matched against:
-&lt;code&gt;Foo(ref foo)&lt;/code&gt; matches &lt;em&gt;the same&lt;/em&gt; objects as &lt;code&gt;Foo(foo)&lt;/code&gt;. &lt;/p&gt;
-&lt;/li&gt;
-&lt;/ul&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;The technical term for this is
-a &lt;a href="https://doc.rust-lang.org/book/deref-coercions.html"&gt;&lt;em&gt;&lt;code&gt;Deref&lt;/code&gt; coercion&lt;/em&gt;&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;We can say that it doesn&amp;#8217;t affect the &lt;em&gt;satisfiability&lt;/em&gt;
-(or conversely, &lt;em&gt;refutability&lt;/em&gt;) of the pattern.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="pattern matching"></category><category term="borrowing"></category><category term="references"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Python"></category><category term="syntax"></category><category term="lambda"></category><category term="operators"></category></entry></feed>

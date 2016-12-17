@@ -63,6 +63,117 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-mock-configure.html#python-mock-configure">Mock.configure_mock fix for&nbsp;Python</a></h2>
+    <p>
+      Posted on Sat 07 May 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/mock.html">mock</a>,      <a href="http://xion.io/tag/patching.html">patching</a>      &#8226; <a href="http://xion.io/post/code/python-mock-configure.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Python&#8217;s <a href="https://docs.python.org/3/library/unittest.mock.html">mocking library</a> is rather uncomplicated.
+Most of what it does is creating <em>mock objects</em>: veritable sponges that absorb every interaction with any code
+that we pass them&nbsp;to.</p>
+<p>This simplicity is also surfaced in the <span class="caps">API</span>, especially in the main part of it &#8212; the <code>mock.Mock</code> constructor:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="s">&#39;http://example.com&#39;</span><span class="p">)</span>
+<span class="k">assert</span> <span class="n">some_mock</span><span class="o">.</span><span class="n">url</span> <span class="o">==</span> <span class="s">&#39;http://example.com&#39;</span>
+</pre></div>
+
+
+<p>Any arguments that we pass there become attributes on the resulting mock object. This is really useful when
+<a href="https://docs.python.org/3/library/unittest.mock.html#the-patchers">patching</a>, because it allows us to completely specify
+the replacement object within a <code>@mock.patch</code> decorator:</p>
+<div class="highlight"><pre><span class="nd">@patch.object</span><span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="s">&#39;get&#39;</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="n">Mock</span><span class="p">(</span><span class="n">return_value</span><span class="o">=</span><span class="n">Mock</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="mi">400</span><span class="p">)))</span>
+<span class="k">def</span> <span class="nf">test_404</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">assertRaises</span><span class="p">(</span><span class="n">NotFoundError</span><span class="p">):</span>
+        <span class="n">do_stuff</span><span class="p">()</span>
+</pre></div>
+
+
+<p>You have to keep in mind, however, that the <code>mock.Mock</code> class also has some
+<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock">constructor arguments</a> of its own.
+For this reason, there exists some potential for name collision: some of the <code>Mock</code><span class="quo">&#8216;</span>s own arguments may have the same
+names as the <em>attributes</em> we&#8217;d like to set on the mock&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>  <span class="c"># doesn&#39;t set the `name` attribute</span>
+<span class="k">assert</span> <span class="n">some_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s">&quot;John Doe&quot;</span>  <span class="c"># blows up!</span>
+</pre></div>
+
+
+<p>Here, the <code>name</code> argument is inherent to the <code>Mock</code> class. Its constructor will interpret it in a special way,
+and so it <em>won&#8217;t</em> set a <code>name</code> attribute on the resulting mock. Other possible culprits include the <code>spec</code> and <code>wraps</code>
+parameters, both of which have relatively common names that we may want to use as object attributes<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>Collision&nbsp;avoidance</h4>
+<p>It&#8217;s trivial to fix the issue, of&nbsp;course:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">()</span>
+<span class="n">some_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;John Doe&quot;</span>
+<span class="k">assert</span> <span class="n">sock_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s">&quot;John Doe&quot;</span>
+</pre></div>
+
+
+<p>but this approach has a downside. Creating and configuring a mock is no longer a single expression, which means we cannot
+use it with patchers as easily as&nbsp;before:</p>
+<div class="highlight"><pre><span class="nd">@patch.object</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="s">&#39;bar&#39;</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">test_something</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_bar</span><span class="p">):</span>
+    <span class="n">mock_bar</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;John Doe&quot;</span>
+    <span class="c"># (...rest of the test...)</span>
+</pre></div>
+
+
+<p>We can either configure the mock after patching, like above, or perhaps introduce some utility functions to be called
+inside the <code>@patch</code> decorator.</p>
+<h4>The almost-there&nbsp;method</h4>
+<p>In any case, this is somewhat disappointing. And it is even more so when we discover that there is
+<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock.configure_mock">a method called <code>configure_mock</code></a>
+which <em>looks</em> like it was designed to solve this very issue. Its arguments are always interpreted as attributes
+of the mock: it has no &#8220;special&#8221; or &#8220;reserved&#8221; names. Indeed, this method is what allows us to actually
+write the mock setup as a single&nbsp;expression:</p>
+<div class="highlight"><pre><span class="n">some_mock</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Problem is, this expression returns <code>None</code>.</p>
+<p>Yes, <code>configure_mock</code> returns nothing.<br>
+Or in other words, it doesn&#8217;t return anything.<br>
+In fact, it has <a href="https://github.com/testing-cabal/mock/blob/286792b2cd5b5baa8338260538ed207391280e34/mock/mock.py#L671">no <code>return</code> statement</a>&nbsp;whatsoever.</p>
+<p>Most importantly, it doesn&#8217;t have the <code>return self</code> line that&#8217;d enable us to write&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">()</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Well, that is <em>quite</em> a&nbsp;let-down.</p>
+<h4>Fixing&nbsp;it</h4>
+<p>But hey, this is Python! Shortcomings like that don&#8217;t necessarily mean we have to fork whole libraries.
+Let&#8217;s just add the missing <code>return</code>, shall&nbsp;we?</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">mock</span> <span class="kn">import</span> <span class="n">Mock</span> <span class="k">as</span> <span class="n">_Mock</span>
+
+<span class="k">class</span> <span class="nc">Mock</span><span class="p">(</span><span class="n">_Mock</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">configure_mock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Mock</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>  <span class="c"># &lt;-- there!</span>
+</pre></div>
+
+
+<p>Whew, that was&nbsp;quick!</p>
+<p>&#8230;Alright, that&#8217;s actually the <em>whole</em> fix, but it&#8217;s close. To complete it, we need to apply the same treatment to
+three more <code>Mock</code> classes: <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.MagicMock"><code>MagicMock</code></a>,
+<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMock"><code>NonCallableMock</code></a>,
+and <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMagicMock"><code>NonCallableMagicMock</code></a>.</p>
+<p>A complete solution can be seen in <a href="https://gist.github.com/Xion/8b98733d4b6be354be0ebae815ebd22d">this gist</a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Collision may also occur with <code>mock.patch</code> constructs. The most likely offender there is probably
+the <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.patch"><code>new</code> parameter</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-mock-configure.html#python-mock-configure">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-get-lambda-code.html#python-get-lambda-code">Source code of a Python&nbsp;lambda</a></h2>
     <p>
       Posted on Tue 19 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1154,80 +1265,6 @@ we may have better luck waiting for the Year of Linux on Desktop to dawn&#8230;&
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-first-impressions.html#rust-first-impressions">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-furl.html#python-furl"><span class="caps">URL</span> library for&nbsp;Python</a></h2>
-    <p>
-      Posted on Fri 27 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/url.html">URL</a>,      <a href="http://xion.io/tag/furl.html">furl</a>      &#8226; <a href="http://xion.io/post/code/python-furl.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Python has many <a href="https://docs.python.org/3/library/">batteries included</a>, but a few things are still conspicuously&nbsp;missing.</p>
-<p>One of them is a standardized and convenient approach to <span class="caps">URL</span> manipulation, akin to the
-<a href="http://docs.oracle.com/javase/7/docs/api/java/net/URI.html"><code>URI</code> class</a> in Java.
-There are some functions in <a href="https://docs.python.org/2/library/urllib.html"><code>urllib</code></a>, of course
-(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their <span class="caps">HTTP</span>-related
-comrades, they prove rather verbose and somewhat&nbsp;clunky.</p>
-<p><span class="caps">HTTP</span>, however, is solved by the <a href="http://python-requests.org/">Requests</a> package, so you may wonder
-if there is some analogous package for <span class="caps">URL</span> operations. The answer is affirmative, and the library in question is,
-quite whimsically, called <a href="https://github.com/gruns/furl"><em>furl</em></a>.</p>
-<h4><span class="caps">URL</span> in a&nbsp;wrap</h4>
-<p>The sole interesting part of the <em>furl</em> interface is the <code>furl</code> class. It represents a single <span class="caps">URL</span>, broken down to
-its constituents, with properties and methods for both reading them out and replacing with new&nbsp;values.</p>
-<p>Thanks to this handy (and quite obvious) abstraction, common <span class="caps">URL</span> operations become quite simple and&nbsp;self-documenting:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">furl</span> <span class="kn">import</span> <span class="n">furl</span>
-
-
-<span class="k">def</span> <span class="nf">to_absolute</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">base</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;If given ``url`` is a relative path,</span>
-<span class="sd">    make it relative to the ``base``.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">furled</span><span class="o">.</span><span class="n">scheme</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">furl</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
-    <span class="k">return</span> <span class="n">url</span>
-
-
-<span class="k">def</span> <span class="nf">is_same_origin</span><span class="p">(</span><span class="o">*</span><span class="n">urls</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Check whether URLs are from the same origin (host:port).&quot;&quot;&quot;</span>
-    <span class="n">origins</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">netloc</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">furl</span><span class="p">,</span> <span class="n">urls</span><span class="p">))</span>
-    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span>
-
-
-<span class="k">def</span> <span class="nf">get_facebook_username</span><span class="p">(</span><span class="n">profile_url</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Get Facebook user ID from their profile URL.&quot;&quot;&quot;</span>
-    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">profile_url</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">furled</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="s">&#39;facebook.com&#39;</span> <span class="ow">or</span>
-            <span class="n">furled</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.facebook.com&#39;</span><span class="p">)):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;not a Facebook URL: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">profile_url</span><span class="p">,))</span>
-    <span class="k">return</span> <span class="n">furled</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-
-<span class="c"># etc.</span>
-</pre></div>
-
-
-<p>This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string&nbsp;interpolation:</p>
-<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">?</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BASE_URL</span><span class="p">,</span> <span class="n">urlencode</span><span class="p">(</span><span class="n">query_params</span><span class="p">))</span>
-</pre></div>
-
-
-<p>Besides looking unpythonically ugly, it&#8217;s also inflexible and error-prone. If <code>BASE_URL</code> gains some innate query string
-params (<code>'http://example.com/?a=b'</code>), this method will start producing completely invalid <code>url</code>s (with two question marks,
-e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
-<p>The equivalent in <em>furl</em> has none of these&nbsp;flaws:</p>
-<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">BASE_URL</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
-</pre></div>
-
-
-<h4>The full&nbsp;package</h4>
-<p>To see the full power of <em>furl</em>, I recommend having a look at its
-<a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
-      <a class="btn" href="http://xion.io/post/code/python-furl.html#python-furl">Continue reading</a>
   </div>
 </article>
 
