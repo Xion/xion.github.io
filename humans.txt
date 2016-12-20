@@ -9,4 +9,4 @@
     Language: English
     Doctype: HTML5
     IDE: Sublime Text 2
-    Tools: Git, Python, Pelican, Fabric
+    Tools: Git, Python, Pelican, Invoke
