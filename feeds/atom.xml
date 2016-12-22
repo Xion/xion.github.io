@@ -114,7 +114,7 @@ they would all close over the same loop counter variable.
 All would then display the exact same&amp;nbsp;message.&lt;/p&gt;
 &lt;p&gt;We don&amp;#8217;t need to employ those workarounds in Rust.
 Thanks to local scoping,
-a simple pair of &lt;code&gt;{&lt;/code&gt; bracers &lt;code&gt;}&lt;/code&gt; would work exactly the same.
+a simple pair of &lt;code&gt;{&lt;/code&gt; braces &lt;code&gt;}&lt;/code&gt; would work exactly the same.
 You can imagine a direct rewrite of the above example, though,
 where an anonymous closure is used to similar&amp;nbsp;effect:&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// WARNING: Not idiomatic! (Also not a real DOM library).&lt;/span&gt;
