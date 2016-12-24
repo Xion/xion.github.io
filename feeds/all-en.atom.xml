@@ -1,5 +1,146 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-12-18T15:00:00+01:00</updated><entry><title>Simulating exceptions in Rust with IIFE</title><link href="http://xion.io/post/code/rust-iife.html" rel="alternate"></link><updated>2016-12-18T15:00:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-17:post/code/rust-iife.html</id><summary type="html">&lt;p&gt;While many languages use exceptions for handling errors,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-12-24T20:57:00+01:00</updated><entry><title>A tale of two Rusts</title><link href="http://xion.io/post/programming/rust-nightly-vs-stable.html" rel="alternate"></link><updated>2016-12-24T20:57:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-24:post/programming/rust-nightly-vs-stable.html</id><summary type="html">&lt;p&gt;The writing has been on the wall for many months now,
+but I think the time has come when we can officially declare&amp;nbsp;it.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Stable Rust is dead. Nightly Rust is the only&amp;nbsp;Rust.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;h3&gt;Say&amp;nbsp;what?&lt;/h3&gt;
+&lt;p&gt;If you&amp;#8217;re out of the loop,
+&lt;a href="http://rust-lang.org/"&gt;Rust&lt;/a&gt; is this newfangled system programming language.
+Rust is meant to fit in the niches normally occupied by C,
+so its domain includes performance-sensitive and safety-critical applications.
+Embedded programming, &lt;span class="caps"&gt;OS&lt;/span&gt; kernels, databases, servers,
+and similar low-level pieces of computing and networking infrastructure
+are all within its&amp;nbsp;purview.&lt;/p&gt;
+&lt;p&gt;Of course, this &amp;#8220;replacing C&amp;#8221; thing is still an ambition that&amp;#8217;s years or decades away.
+But in theory, there is nothing preventing it from happening.
+The main thing Rust would need here is &lt;em&gt;time&lt;/em&gt;: time to buy trust of developers
+by having been used in real-world, production scenarios without&amp;nbsp;issues.&lt;/p&gt;
+&lt;p&gt;To facilitate this (and for other reasons),
+Rust has been using &lt;a href="https://doc.rust-lang.org/stable/book/release-channels.html"&gt;three &lt;em&gt;release channels&lt;/em&gt;&lt;/a&gt;
+with varying frequency of updates.
+There are the &lt;em&gt;stable&lt;/em&gt;, &lt;em&gt;beta&lt;/em&gt;, and &lt;em&gt;nightly&lt;/em&gt; Rust.
+Of those, beta is pretty much an
+&lt;a href="https://en.wikipedia.org/wiki/Software_release_life_cycle#Release_candidate"&gt;&lt;span class="caps"&gt;RC&lt;/span&gt;&lt;/a&gt;
+for a future stable release,
+so there aren&amp;#8217;t many differences at all between the first two&amp;nbsp;channels.&lt;/p&gt;
+&lt;h4&gt;Nightly&amp;nbsp;perks&lt;/h4&gt;
+&lt;p&gt;This cannot be said about&amp;nbsp;nightly.&lt;/p&gt;
+&lt;p&gt;In fact, nightly Rust is essentially &lt;em&gt;its own language&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;First, there is a number of exclusive language features that are only available on nightly.
+They are all guarded by numerous &lt;code&gt;#![feature(...)]&lt;/code&gt; gates
+which are required to activate them.
+Because stable Rust doesn&amp;#8217;t accept any such directive,
+trying to compile code that uses them will fail on a non-nightly&amp;nbsp;compiler.&lt;/p&gt;
+&lt;p&gt;This has been justified as a necessary step for testing out new features
+in real scenarios, or at least those that resemble (stable) reality as close as possible.
+Indeed, many features &lt;em&gt;did&lt;/em&gt; eventually land in stable Rust by going through this route
+&amp;#8212; a recent example would be &lt;a href="https://m4rw3r.github.io/rust-questionmark-operator"&gt;the &lt;code&gt;?&lt;/code&gt; operator&lt;/a&gt;,
+an error-handling measure analogous to the &lt;code&gt;try!&lt;/code&gt; macro.&lt;/p&gt;
+&lt;p&gt;But some features take a lot of time to stabilize.
+And few (like &lt;code&gt;zero_one&lt;/code&gt; which guards the numeric traits
+&lt;a href="https://doc.rust-lang.org/std/num/trait.Zero.html"&gt;&lt;code&gt;Zero&lt;/code&gt;&lt;/a&gt;
+and &lt;a href="https://doc.rust-lang.org/std/num/trait.One.html"&gt;&lt;code&gt;One&lt;/code&gt;&lt;/a&gt;) may even be deprecated
+without ever getting out of the nightly&amp;nbsp;channel.&lt;/p&gt;
+&lt;h4&gt;Unplugged&lt;/h4&gt;
+&lt;p&gt;Secondly, and most importantly, there is at least one feature
+that won&amp;#8217;t get stabilized &lt;strong&gt;ever&lt;/strong&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#![feature(plugin)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;And it&amp;#8217;s all by&amp;nbsp;design.&lt;/p&gt;
+&lt;p&gt;This &lt;code&gt;plugin&lt;/code&gt; switch is what&amp;#8217;s necessary to include &lt;code&gt;#![plugin(...)]&lt;/code&gt; directives.
+Those in turn activate &lt;em&gt;compiler plugins&lt;/em&gt;:
+user-provided additions to the compiler itself.
+Plugins operate against the &lt;span class="caps"&gt;API&lt;/span&gt; provided directly by &lt;code&gt;rustc&lt;/code&gt;
+and enhance its capabilities beyond what the language normally&amp;nbsp;provides.&lt;/p&gt;
+&lt;p&gt;Although it sounds rather ominous,
+the vast majority of plugins in the wild serve a singular purpose: &lt;em&gt;code generation&lt;/em&gt;.
+They are written with the sole purpose of combating Rust&amp;#8217;s rigidity,
+including the (perfectly expected) lack of dynamic runtime capabilities
+and the (disappointingly) stiff limits of its wanting macro&amp;nbsp;system.&lt;/p&gt;
+&lt;p&gt;This is how they are utilized by &lt;a href="http://diesel.rs/"&gt;Diesel&lt;/a&gt;, for example,
+a popular &lt;span class="caps"&gt;ORM&lt;/span&gt; and &lt;span class="caps"&gt;SQL&lt;/span&gt; query interface;
+or &lt;a href="https://serde.rs/"&gt;Serde&lt;/a&gt;, a serialization&amp;nbsp;framework.&lt;/p&gt;
+&lt;p&gt;Why compiler plugins can never be stable, though?
+It&amp;#8217;s because the internal &lt;span class="caps"&gt;API&lt;/span&gt; they are coded against
+goes too deep into the compiler bowels to ever get stabilized.
+If it were, it would severely limit the ability to further develop the language
+without significant breakage of the established&amp;nbsp;plugins.&lt;/p&gt;
+&lt;h4&gt;Pseudo-stable&lt;/h4&gt;
+&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Wait,&amp;#8221; you may ask, &amp;#8220;how do we even talk about «established» compiler plugins?
+Shouldn&amp;#8217;t they be, by their very definition, &lt;em&gt;unstable&lt;/em&gt;?&amp;#8221;&lt;/p&gt;
+&lt;p&gt;Well&amp;#8230; yes. They definitely should. And therein lies the crux of the&amp;nbsp;problem.&lt;/p&gt;
+&lt;p&gt;Turns out, plugins &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; nightly Rust are only &lt;em&gt;mostly&lt;/em&gt; treated as&amp;nbsp;unstable.&lt;/p&gt;
+&lt;p&gt;In reality, the comfort and convenience provided by nightly versions of many libraries
+&amp;#8212; all of which rely on compiler plugins &amp;#8212; is difficult to overstate.
+While their stable approximations are available, they at best require rather complicated&amp;nbsp;setup.&lt;/p&gt;
+&lt;p&gt;What&amp;#8217;s always involved is a custom build step,
+and usually a separate file for the relevant code symbols and declarations.
+In the end, we get a bunch of autogenerated modules
+whose prior non-existence during development may also confuse IDEs and autocompletion&amp;nbsp;tools.&lt;/p&gt;
+&lt;p&gt;For all those reasons and more,
+an ecosystem has developed where several popular libraries are &amp;#8220;nightly but pseudo-stable&amp;#8221;.
+This includes some key components in many serious applications,
+like the aforementioned &lt;span class="caps"&gt;ORM&lt;/span&gt; &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; serialization&amp;nbsp;crates.&lt;/p&gt;
+&lt;h4&gt;The&amp;nbsp;precedent&lt;/h4&gt;
+&lt;p&gt;And so has been the state of affairs until very recently.
+The nightly Rust has been offering some extremely enticing features,
+but the stable channel was at least paid a lip service to.
+However, the mentality among library authors that &amp;#8220;nightly-first&amp;#8221; is an acceptable policy
+had been strong for a long time&amp;nbsp;now.&lt;/p&gt;
+&lt;p&gt;No wonder it has finally shifted towards&amp;nbsp;&amp;#8220;nightly-only&amp;#8221;.&lt;/p&gt;
+&lt;p&gt;Meet &lt;a href="http://rocket.rs"&gt;Rocket&lt;/a&gt;,
+the latest contestant in the already rich lineup of &lt;a href="http://www.arewewebyet.org/topics/frameworks/"&gt;Rust web frameworks&lt;/a&gt;.
+Everything about it is really slick:
+a flashy designer website; approachable and comprehensive documentation;
+and concise, &lt;a href="http://flask.pocoo.org/"&gt;Flask&lt;/a&gt;-like &lt;span class="caps"&gt;API&lt;/span&gt; for
+&lt;a href="https://rocket.rs/overview/#anatomy-of-a-rocket-application"&gt;routing&lt;/a&gt;
+and response handling.
+Predictably, it&amp;#8217;s been making quite a
+&lt;a href="https://www.reddit.com/r/rust/comments/5jxv6u/rocket_web_framework_for_rust/"&gt;buzz&lt;/a&gt; on
+&lt;a href="https://www.reddit.com/r/programming/comments/5jy64x/rocket_a_web_framework_for_rust/"&gt;Reddit&lt;/a&gt;
+and &lt;a href="https://news.ycombinator.com/item?id=13245475"&gt;elsewhere&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;There is just an itty bitty little problem: Rocket &lt;em&gt;only works on nightly&lt;/em&gt;.
+No alternatives, no codegen shims&amp;#8230;
+and no prospects of any change in the foreseeable future.
+Yet, there doesn&amp;#8217;t seem to be many people concerned about this,
+so clearly this is (a new?)&amp;nbsp;norm.&lt;/p&gt;
+&lt;h4&gt;The Rusts&amp;nbsp;split&lt;/h4&gt;
+&lt;p&gt;In essence, Rust is now two separate&amp;nbsp;languages.&lt;/p&gt;
+&lt;p&gt;The stable-nightly divide has essentially evolved into something that closely resembles
+the early stages of the &lt;a href="https://wiki.python.org/moin/Python2orPython3"&gt;2.x vs. 3.x&lt;/a&gt; split in the Python world.
+The people still &amp;#8220;stuck&amp;#8221; on 2.7 (i.e. stable) were &amp;#8220;holdouts&amp;#8221;,
+and the future was with 3.x (nightly).
+Sure, there have been some pithy backports (feature stabilizations),
+but the interesting stuff has been happening on the other&amp;nbsp;side.&lt;/p&gt;
+&lt;p&gt;It&amp;#8217;s astonishing that Rust managed to replicate this phenomenon
+without any major version bumps, and with no backwards-incompatible releases.
+Technically, everything is still version 1.x..
+Not even &lt;a href="http://crates.io"&gt;Cargo&lt;/a&gt;, the Rust package manager, recognizes the stable-nightly&amp;nbsp;distinction.&lt;/p&gt;
+&lt;p&gt;But that&amp;#8217;s hardly any consolation when you try to install a nightly-only crate on stable Rust.
+You will download it just fine, and get all the way to compiling its code,
+only to have it error out due to unsupported &lt;code&gt;#![feature(...)]&lt;/code&gt; declarations.&lt;/p&gt;
+&lt;h4&gt;What&amp;nbsp;now?&lt;/h4&gt;
+&lt;p&gt;The natural question is, can this situation be effectively&amp;nbsp;addressed?&lt;/p&gt;
+&lt;p&gt;I hope it&amp;#8217;s obvious why stable Rust cannot suddenly start supporting compiler plugins.
+Given that they rely on &lt;code&gt;rustc&lt;/code&gt; internals which aren&amp;#8217;t standardized,
+doing so would be contrary to the very definition of a &amp;#8220;stable&amp;#8221; release&amp;nbsp;channel.&lt;/p&gt;
+&lt;p&gt;The other option is to fully embrace nightly as &lt;em&gt;de facto&lt;/em&gt; recommended toolchain.
+This has been informally happening already,
+despite the &lt;a href="https://doc.rust-lang.org/stable/book/release-channels.html#choosing-a-version"&gt;contrary recommendations&lt;/a&gt;
+in the official&amp;nbsp;docs.&lt;/p&gt;
+&lt;p&gt;The downsides are obvious here, though: nightly Rust is not a misnomer at all.
+The compiler is in active development and its build &lt;a href="https://travis-ci.org/rust-lang/rust/builds"&gt;breaks often&lt;/a&gt;.
+Some of those breakages make it into nightly releases with unsatisfying&amp;nbsp;regularity.&lt;/p&gt;
+&lt;p&gt;Of course, there was also another option:
+stick to the intended purpose of release channels and don&amp;#8217;t build castles on the sand
+by publishing nightly-first or nightly-only crates.
+This ship seems to have sailed by now, as the community has collectively decided&amp;nbsp;otherwise.&lt;/p&gt;
+&lt;p&gt;Oh&amp;nbsp;well.&lt;/p&gt;
+&lt;p&gt;It&amp;#8217;s just a little ironic that in a language that is so focused on safety,
+everyone is perfectly happy with an &lt;em&gt;unstable compiler&lt;/em&gt;.&lt;/p&gt;</summary><category term="Rust"></category><category term="nightly Rust"></category><category term="stable Rust"></category><category term="Rocket.rs"></category></entry><entry><title>Simulating exceptions in Rust with IIFE</title><link href="http://xion.io/post/code/rust-iife.html" rel="alternate"></link><updated>2016-12-18T15:00:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-17:post/code/rust-iife.html</id><summary type="html">&lt;p&gt;While many languages use exceptions for handling errors,
 Rust prefers a slightly different, yet very classical approach: &lt;em&gt;return values&lt;/em&gt;.&lt;/p&gt;
 &lt;p&gt;Now, they aren&amp;#8217;t exactly the same thing as in C,
 where the error is indicated by a special value within the same return type.
@@ -1142,144 +1283,4 @@ but it&amp;#8217;s quite difficult to see how those two are&amp;nbsp;related.&lt
 &lt;/pre&gt;&lt;/div&gt;
 
 
-&lt;p&gt;though ideally, you&amp;#8217;d want to pack the prefixes in a tuple to begin&amp;nbsp;with.&lt;/p&gt;</summary><category term="Python"></category><category term="strings"></category><category term="tuples"></category></entry><entry><title>…or lambda?</title><link href="http://xion.io/post/code/python-or-lambda.html" rel="alternate"></link><updated>2016-06-20T22:07:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-06-20:post/code/python-or-lambda.html</id><summary type="html">&lt;p&gt;&lt;em&gt;a.k.a. Curious Facts about Python&amp;nbsp;Syntax&lt;/em&gt;&lt;/p&gt;
-&lt;p&gt;In Python 3.3,
-a new method has been &lt;a href="https://docs.python.org/3/library/stdtypes.html#str.casefold"&gt;added&lt;/a&gt; to the &lt;code&gt;str&lt;/code&gt; type: &lt;code&gt;casefold&lt;/code&gt;.
-Its purpose is to return a &amp;#8220;sanitized&amp;#8221; version of the string
-that&amp;#8217;s suitable for case-insensitive comparison.
-For older versions of Python,
-an alternative way that&amp;#8217;s &lt;em&gt;mostly&lt;/em&gt; compatible is to use the &lt;code&gt;str.lower&lt;/code&gt; method,
-which simply changes all letters in the string to&amp;nbsp;lowercase.&lt;/p&gt;
-&lt;h4&gt;Syntax is&amp;nbsp;hard&lt;/h4&gt;
-&lt;p&gt;Easy enough for a compatibility shim, right?
-That&amp;#8217;s exactly what I thought when I came up with&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;casefold&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;getattr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;casefold&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lower&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Let&amp;#8217;s ignore for a moment
-the fact that for a correct handling of &lt;code&gt;unicode&lt;/code&gt; objects in Python 2,
-a &lt;a href="http://stackoverflow.com/a/32838944/434799"&gt;much more sophisticated approach&lt;/a&gt; is necessary.
-What&amp;#8217;s rather more pertinent is that this simple code &lt;em&gt;doesn&amp;#8217;t parse&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;  File &amp;quot;foo.py&amp;quot;, line 42
-    getattr(str, &amp;#39;casefold&amp;#39;, None) or lambda s: s.lower()
-                                      ^
-SyntaxError: invalid syntax
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It&amp;#8217;s not very often that you would produce a &lt;code&gt;SyntaxError&lt;/code&gt; with code
-that looks perfectly valid to most pythonistas.
-The &lt;a href="http://xion.org.pl/2012/04/16/the-infernal-comma/"&gt;last time I had it happen&lt;/a&gt;,
-the explanation was rather surprising and not exactly trivial to come&amp;nbsp;by.&lt;/p&gt;
-&lt;p&gt;Fortunately, there is always one place
-where we can definitively resolve any syntactic confusion.
-That place is the &lt;a href="https://docs.python.org/2/reference/grammar.html"&gt;full grammar specification&lt;/a&gt;
-of the Python&amp;nbsp;language.&lt;/p&gt;
-&lt;p&gt;It may be a little intimidating at first,
-especially if you&amp;#8217;re not familiar with the &lt;a href="https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_Form"&gt;&lt;span class="caps"&gt;ENBF&lt;/span&gt; notation&lt;/a&gt; it uses.
-All the Python&amp;#8217;s language constructs are there, though,
-so the &lt;code&gt;SyntaxError&lt;/code&gt; from above should be traceable to a some rule of the grammar&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h4&gt;The&amp;nbsp;culprit&lt;/h4&gt;
-&lt;p&gt;And indeed, the offending bit is right&amp;nbsp;here:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;or_test: and_test (&amp;#39;or&amp;#39; and_test)*
-and_test: not_test (&amp;#39;and&amp;#39; not_test)*
-...
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It says, essentially, that Python defines the &lt;code&gt;or&lt;/code&gt; expression (&lt;code&gt;or_test&lt;/code&gt;)
-as a sequence of &lt;code&gt;and&lt;/code&gt; expressions (&lt;code&gt;and_test&lt;/code&gt;).
-If you follow the syntax definition further, however,
-you will notice that &lt;code&gt;and_test&lt;/code&gt; expands to
-comparisons (&lt;code&gt;a &amp;lt; b&lt;/code&gt;, etc.),
-arithmetic expressions (&lt;code&gt;x + y&lt;/code&gt;, etc.),
-&lt;code&gt;list&lt;/code&gt; &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; &lt;code&gt;dict&lt;/code&gt; constructors (&lt;code&gt;[foo, bar]&lt;/code&gt;, etc.),
-and finally to &lt;em&gt;atoms&lt;/em&gt; such as literal strings and&amp;nbsp;numbers.&lt;/p&gt;
-&lt;p&gt;What you &lt;em&gt;won&amp;#8217;t&lt;/em&gt; see along the way are lambda&amp;nbsp;definitions:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;lambdef: &amp;#39;lambda&amp;#39; [varargslist] &amp;#39;:&amp;#39; test
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;In fact, the branch to allow them is directly above the &lt;code&gt;or_test&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;test: or_test [&amp;#39;if&amp;#39; or_test &amp;#39;else&amp;#39; test] | lambdef
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;As you can see, the rule puts lambdas at the same syntactical level as conditional expressions
-(&lt;code&gt;x if a else b&lt;/code&gt;), which is &lt;em&gt;very&lt;/em&gt; high up.
-The only thing you can do with a &lt;code&gt;lambda&lt;/code&gt; to make a larger expression
-is to add a &lt;code&gt;yield&lt;/code&gt; keyword before it&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;, or follow it with a comma to create a tuple&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;You cannot, however, pass it as an argument to a binary operator,
-even if it otherwise makes sense and even &lt;em&gt;looks&lt;/em&gt; unambiguous.
-This is also why the nonsensical expressions such as this&amp;nbsp;one:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="k"&gt;lambda&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;will fail not with &lt;code&gt;TypeError&lt;/code&gt;, but also with &lt;code&gt;SyntaxError&lt;/code&gt;,
-as they won&amp;#8217;t even be&amp;nbsp;evaluated.&lt;/p&gt;
-&lt;h4&gt;More&amp;nbsp;parentheses&lt;/h4&gt;
-&lt;p&gt;Savvy readers may have noticed that this phenomenon is very much reminiscent
-of the issue of &lt;em&gt;operator precedence&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Indeed, in Python and in many other languages it is the grammar
-that ultimately specifies the order of operations.
-It does so simply by defining how expressions can be&amp;nbsp;constructed.&lt;/p&gt;
-&lt;p&gt;Addition, for example, will be of lower priority than multiplication
-simply because a &lt;em&gt;sum&lt;/em&gt; is said to comprise of terms that are &lt;em&gt;products&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;arith_expr: term ((&amp;#39;+&amp;#39;|&amp;#39;-&amp;#39;) term)*
-term: factor ((&amp;#39;*&amp;#39;|&amp;#39;/&amp;#39;|&amp;#39;%&amp;#39;|&amp;#39;//&amp;#39;) factor)*
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This makes operator precedence a syntactic feature,
-and its resolution is baked into the language parser and handled implicitly&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;We know, however, that precedence can be worked around where necessary
-by enclosing the operator and its arguments in a pair of parenthesis.
-On the syntax level, this means creating an entirely new, top-level&amp;nbsp;expression:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;atom: &amp;#39;(&amp;#39; [yield_expr|testlist_comp] &amp;#39;)&amp;#39; |  # parenthesized expression
-       &amp;#39;[&amp;#39; [listmaker] &amp;#39;]&amp;#39; |
-       &amp;#39;{&amp;#39; [dictorsetmaker] &amp;#39;}&amp;#39; |
-       &amp;#39;`&amp;#39; testlist1 &amp;#39;`&amp;#39; |
-       NAME | NUMBER | STRING+)
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;There, it is again possible to use even the highest-level constructs,
-including also the silly stuff such as trying to add a number to a&amp;nbsp;function:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="mi"&gt;1&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;lambda&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This expression will now parse correctly,
- and produce &lt;code&gt;TypeError&lt;/code&gt; as&amp;nbsp;expected.&lt;/p&gt;
-&lt;p&gt;In the end, the resolution of our initial dilemma is therefore rather&amp;nbsp;simple:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;casefold&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;getattr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;casefold&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;lambda&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lower&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Such rules are sometimes called &lt;em&gt;productions&lt;/em&gt; of the grammar,
-a &lt;a href="https://en.wikipedia.org/wiki/Production_%28computer_science%29"&gt;term&lt;/a&gt; from computational linguistics.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Yes, &lt;code&gt;yield foo&lt;/code&gt; is an expression.
-Its result is the value sent &lt;em&gt;to&lt;/em&gt; the generator by outer code via the &lt;code&gt;send&lt;/code&gt; method.
-Since most generators are used as iterables, typically no values are passed this way
-so the result of a &lt;code&gt;yield&lt;/code&gt; expression is &lt;code&gt;None&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;There are also a legacy corner cases of lambdas in &lt;code&gt;list&lt;/code&gt;/&lt;code&gt;dict&lt;/code&gt;/etc. comprehensions,
-but those only apply under Python 2.x.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:4"&gt;
-&lt;p&gt;This saying, there are languages where the order is resolved at later stage,
-after the expressions have already been parsed. They usually allow the programmer
-to change the precedence of their own operators,
-as it&amp;#8217;s the case in &lt;a href="https://www.haskell.org/tutorial/functions.html#sect3.2.2"&gt;Haskell&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="syntax"></category><category term="lambda"></category><category term="operators"></category></entry></feed>
+&lt;p&gt;though ideally, you&amp;#8217;d want to pack the prefixes in a tuple to begin&amp;nbsp;with.&lt;/p&gt;</summary><category term="Python"></category><category term="strings"></category><category term="tuples"></category></entry></feed>
