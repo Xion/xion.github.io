@@ -247,31 +247,7 @@ Here, <code>load</code> receives the <code>onload</code> callback which we event
 <code>parentRequire</code> argument; this is simply a regular <code>require</code> function that&#8217;d normally be used if our plugin didn&#8217;t
 stand in the&nbsp;way.</p>
 <p>Those two are the most important pieces of the puzzle, which overall has a pretty succinct&nbsp;solution:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25</pre></div></td><td class="code"><div class="highlight"><pre><span class="cm">/**</span>
+<div class="highlight"><pre><span class="cm">/**</span>
 <span class="cm"> * RequireJS plugin for optional module loading.</span>
 <span class="cm"> */</span>
 <span class="nx">define</span> <span class="p">([],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
@@ -297,7 +273,7 @@ stand in the&nbsp;way.</p>
 
 <span class="p">});</span>
 </pre></div>
-</td></tr></table>
+
 
 <p>The logic here is as&nbsp;follows:</p>
 <ul>
