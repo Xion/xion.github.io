@@ -63,6 +63,212 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-unit-test-placement.html#rust-unit-test-placement">Better location for unit tests in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Fri 06 January 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/unit-tests.html">unit tests</a>,      <a href="http://xion.io/tag/testing.html">testing</a>,      <a href="http://xion.io/tag/modules.html">modules</a>      &#8226; <a href="http://xion.io/post/code/rust-unit-test-placement.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>For a unit test to be comprehensive,
+it must often access some private symbols from the module it&nbsp;checks.</p>
+<p>In Rust, this is permitted for submodules:
+they can freely refer to anything defined &#8220;upwards&#8221; in the module hierarchy.
+The only requirement is that they import it explicitly by name,
+using statements such as <code>use super::foo</code>.</p>
+<p>To illustrate this,
+here&#8217;s an <a href="https://is.gd/xTgUEd">example</a>
+of a ridiculously well-factored <a href="http://wiki.c2.com/?FizzBuzzTest">FizzBuzz</a>
+along with its accompanying unit&nbsp;test:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">borrow</span><span class="o">::</span><span class="n">Cow</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">fizzbuzz</span><span class="p">(</span><span class="n">n</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mf">1.</span><span class="p">.</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="n">i</span><span class="p">));</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Cow</span><span class="o">&lt;</span><span class="nl">&#39;static</span><span class="p">,</span><span class="w"> </span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">by3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">by5</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">by3</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">by5</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;FizzBuzz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">by3</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Fizz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">by5</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Buzz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">else</span><span class="w">          </span><span class="p">{</span><span class="w"> </span><span class="n">format</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">).</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">tests</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kn">use</span><span class="w"> </span><span class="n">super</span><span class="o">::</span><span class="n">fizzbuzz_string</span><span class="p">;</span><span class="w"></span>
+
+<span class="w">    </span><span class="cp">#[test]</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">single_numbers</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;2&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">2</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Fizz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Buzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;7&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">7</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Fizz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">9</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Buzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;FizzBuzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">15</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="err">#</span><span class="w"> </span><span class="n">etc</span><span class="p">.</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The internal function, as shown above, can be imported and verified independently
+of the <code>pub</code>lic one.
+This is done through a <code>#[test]</code> procedure in an inline&nbsp;submodule.</p>
+<p>Such factorization and granular testing is commonplace,
+especially when the public <span class="caps">API</span> may cause unwanted side effects,
+such as printing stuff to stdout&nbsp;here.</p>
+<h4>The issue of&nbsp;length</h4>
+<p>But if you are like me and prefer your modules to be short and sweet,
+you may feel justifiably concerned about this <em>inline</em> submodule&nbsp;business.</p>
+<p>In the toy example above,
+tests have already taken at least as many lines as the actual code.
+Real world usually <a href="https://github.com/Geal/nom/blob/80a1deab58d1faf41c05a5d741d9e3f51bde3a55/src/nom.rs#L599">matches</a> this ratio.
+A module with a couple hundred lines of regular code starts
+to be measured in <a href="https://en.wikipedia.org/wiki/Source_lines_of_code#Related_terms">KLOCs</a>
+if we also include its&nbsp;tests.</p>
+<p>While this could be taken as a strong hint to split things up,
+it can just as easily disincentivize testing&nbsp;instead.</p>
+<p>The obvious solution is to move those tests somewhere else.
+What is not so evident is how to preserve this crucial module-submodule relation,
+enabling us to write comprehensive tests in the first&nbsp;place.</p>
+<h4>Looking for&nbsp;inspiration</h4>
+<p>I must quickly disappoint anyone who would like to round up all their unit tests
+and sequester them in some distant <em>tests/</em> directory.
+Such layout is reserved for
+<a href="https://doc.rust-lang.org/book/testing.html#the-tests-directory">crate-level</a> (&#8220;integration&#8221;) tests.
+Unit tests, on the other hand, are predestined to live among production code<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>So let&#8217;s at least relocate them to separate&nbsp;files.</p>
+<p>To make this goal more concrete,
+we will try to emulate the project layout described in
+<a href="https://google.github.io/styleguide/cppguide.html#File_Names">Google&#8217;s C++ style guide</a>.
+By this convention, a conceptual &#8220;module&#8221; or &#8220;unit&#8221; consists of the following&nbsp;files:</p>
+<ul>
+<li><em>foo.h</em></li>
+<li><em>foo.cc</em></li>
+<li><em>foo_test.cc</em></li>
+</ul>
+<p>Translating this to Rust, we&nbsp;get:</p>
+<ul>
+<li><em>foo.rs</em></li>
+<li><em>foo_test.rs</em></li>
+</ul>
+<p>The first one is obviously our production code.
+The second file, <em>foo_test.rs</em>,
+contains all the tests we would previously put in the <code>mod tests { }</code> construct.</p>
+<p>Seems pretty clean and straightforward, right?
+Unfortunately, Rust will not accept this setup without some&nbsp;convincing.</p>
+<h4>Family&nbsp;problems</h4>
+<p>To understand why,
+recall that the mere presence of some <em>.rs</em> files
+is not enough for the Rust compiler to care.
+If we want them picked up and included in the project,
+we also need to add some <em>module declarations</em>&nbsp;first.</p>
+<p>In other words, there must also be a <em>mod.rs</em> file in this directory,
+containing at the very least the following&nbsp;content:</p>
+<div class="highlight"><pre><span class="c1">// (mod.rs)</span>
+
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo</span><span class="p">;</span><span class="w"></span>
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Now it should be clearer that something is&nbsp;wrong.</p>
+<p>We got two modules here, but they are <em>siblings</em>.
+Both <code>foo</code> and <code>foo_test</code> are on the same level,
+children of whatever parent module contains them both.
+More to the point, it&#8217;s <code>foo_test</code> that&#8217;s not a child module of <code>foo</code>,
+meaning it can only see the <code>pub</code>lic symbols of the&nbsp;latter.</p>
+<p>This is not quite enough to write a proper unit test.
+It definitely isn&#8217;t for our initial FizzBuzz example,
+because the <code>fizzbuzz_string</code> function cannot even be&nbsp;imported!</p>
+<h4>Existential&nbsp;crises</h4>
+<p>Okay, so how about we move the <code>mod foo_test;</code> declaration to <em>foo.rs</em>?
+This should be enough to establish the proper hierarchy.
+After all, this is how the module tree is
+<a href="https://doc.rust-lang.org/book/crates-and-modules.html#defining-modules">normally reconstructed</a>:
+from the appropriate placement of the <code>mod</code> statements.</p>
+<p>So, here we&nbsp;go:</p>
+<div class="highlight"><pre><span class="c1">// (foo.rs)</span>
+
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>error: cannot declare a new module at this location
+  --&gt; src/parent/foo.rs:4:5
+   |
+ 4 | mod foo_test;
+</pre></div>
+
+
+<p>&#8230;Really?</p>
+<p>Well, yes. A declaration like this simply isn&#8217;t allowed.
+The reason for this is actually much less arbitrary than the error message would&nbsp;indicate.</p>
+<p>To put it bluntly, <code>foo_test</code> simply cannot <em>exist</em> if it&#8217;s introduced there.
+To deliver on its declaration promise,
+the submodule would have to reside <em>within <code>foo</code> itself</em>.
+But of course, <em>foo.rs</em> is just a file, so this setup is evidently&nbsp;impossible.</p>
+<p>All in all, Rust seems to be looking for our module in all the wrong&nbsp;places.</p>
+<p>Perhaps we can just <em>tell it</em> where it should be going&nbsp;instead?&#8230;</p>
+<h4>The right&nbsp;path</h4>
+<p>Enter the <code>#[path]</code> attribute,
+which fulfills this exact&nbsp;purpose:</p>
+<div class="highlight"><pre><span class="c1">// (foo.rs)</span>
+
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="cp">#[path = </span><span class="s">&quot;./foo_test.rs&quot;</span><span class="cp">]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p><code>#[path]</code> tells the Rust compiler where to look for the <code>mod</code>ule it is attached to.
+Its argument is relative to the location of the outer module (like <code>foo</code> here),
+and can be either a single file, or a directory with <em>mod.rs</em>.</p>
+<p>Conceptually, this is similar to a custom <code>ClassLoader</code> in Java,
+or the common <a href="http://xion.org.pl/2012/05/06/hacking-python-imports/"><code>sys.path</code> hacks</a> in Python.
+Unlike those two languages, however,
+the <code>#[path]</code> attribute is only relevant at compile&nbsp;time.</p>
+<p>Additionally, and somewhat <a href="https://github.com/rust-lang/rust/issues/13156">confusingly</a>,
+<code>#[path]</code> can also be applied <em>retroactively</em>
+to a module that the compiler has already located.
+In such case, it will affect <a href="https://doc.rust-lang.org/reference.html#modules">the lookup of any child modules</a>
+by making <code>rustc</code> search for them in the new&nbsp;location.</p>
+<hr />
+<p>With <code>#[path]</code> handy,
+it is therefore possible to implement custom layouts
+of regular source modules and test&nbsp;files.</p>
+<p>But like with every tool that can be used to defy conventions,
+it should be used with the appropriate care.
+While a straightforward and self-documenting approach described here
+is unlikely to raise any eyebrows,
+rewriting module paths willy-nilly is most certainly a bad&nbsp;idea.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Okay, technically it <em>is</em> possible to completely isolate them,
+essentially by abusing the approach I describe later in this post.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-unit-test-placement.html#rust-unit-test-placement">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-all-wild-imports.html#python-all-wild-imports">__all__ and wild imports in&nbsp;Python</a></h2>
     <p>
       Posted on Mon 26 December 2016 in <a href="http://xion.io/category/code.html">Code</a>

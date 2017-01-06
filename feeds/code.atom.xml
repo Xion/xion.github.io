@@ -1,5 +1,196 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-12-26T20:51:00+01:00</updated><entry><title>__all__ and wild imports in Python</title><link href="http://xion.io/post/code/python-all-wild-imports.html" rel="alternate"></link><updated>2016-12-26T20:51:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-26:post/code/python-all-wild-imports.html</id><summary type="html">&lt;p&gt;An often misunderstood piece of Python import machinery is the &lt;code&gt;__all__&lt;/code&gt; attribute.
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-01-06T18:53:00+01:00</updated><entry><title>Better location for unit tests in Rust</title><link href="http://xion.io/post/code/rust-unit-test-placement.html" rel="alternate"></link><updated>2017-01-06T18:53:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-01-06:post/code/rust-unit-test-placement.html</id><summary type="html">&lt;p&gt;For a unit test to be comprehensive,
+it must often access some private symbols from the module it&amp;nbsp;checks.&lt;/p&gt;
+&lt;p&gt;In Rust, this is permitted for submodules:
+they can freely refer to anything defined &amp;#8220;upwards&amp;#8221; in the module hierarchy.
+The only requirement is that they import it explicitly by name,
+using statements such as &lt;code&gt;use super::foo&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;To illustrate this,
+here&amp;#8217;s an &lt;a href="https://is.gd/xTgUEd"&gt;example&lt;/a&gt;
+of a ridiculously well-factored &lt;a href="http://wiki.c2.com/?FizzBuzzTest"&gt;FizzBuzz&lt;/a&gt;
+along with its accompanying unit&amp;nbsp;test:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;borrow&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Cow&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mf"&gt;1.&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Cow&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nl"&gt;&amp;#39;static&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;by3&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;%&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;==&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;by5&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;%&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;==&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;by3&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;by5&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;FizzBuzz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;by3&lt;/span&gt;&lt;span class="w"&gt;   &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Fizz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;by5&lt;/span&gt;&lt;span class="w"&gt;   &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Buzz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+
+&lt;span class="cp"&gt;#[cfg(test)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;mod&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tests&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;super&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="cp"&gt;#[test]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;single_numbers&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;1&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;2&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Fizz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Buzz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;7&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;7&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Fizz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;9&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Buzz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;FizzBuzz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fizzbuzz_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;15&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="err"&gt;#&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;etc&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The internal function, as shown above, can be imported and verified independently
+of the &lt;code&gt;pub&lt;/code&gt;lic one.
+This is done through a &lt;code&gt;#[test]&lt;/code&gt; procedure in an inline&amp;nbsp;submodule.&lt;/p&gt;
+&lt;p&gt;Such factorization and granular testing is commonplace,
+especially when the public &lt;span class="caps"&gt;API&lt;/span&gt; may cause unwanted side effects,
+such as printing stuff to stdout&amp;nbsp;here.&lt;/p&gt;
+&lt;h4&gt;The issue of&amp;nbsp;length&lt;/h4&gt;
+&lt;p&gt;But if you are like me and prefer your modules to be short and sweet,
+you may feel justifiably concerned about this &lt;em&gt;inline&lt;/em&gt; submodule&amp;nbsp;business.&lt;/p&gt;
+&lt;p&gt;In the toy example above,
+tests have already taken at least as many lines as the actual code.
+Real world usually &lt;a href="https://github.com/Geal/nom/blob/80a1deab58d1faf41c05a5d741d9e3f51bde3a55/src/nom.rs#L599"&gt;matches&lt;/a&gt; this ratio.
+A module with a couple hundred lines of regular code starts
+to be measured in &lt;a href="https://en.wikipedia.org/wiki/Source_lines_of_code#Related_terms"&gt;KLOCs&lt;/a&gt;
+if we also include its&amp;nbsp;tests.&lt;/p&gt;
+&lt;p&gt;While this could be taken as a strong hint to split things up,
+it can just as easily disincentivize testing&amp;nbsp;instead.&lt;/p&gt;
+&lt;p&gt;The obvious solution is to move those tests somewhere else.
+What is not so evident is how to preserve this crucial module-submodule relation,
+enabling us to write comprehensive tests in the first&amp;nbsp;place.&lt;/p&gt;
+&lt;h4&gt;Looking for&amp;nbsp;inspiration&lt;/h4&gt;
+&lt;p&gt;I must quickly disappoint anyone who would like to round up all their unit tests
+and sequester them in some distant &lt;em&gt;tests/&lt;/em&gt; directory.
+Such layout is reserved for
+&lt;a href="https://doc.rust-lang.org/book/testing.html#the-tests-directory"&gt;crate-level&lt;/a&gt; (&amp;#8220;integration&amp;#8221;) tests.
+Unit tests, on the other hand, are predestined to live among production code&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;So let&amp;#8217;s at least relocate them to separate&amp;nbsp;files.&lt;/p&gt;
+&lt;p&gt;To make this goal more concrete,
+we will try to emulate the project layout described in
+&lt;a href="https://google.github.io/styleguide/cppguide.html#File_Names"&gt;Google&amp;#8217;s C++ style guide&lt;/a&gt;.
+By this convention, a conceptual &amp;#8220;module&amp;#8221; or &amp;#8220;unit&amp;#8221; consists of the following&amp;nbsp;files:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;foo.h&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;foo.cc&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;foo_test.cc&lt;/em&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Translating this to Rust, we&amp;nbsp;get:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;em&gt;foo.rs&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;foo_test.rs&lt;/em&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The first one is obviously our production code.
+The second file, &lt;em&gt;foo_test.rs&lt;/em&gt;,
+contains all the tests we would previously put in the &lt;code&gt;mod tests { }&lt;/code&gt; construct.&lt;/p&gt;
+&lt;p&gt;Seems pretty clean and straightforward, right?
+Unfortunately, Rust will not accept this setup without some&amp;nbsp;convincing.&lt;/p&gt;
+&lt;h4&gt;Family&amp;nbsp;problems&lt;/h4&gt;
+&lt;p&gt;To understand why,
+recall that the mere presence of some &lt;em&gt;.rs&lt;/em&gt; files
+is not enough for the Rust compiler to care.
+If we want them picked up and included in the project,
+we also need to add some &lt;em&gt;module declarations&lt;/em&gt;&amp;nbsp;first.&lt;/p&gt;
+&lt;p&gt;In other words, there must also be a &lt;em&gt;mod.rs&lt;/em&gt; file in this directory,
+containing at the very least the following&amp;nbsp;content:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// (mod.rs)&lt;/span&gt;
+
+&lt;span class="kn"&gt;mod&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;foo&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="cp"&gt;#[cfg(test)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;mod&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;foo_test&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Now it should be clearer that something is&amp;nbsp;wrong.&lt;/p&gt;
+&lt;p&gt;We got two modules here, but they are &lt;em&gt;siblings&lt;/em&gt;.
+Both &lt;code&gt;foo&lt;/code&gt; and &lt;code&gt;foo_test&lt;/code&gt; are on the same level,
+children of whatever parent module contains them both.
+More to the point, it&amp;#8217;s &lt;code&gt;foo_test&lt;/code&gt; that&amp;#8217;s not a child module of &lt;code&gt;foo&lt;/code&gt;,
+meaning it can only see the &lt;code&gt;pub&lt;/code&gt;lic symbols of the&amp;nbsp;latter.&lt;/p&gt;
+&lt;p&gt;This is not quite enough to write a proper unit test.
+It definitely isn&amp;#8217;t for our initial FizzBuzz example,
+because the &lt;code&gt;fizzbuzz_string&lt;/code&gt; function cannot even be&amp;nbsp;imported!&lt;/p&gt;
+&lt;h4&gt;Existential&amp;nbsp;crises&lt;/h4&gt;
+&lt;p&gt;Okay, so how about we move the &lt;code&gt;mod foo_test;&lt;/code&gt; declaration to &lt;em&gt;foo.rs&lt;/em&gt;?
+This should be enough to establish the proper hierarchy.
+After all, this is how the module tree is
+&lt;a href="https://doc.rust-lang.org/book/crates-and-modules.html#defining-modules"&gt;normally reconstructed&lt;/a&gt;:
+from the appropriate placement of the &lt;code&gt;mod&lt;/code&gt; statements.&lt;/p&gt;
+&lt;p&gt;So, here we&amp;nbsp;go:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// (foo.rs)&lt;/span&gt;
+
+&lt;span class="cp"&gt;#[cfg(test)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;mod&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;foo_test&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;!-- --&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;error: cannot declare a new module at this location
+  --&amp;gt; src/parent/foo.rs:4:5
+   |
+ 4 | mod foo_test;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&amp;#8230;Really?&lt;/p&gt;
+&lt;p&gt;Well, yes. A declaration like this simply isn&amp;#8217;t allowed.
+The reason for this is actually much less arbitrary than the error message would&amp;nbsp;indicate.&lt;/p&gt;
+&lt;p&gt;To put it bluntly, &lt;code&gt;foo_test&lt;/code&gt; simply cannot &lt;em&gt;exist&lt;/em&gt; if it&amp;#8217;s introduced there.
+To deliver on its declaration promise,
+the submodule would have to reside &lt;em&gt;within &lt;code&gt;foo&lt;/code&gt; itself&lt;/em&gt;.
+But of course, &lt;em&gt;foo.rs&lt;/em&gt; is just a file, so this setup is evidently&amp;nbsp;impossible.&lt;/p&gt;
+&lt;p&gt;All in all, Rust seems to be looking for our module in all the wrong&amp;nbsp;places.&lt;/p&gt;
+&lt;p&gt;Perhaps we can just &lt;em&gt;tell it&lt;/em&gt; where it should be going&amp;nbsp;instead?&amp;#8230;&lt;/p&gt;
+&lt;h4&gt;The right&amp;nbsp;path&lt;/h4&gt;
+&lt;p&gt;Enter the &lt;code&gt;#[path]&lt;/code&gt; attribute,
+which fulfills this exact&amp;nbsp;purpose:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// (foo.rs)&lt;/span&gt;
+
+&lt;span class="cp"&gt;#[cfg(test)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="cp"&gt;#[path = &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;./foo_test.rs&amp;quot;&lt;/span&gt;&lt;span class="cp"&gt;]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;mod&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;foo_test&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;code&gt;#[path]&lt;/code&gt; tells the Rust compiler where to look for the &lt;code&gt;mod&lt;/code&gt;ule it is attached to.
+Its argument is relative to the location of the outer module (like &lt;code&gt;foo&lt;/code&gt; here),
+and can be either a single file, or a directory with &lt;em&gt;mod.rs&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Conceptually, this is similar to a custom &lt;code&gt;ClassLoader&lt;/code&gt; in Java,
+or the common &lt;a href="http://xion.org.pl/2012/05/06/hacking-python-imports/"&gt;&lt;code&gt;sys.path&lt;/code&gt; hacks&lt;/a&gt; in Python.
+Unlike those two languages, however,
+the &lt;code&gt;#[path]&lt;/code&gt; attribute is only relevant at compile&amp;nbsp;time.&lt;/p&gt;
+&lt;p&gt;Additionally, and somewhat &lt;a href="https://github.com/rust-lang/rust/issues/13156"&gt;confusingly&lt;/a&gt;,
+&lt;code&gt;#[path]&lt;/code&gt; can also be applied &lt;em&gt;retroactively&lt;/em&gt;
+to a module that the compiler has already located.
+In such case, it will affect &lt;a href="https://doc.rust-lang.org/reference.html#modules"&gt;the lookup of any child modules&lt;/a&gt;
+by making &lt;code&gt;rustc&lt;/code&gt; search for them in the new&amp;nbsp;location.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;With &lt;code&gt;#[path]&lt;/code&gt; handy,
+it is therefore possible to implement custom layouts
+of regular source modules and test&amp;nbsp;files.&lt;/p&gt;
+&lt;p&gt;But like with every tool that can be used to defy conventions,
+it should be used with the appropriate care.
+While a straightforward and self-documenting approach described here
+is unlikely to raise any eyebrows,
+rewriting module paths willy-nilly is most certainly a bad&amp;nbsp;idea.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Okay, technically it &lt;em&gt;is&lt;/em&gt; possible to completely isolate them,
+essentially by abusing the approach I describe later in this post.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="unit tests"></category><category term="testing"></category><category term="modules"></category></entry><entry><title>__all__ and wild imports in Python</title><link href="http://xion.io/post/code/python-all-wild-imports.html" rel="alternate"></link><updated>2016-12-26T20:51:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-26:post/code/python-all-wild-imports.html</id><summary type="html">&lt;p&gt;An often misunderstood piece of Python import machinery is the &lt;code&gt;__all__&lt;/code&gt; attribute.
 While it is completely &lt;em&gt;optional&lt;/em&gt;,
 it&amp;#8217;s common to see modules with the &lt;code&gt;__all__&lt;/code&gt; list populated&amp;nbsp;explicitly:&lt;/p&gt;
 &lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;__all__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;Foo&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;bar&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
@@ -1244,67 +1435,4 @@ as its first parameter. It means that the entire object for which this method is
 making it technically just a convention. It is followed consistently at least in the standard library, though.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="loops"></category><category term="iterators"></category></entry><entry><title>str.startswith() with tuple argument</title><link href="http://xion.io/post/code/python-startswith-tuple.html" rel="alternate"></link><updated>2016-06-28T09:56:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-06-28:post/code/python-startswith-tuple.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a little known trick that&amp;#8217;s applicable to Python&amp;#8217;s &lt;a href="http://bugs.python.org/issue1491485"&gt;&lt;code&gt;startswith&lt;/code&gt;&lt;/a&gt;
-and &lt;a href="http://bugs.python.org/issue1491485"&gt;&lt;code&gt;endswith&lt;/code&gt;&lt;/a&gt; methods of &lt;code&gt;str&lt;/code&gt; (and &lt;code&gt;unicode&lt;/code&gt;).&lt;/p&gt;
-&lt;p&gt;Suppose you&amp;#8217;re checking whether a string starts with some&amp;nbsp;prefix:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="c"&gt;# totally an URL&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;You eventually add more possible prefixes (or suffixes) to your&amp;nbsp;condition:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;or&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Later on you notice the repetition and refactor it into something like&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;SCHEMES&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;ftp://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;git://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;SCHEMES&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;or if you&amp;#8217;re feeling extra&amp;nbsp;functional:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;any&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;SCHEMES&lt;/span&gt;&lt;span class="p"&gt;)):&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Turns out, however, that &lt;code&gt;startswith&lt;/code&gt; (and &lt;code&gt;endswith&lt;/code&gt;) support this use case natively.
-Rather than passing just a single string as the argument,
-you can provide a &lt;em&gt;tuple&lt;/em&gt; of strings&amp;nbsp;instead:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;SCHEMES&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;https://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;ftp://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;git://&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;SCHEMES&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Either method will then check the original string against every element of the passed tuple.
-Both will only return &lt;code&gt;True&lt;/code&gt; if &lt;em&gt;at least one&lt;/em&gt; of the strings is recognized as prefix/suffix.
-As you can see, that&amp;#8217;s exactly what we would previously do with &lt;code&gt;any&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Somewhat surprisingly, however, the feature only works for actual &lt;em&gt;tuples&lt;/em&gt;.
-Trying to pass a seemingly equivalent iterable &amp;#8212; a &lt;code&gt;list&lt;/code&gt; or &lt;code&gt;set&lt;/code&gt;, for example &amp;#8212;
-will be met with interpreter&amp;#8217;s&amp;nbsp;refusal:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;is_jpeg&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;filename&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;endswith&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;.jpg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;.jpeg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;!----&gt;
-
-&lt;div class="highlight"&gt;&lt;pre&gt;TypeError: endswith first arg must be str, unicode, or tuple, not list
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;If you dig into it, there doesn&amp;#8217;t seem to be a compelling reason for this behavior.
-The &lt;a href="http://bugs.python.org/issue1491485"&gt;relevant feature request&lt;/a&gt; talks about
-consistency with the built-in &lt;code&gt;isinstance&lt;/code&gt; function,
-but it&amp;#8217;s quite difficult to see how those two are&amp;nbsp;related.&lt;/p&gt;
-&lt;p&gt;In any case, this can be worked around without much&amp;nbsp;difficulty:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;PROTOCOLS&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;http&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;https&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;ftp&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;git&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;startswith&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;tuple&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;://&amp;#39;&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;p&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;PROTOCOLS&lt;/span&gt;&lt;span class="p"&gt;)):&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;though ideally, you&amp;#8217;d want to pack the prefixes in a tuple to begin&amp;nbsp;with.&lt;/p&gt;</summary><category term="Python"></category><category term="strings"></category><category term="tuples"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="loops"></category><category term="iterators"></category></entry></feed>

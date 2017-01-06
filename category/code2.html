@@ -63,6 +63,161 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
+    <p>
+      Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/syntax.html">syntax</a>,      <a href="http://xion.io/tag/lambda.html">lambda</a>,      <a href="http://xion.io/tag/operators.html">operators</a>      &#8226; <a href="http://xion.io/post/code/python-or-lambda.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>a.k.a. Curious Facts about Python&nbsp;Syntax</em></p>
+<p>In Python 3.3,
+a new method has been <a href="https://docs.python.org/3/library/stdtypes.html#str.casefold">added</a> to the <code>str</code> type: <code>casefold</code>.
+Its purpose is to return a &#8220;sanitized&#8221; version of the string
+that&#8217;s suitable for case-insensitive comparison.
+For older versions of Python,
+an alternative way that&#8217;s <em>mostly</em> compatible is to use the <code>str.lower</code> method,
+which simply changes all letters in the string to&nbsp;lowercase.</p>
+<h4>Syntax is&nbsp;hard</h4>
+<p>Easy enough for a compatibility shim, right?
+That&#8217;s exactly what I thought when I came up with&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Let&#8217;s ignore for a moment
+the fact that for a correct handling of <code>unicode</code> objects in Python 2,
+a <a href="http://stackoverflow.com/a/32838944/434799">much more sophisticated approach</a> is necessary.
+What&#8217;s rather more pertinent is that this simple code <em>doesn&#8217;t parse</em>:</p>
+<div class="highlight"><pre>  File &quot;foo.py&quot;, line 42
+    getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower()
+                                      ^
+SyntaxError: invalid syntax
+</pre></div>
+
+
+<p>It&#8217;s not very often that you would produce a <code>SyntaxError</code> with code
+that looks perfectly valid to most pythonistas.
+The <a href="http://xion.org.pl/2012/04/16/the-infernal-comma/">last time I had it happen</a>,
+the explanation was rather surprising and not exactly trivial to come&nbsp;by.</p>
+<p>Fortunately, there is always one place
+where we can definitively resolve any syntactic confusion.
+That place is the <a href="https://docs.python.org/2/reference/grammar.html">full grammar specification</a>
+of the Python&nbsp;language.</p>
+<p>It may be a little intimidating at first,
+especially if you&#8217;re not familiar with the <a href="https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_Form"><span class="caps">ENBF</span> notation</a> it uses.
+All the Python&#8217;s language constructs are there, though,
+so the <code>SyntaxError</code> from above should be traceable to a some rule of the grammar<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>The&nbsp;culprit</h4>
+<p>And indeed, the offending bit is right&nbsp;here:</p>
+<div class="highlight"><pre>or_test: and_test (&#39;or&#39; and_test)*
+and_test: not_test (&#39;and&#39; not_test)*
+...
+</pre></div>
+
+
+<p>It says, essentially, that Python defines the <code>or</code> expression (<code>or_test</code>)
+as a sequence of <code>and</code> expressions (<code>and_test</code>).
+If you follow the syntax definition further, however,
+you will notice that <code>and_test</code> expands to
+comparisons (<code>a &lt; b</code>, etc.),
+arithmetic expressions (<code>x + y</code>, etc.),
+<code>list</code> <span class="amp">&amp;</span> <code>dict</code> constructors (<code>[foo, bar]</code>, etc.),
+and finally to <em>atoms</em> such as literal strings and&nbsp;numbers.</p>
+<p>What you <em>won&#8217;t</em> see along the way are lambda&nbsp;definitions:</p>
+<div class="highlight"><pre>lambdef: &#39;lambda&#39; [varargslist] &#39;:&#39; test
+</pre></div>
+
+
+<p>In fact, the branch to allow them is directly above the <code>or_test</code>:</p>
+<div class="highlight"><pre>test: or_test [&#39;if&#39; or_test &#39;else&#39; test] | lambdef
+</pre></div>
+
+
+<p>As you can see, the rule puts lambdas at the same syntactical level as conditional expressions
+(<code>x if a else b</code>), which is <em>very</em> high up.
+The only thing you can do with a <code>lambda</code> to make a larger expression
+is to add a <code>yield</code> keyword before it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>, or follow it with a comma to create a tuple<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>You cannot, however, pass it as an argument to a binary operator,
+even if it otherwise makes sense and even <em>looks</em> unambiguous.
+This is also why the nonsensical expressions such as this&nbsp;one:</p>
+<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span>
+</pre></div>
+
+
+<p>will fail not with <code>TypeError</code>, but also with <code>SyntaxError</code>,
+as they won&#8217;t even be&nbsp;evaluated.</p>
+<h4>More&nbsp;parentheses</h4>
+<p>Savvy readers may have noticed that this phenomenon is very much reminiscent
+of the issue of <em>operator precedence</em>.</p>
+<p>Indeed, in Python and in many other languages it is the grammar
+that ultimately specifies the order of operations.
+It does so simply by defining how expressions can be&nbsp;constructed.</p>
+<p>Addition, for example, will be of lower priority than multiplication
+simply because a <em>sum</em> is said to comprise of terms that are <em>products</em>:</p>
+<div class="highlight"><pre>arith_expr: term ((&#39;+&#39;|&#39;-&#39;) term)*
+term: factor ((&#39;*&#39;|&#39;/&#39;|&#39;%&#39;|&#39;//&#39;) factor)*
+</pre></div>
+
+
+<p>This makes operator precedence a syntactic feature,
+and its resolution is baked into the language parser and handled implicitly<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.</p>
+<p>We know, however, that precedence can be worked around where necessary
+by enclosing the operator and its arguments in a pair of parenthesis.
+On the syntax level, this means creating an entirely new, top-level&nbsp;expression:</p>
+<div class="highlight"><pre>atom: &#39;(&#39; [yield_expr|testlist_comp] &#39;)&#39; |  # parenthesized expression
+       &#39;[&#39; [listmaker] &#39;]&#39; |
+       &#39;{&#39; [dictorsetmaker] &#39;}&#39; |
+       &#39;`&#39; testlist1 &#39;`&#39; |
+       NAME | NUMBER | STRING+)
+</pre></div>
+
+
+<p>There, it is again possible to use even the highest-level constructs,
+including also the silly stuff such as trying to add a number to a&nbsp;function:</p>
+<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This expression will now parse correctly,
+ and produce <code>TypeError</code> as&nbsp;expected.</p>
+<p>In the end, the resolution of our initial dilemma is therefore rather&nbsp;simple:</p>
+<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+</pre></div>
+
+
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Such rules are sometimes called <em>productions</em> of the grammar,
+a <a href="https://en.wikipedia.org/wiki/Production_%28computer_science%29">term</a> from computational linguistics.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Yes, <code>yield foo</code> is an expression.
+Its result is the value sent <em>to</em> the generator by outer code via the <code>send</code> method.
+Since most generators are used as iterables, typically no values are passed this way
+so the result of a <code>yield</code> expression is <code>None</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>There are also a legacy corner cases of lambdas in <code>list</code>/<code>dict</code>/etc. comprehensions,
+but those only apply under Python 2.x.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>This saying, there are languages where the order is resolved at later stage,
+after the expressions have already been parsed. They usually allow the programmer
+to change the precedence of their own operators,
+as it&#8217;s the case in <a href="https://www.haskell.org/tutorial/functions.html#sect3.2.2">Haskell</a>.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-patterns-ref.html#rust-patterns-ref">& vs. ref in Rust&nbsp;patterns</a></h2>
     <p>
       Posted on Thu 02 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1169,94 +1324,6 @@ instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnr
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Retry idiom for&nbsp;Python</a></h2>
-    <p>
-      Posted on Wed 27 January 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/exceptions.html">exceptions</a>,      <a href="http://xion.io/tag/else.html">else</a>      &#8226; <a href="http://xion.io/post/code/python-retry-idiom.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>A relatively little known feature of Python is the <code>else</code> block for control flow statements other than <code>if</code>.</p>
-<p>If you haven&#8217;t heard about it before, you can provide such a block for both <code>while</code> and <code>for</code> loops,
-as well as any variant of the <code>try</code> statement, Its functionality is roughly analogous in both&nbsp;cases:</p>
-<ul>
-<li>in loops, the <code>else</code> block is executed if the loop didn&#8217;t exit abnormally (i.e. with <code>break</code>)</li>
-<li>in <code>try</code> constructs, the <code>else</code> block runs if <em>no</em> exception&nbsp;happened</li>
-</ul>
-<p>Likely because of the unique semantics that don&#8217;t exist in other languages, neither of those constructs has been seen much
-in real world code. Recently, however, I&#8217;ve found they can be combined into a very pythonic pattern
-that&#8217;s also quite&nbsp;useful.</p>
-<h4>The&nbsp;trick</h4>
-<p>Say you have a task that won&#8217;t always succeed. Perhaps it&#8217;s a request made to a janky server, or other network operartion
-that&#8217;s prone to timeouts. Since failures are likely to be transient, you&#8217;d like to retry it several more times before
-giving up&nbsp;permanently.</p>
-<p>With <code>try</code>/<code>except</code> block, you can detect those half-expected failures. With a simple loop, you can repeat the attempt
-for as many times as you deem feasible. Combined, they can solve the problem rather&nbsp;neatly:</p>
-<div class="highlight"><pre><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">MAX_RETRIES</span><span class="p">):</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="c"># ... do stuff ...</span>
-    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
-        <span class="c"># ... log it, sleep, etc. ...</span>
-        <span class="k">continue</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">break</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
-</pre></div>
-
-
-<h4>But&nbsp;why?</h4>
-<p>What&#8217;s the deal with the <code>else</code>s here, though? Are they both&nbsp;necessary?</p>
-<p>The simple answer is of course no. <code>else</code> after either a loop or  <code>try</code>/<code>except</code> block is always a <em>syntactic sugar</em>.
-Any code that contains it can be transformed into an equivalent snippet that utilizes different techniques to achieve
-the same&nbsp;effect.</p>
-<p>But this view isn&#8217;t very useful, for many of the essential features in any programming languages can be dismissed
-as superfluous using this reasoning. The real question is whether the above idiom is more readable and understandable
-than the&nbsp;alternatives.</p>
-<p>To that, I posit, the answer is: <em>absolutely</em>.</p>
-<h4>Desugaring</h4>
-<p>Without the double <code>else</code>, this example would have to be written in a considerably more convoluted&nbsp;way:</p>
-<div class="highlight"><pre><span class="n">retries</span> <span class="o">=</span> <span class="n">MAX_RETRIES</span>
-<span class="k">while</span> <span class="n">retries</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="c"># ... do stuff ...</span>
-        <span class="k">break</span>
-    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
-        <span class="c"># ... log it, sleep, etc. ...</span>
-        <span class="n">retries</span> <span class="o">-=</span> <span class="mi">1</span>
-<span class="k">if</span> <span class="n">retries</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
-</pre></div>
-
-
-<p>Although at first glance the difference may be minuscule, this version adds significant extra busywork the programmer
-has to pay careful attention&nbsp;to:</p>
-<ul>
-<li>The <code>retries</code> variable now has to be explicit, because the final conditional statement must look at its&nbsp;value.</li>
-<li>We can&#8217;t use a <code>for</code> loop anymore (e.g. <code>for retries in range(MAX_RETRIES)</code>), because we wouldn&#8217;t distinguish the
-&#8220;success at last try&#8221; and &#8220;retry limit exceeded&#8221; cases: they&#8217;d both result in <code>retries</code> equal to <code>MAX_RETRIES - 1</code>
-after the loop<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</li>
-<li>As a result, we have to remember to decrement the counter ourselves upon an&nbsp;error.</li>
-</ul>
-<p>Additionally, the <code>break</code> is easy to miss amidst the actual logic within the <code>try</code> block, both for developer
-who writes the code and for any subsequent readers. An alternative is to move it outside of the <code>try</code>/<code>except</code> clause,
-but that in turn reintroduces <code>continue</code> into the <code>except</code> branch and further complicates the whole&nbsp;flow.</p>
-<p>In short, the desugared version is more error-prone (all those off-by-ones!) and also quite&nbsp;inscrutable.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Or to <code>1</code>, if we count from <code>MAX_RETRIES</code> down to zero.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Continue reading</a>
   </div>
 </article>
 

@@ -63,6 +63,83 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">str.startswith() with tuple&nbsp;argument</a></h2>
+    <p>
+      Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/tuples.html">tuples</a>      &#8226; <a href="http://xion.io/post/code/python-startswith-tuple.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a little known trick that&#8217;s applicable to Python&#8217;s <a href="http://bugs.python.org/issue1491485"><code>startswith</code></a>
+and <a href="http://bugs.python.org/issue1491485"><code>endswith</code></a> methods of <code>str</code> (and <code>unicode</code>).</p>
+<p>Suppose you&#8217;re checking whether a string starts with some&nbsp;prefix:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">):</span>
+    <span class="c"># totally an URL</span>
+</pre></div>
+
+
+<p>You eventually add more possible prefixes (or suffixes) to your&nbsp;condition:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;https://&#39;</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Later on you notice the repetition and refactor it into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">]</span>
+<span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or if you&#8217;re feeling extra&nbsp;functional:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">,</span> <span class="n">SCHEMES</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Turns out, however, that <code>startswith</code> (and <code>endswith</code>) support this use case natively.
+Rather than passing just a single string as the argument,
+you can provide a <em>tuple</em> of strings&nbsp;instead:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Either method will then check the original string against every element of the passed tuple.
+Both will only return <code>True</code> if <em>at least one</em> of the strings is recognized as prefix/suffix.
+As you can see, that&#8217;s exactly what we would previously do with <code>any</code>.</p>
+<p>Somewhat surprisingly, however, the feature only works for actual <em>tuples</em>.
+Trying to pass a seemingly equivalent iterable &#8212; a <code>list</code> or <code>set</code>, for example &#8212;
+will be met with interpreter&#8217;s&nbsp;refusal:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">is_jpeg</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">([</span><span class="s">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s">&#39;.jpeg&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre>TypeError: endswith first arg must be str, unicode, or tuple, not list
+</pre></div>
+
+
+<p>If you dig into it, there doesn&#8217;t seem to be a compelling reason for this behavior.
+The <a href="http://bugs.python.org/issue1491485">relevant feature request</a> talks about
+consistency with the built-in <code>isinstance</code> function,
+but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
+<p>In any case, this can be worked around without much&nbsp;difficulty:</p>
+<div class="highlight"><pre><span class="n">PROTOCOLS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http&#39;</span><span class="p">,</span> <span class="s">&#39;https&#39;</span><span class="p">,</span> <span class="s">&#39;ftp&#39;</span><span class="p">,</span> <span class="s">&#39;git&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="s">&#39;://&#39;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">PROTOCOLS</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
     <p>
       Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1058,65 +1135,6 @@ for <code>xargs</code> in those cases, .e.g: <code>xargs -I^ find ^ -name '__mai
 </li>
 </ol>
 </div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/package-management.html#package-management">Package managers&#8217; appreciation&nbsp;day</a></h2>
-    <p>
-      Posted on Sat 26 March 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/package-manager.html">package manager</a>,      <a href="http://xion.io/tag/nodejs.html">node.js</a>,      <a href="http://xion.io/tag/npm.html">npm</a>,      <a href="http://xion.io/tag/c.html">C++</a>      &#8226; <a href="http://xion.io/post/programming/package-management.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>By now you have probably heard about the infamous &#8220;npm-gate&#8221; that swept through the developer community
-over the last week. It has been
-<a href="https://medium.com/@azerbike/i-ve-just-liberated-my-modules-9045c06be67c#.hp7p1aolc">brought up</a>,
-<a href="https://medium.com/@mproberts/a-discussion-about-the-breaking-of-the-internet-3d4d2a83aa4d#.rlnh89inz">discussed</a>,
-<a href="http://www.theregister.co.uk/2016/03/23/npm_left_pad_chaos/">covered</a>,
-<a href="http://www.haneycodes.net/npm-left-pad-have-we-forgotten-how-to-program">meta-discussed</a>,
-<a href="http://left-pad.io/">satirized</a>, and even featured by
-<a href="http://www.businessinsider.com/npm-left-pad-controversy-explained-2016-3">some mainstream media</a>.
-Evidently the nerds have managed to stir up some serious trouble again, and it only took them 11 lines of
-that strange thing they call&nbsp;&#8220;code&#8221;.</p>
-<h4>No good things in small&nbsp;packages</h4>
-<p>When looking for a culprit, the one party that everyone pounced on immediately was of course
-the <a href="http://npmjs.com">npm</a> itself. With its myriad of packages that could each fit in a tweet, it invites to create
-the exact house of cards we&#8217;ve seen&nbsp;collapse.</p>
-<p>This serves as a good wake-up call, of course. But it also compels to throw the baby out with the bathwater,
-and draw a conclusion that may be a little too far-fetched. Like perhaps declaring the <em>entire idea</em> of
-managing dependencies &#8220;the npm way&#8221; suspect. If packages tend to degenerate into something as ludicrous as
-<a href="https://www.npmjs.com/package/isarray"><code>isArray</code></a> &#8212; to say nothing of
-<a href="https://www.npmjs.com/package/left-pad"><code>left-pad</code></a>, which started the whole debacle &#8212; then maybe this approach
-to software reusability has simply bankrupted&nbsp;itself?</p>
-<h4>A world without&nbsp;*pm</h4>
-<p>I&#8217;m right away responding to that with a resounding &#8220;No!&#8221;. Package management as a concept is not responsible for
-the poor decision making of one specific developer collective. And anyone who might think tools like npm do more
-harm than good I ask: have you recently written any&nbsp;C++?</p>
-<p>See, C++ is the odd one among languages that at least pretend to be keeping up with the times. It doesn&#8217;t present
-a package management story at all. That&#8217;s right &#8212; the C++ &#8220;ecosystem&#8221;, as it stands now,&nbsp;has:</p>
-<ul>
-<li>no package&nbsp;manager</li>
-<li>no repository of&nbsp;packages</li>
-<li>no unified way of managing&nbsp;dependencies</li>
-<li>no way to isolate development environments of different projects from one&nbsp;another</li>
-</ul>
-<p>Adding any kind of third-party dependency to a C++ project &#8212; especially a portable one, which is allegedly one of C++&#8217;s
-strengths &#8212; is a considerable pain, even when it doesn&#8217;t require any additional libraries by itself. And environment
-isolation? Some people are using Linux containers (!) for this, which is like dealing with a mosquito by shooting it
-with a&nbsp;howitzer.</p>
-<p style="text-align: center">
-    <img src="http://xion.io/images/carl-sagan.jpg" alt="Billions upon billions of lines"></br>
-    <small>To build a C++ binary, you must first build the userspace.</small>
-</p>
-
-<p>But hey, at least they can use <code>apt-get</code>,&nbsp;right?&#8230;</p>
-<p>So, string padding incidents aside, package managers are absolutely <em>essential</em>. Sure, we can and should discuss
-the merits of their particular flavors and implementation details &#8212;like whether it&#8217;s prudent to allow &#8220;delisting&#8221;
-of packages. As a whole, however, package managers deserve recognition as a crucial part of modern language tooling
-that we cannot really do&nbsp;without.</p>
   </div>
 </article>
 
