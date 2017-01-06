@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="For a unit test to be comprehensive, it must often access some private symbols from the module it checks. In Rust, this is permitted for submodules: they can freely refer to anything defined “upwards” in the module hierarchy. The only requirement is that they import it explicitly by name, using statements such as use super::foo. To illustrate this, here’s an example of a ridiculously well-factored FizzBuzz along with its accompanying unit test: use std::borrow::Cow; pub fn fizzbuzz(n: u32) { for i in 1..n+1 { println!(&#34;{}&#34;, fizzbuzz_string(i)); } } fn fizzbuzz_string(i: u32) -&gt; Cow&lt;&#39;static, str&gt; { let by3 = i % 3 == 0; let by5 = i % 5 == 0; if by3 &amp;&amp; by5 { &#34;FizzBuzz&#34;.into() } else if by3 { &#34;Fizz&#34;.into() } else if by5 { &#34;Buzz&#34;.into() } else { format!(&#34;{}&#34;, i).into() } } #[cfg(test)] mod tests { use super::fizzbuzz_string; #[test] fn single_numbers() { assert_eq!(&#34;1&#34;, fizzbuzz_string(1)); assert_eq!(&#34;2&#34;, fizzbuzz_string(2)); assert_eq!(&#34;Fizz&#34;, fizzbuzz_string(3)); assert_eq!(&#34;Buzz&#34;, fizzbuzz_string(5)); assert_eq!(&#34;7&#34;, fizzbuzz_string(7)); assert_eq!(&#34;Fizz&#34;, fizzbuzz_string(9)); assert_eq!(&#34;Buzz&#34;, fizzbuzz_string(10)); assert_eq!(&#34;FizzBuzz&#34;, fizzbuzz_string(15)); # etc. } } The internal function, as shown above, can be imported and verified independently of the public one. This is done through a #[test] procedure in an inline submodule. Such factorization and granular testing is commonplace, especially when the public API may cause unwanted side effects, such as printing stuff to stdout here. The issue of length But if you are like me and prefer your modules to be short and sweet, you may feel justifiably concerned about this inline submodule business. In the toy example above, tests have already taken at least as many lines as the actual code. Real world usually matches this ratio. A module with a couple hundred lines of regular code starts to be measured in KLOCs if we also include its tests. While this could be taken as a strong hint to split things up, it can just as easily disincentivize testing instead. The obvious solution is to move those tests somewhere else. What is not so evident is how to preserve this crucial module-submodule relation, enabling us to write comprehensive tests in the first place. Looking for inspiration I must quickly disappoint anyone who would like to round up all their unit tests and sequester them in some distant tests/ directory. Such layout is reserved for crate-level (“integration”) tests. Unit tests, on the other hand, are predestined to live among production code1. So let’s at least relocate them to separate files. To make this goal more concrete, we will try to emulate the project layout described in Google’s C++ style guide. By this convention, a conceptual “module” or “unit” consists of the following files: foo.h foo.cc foo_test.cc Translating this to Rust, we get: foo.rs foo_test.rs The first one is obviously our production code. The second file, foo_test.rs, contains all the tests we would previously put in the mod tests { } construct. Seems pretty clean and straightforward, right? Unfortunately, Rust will not accept this setup without some convincing. Family problems To understand why, recall that the mere presence of some .rs files is not enough for the Rust compiler to care. If we want them picked up and included in the project, we also need to add some module declarations first. In other words, there must also be a mod.rs file in this directory, containing at the very least the following content: // (mod.rs) mod foo; #[cfg(test)] mod foo_test; Now it should be clearer that something is wrong. We got two modules here, but they are siblings. Both foo and foo_test are on the same level, children of whatever parent module contains them both. More to the point, it’s foo_test that’s not a child module of foo, meaning it can only see the public symbols of the latter. This is not quite enough to write a proper unit test. It definitely isn’t for our initial FizzBuzz example, because the fizzbuzz_string function cannot even be imported! Existential crises Okay, so how about we move the mod foo_test; declaration to foo.rs? This should be enough to establish the proper hierarchy. After all, this is how the module tree is normally reconstructed: from the appropriate placement of the mod statements. So, here we go: // (foo.rs) #[cfg(test)] mod foo_test; error: cannot declare a new module at this location --&gt; src/parent/foo.rs:4:5 | 4 | mod foo_test; …Really? Well, yes. A declaration like this simply isn’t allowed. The reason for this is actually much less arbitrary than the error message would indicate. To put it bluntly, foo_test simply cannot exist if it’s introduced there. To deliver on its declaration promise, the submodule would have to reside within foo itself. But of course, foo.rs is just a file, so this setup is evidently impossible. All in all, Rust seems to be looking for our module in all the wrong places. Perhaps we can just tell it where it should be going instead?… The right path Enter the #[path] attribute, which fulfills this exact purpose: // (foo.rs) #[cfg(test)] #[path = &#34;./foo_test.rs&#34;] mod foo_test; #[path] tells the Rust compiler where to look for the module it is attached to. Its argument is relative to the location of the outer module (like foo here), and can be either a single file, or a directory with mod.rs. Conceptually, this is similar to a custom ClassLoader in Java, or the common sys.path hacks in Python. Unlike those two languages, however, the #[path] attribute is only relevant at compile time. Additionally, and somewhat confusingly, #[path] can also be applied retroactively to a module that the compiler has already located. In such case, it will affect the lookup of any child modules by making rustc search for them in the new location. With #[path] handy, it is therefore possible to implement custom layouts of regular source modules and test files. But like with every tool that can be used to defy conventions, it should be used with the appropriate care. While a straightforward and self-documenting approach described here is unlikely to raise any eyebrows, rewriting module paths willy-nilly is most certainly a bad idea. Okay, technically it is possible to completely isolate them, essentially by abusing the approach I describe later in this post. ↩" />
+<meta name="keywords" content="Rust, unit tests, testing, modules">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Better location for unit tests in Rust"/>
+<meta property="og:description" content="For a unit test to be comprehensive, it must often access some private symbols from the module it checks. In Rust, this is permitted for submodules: they can freely refer to anything defined “upwards” in the module hierarchy. The only requirement is that they import it explicitly by name, using statements such as use super::foo. To illustrate this, here’s an example of a ridiculously well-factored FizzBuzz along with its accompanying unit test: use std::borrow::Cow; pub fn fizzbuzz(n: u32) { for i in 1..n+1 { println!(&#34;{}&#34;, fizzbuzz_string(i)); } } fn fizzbuzz_string(i: u32) -&gt; Cow&lt;&#39;static, str&gt; { let by3 = i % 3 == 0; let by5 = i % 5 == 0; if by3 &amp;&amp; by5 { &#34;FizzBuzz&#34;.into() } else if by3 { &#34;Fizz&#34;.into() } else if by5 { &#34;Buzz&#34;.into() } else { format!(&#34;{}&#34;, i).into() } } #[cfg(test)] mod tests { use super::fizzbuzz_string; #[test] fn single_numbers() { assert_eq!(&#34;1&#34;, fizzbuzz_string(1)); assert_eq!(&#34;2&#34;, fizzbuzz_string(2)); assert_eq!(&#34;Fizz&#34;, fizzbuzz_string(3)); assert_eq!(&#34;Buzz&#34;, fizzbuzz_string(5)); assert_eq!(&#34;7&#34;, fizzbuzz_string(7)); assert_eq!(&#34;Fizz&#34;, fizzbuzz_string(9)); assert_eq!(&#34;Buzz&#34;, fizzbuzz_string(10)); assert_eq!(&#34;FizzBuzz&#34;, fizzbuzz_string(15)); # etc. } } The internal function, as shown above, can be imported and verified independently of the public one. This is done through a #[test] procedure in an inline submodule. Such factorization and granular testing is commonplace, especially when the public API may cause unwanted side effects, such as printing stuff to stdout here. The issue of length But if you are like me and prefer your modules to be short and sweet, you may feel justifiably concerned about this inline submodule business. In the toy example above, tests have already taken at least as many lines as the actual code. Real world usually matches this ratio. A module with a couple hundred lines of regular code starts to be measured in KLOCs if we also include its tests. While this could be taken as a strong hint to split things up, it can just as easily disincentivize testing instead. The obvious solution is to move those tests somewhere else. What is not so evident is how to preserve this crucial module-submodule relation, enabling us to write comprehensive tests in the first place. Looking for inspiration I must quickly disappoint anyone who would like to round up all their unit tests and sequester them in some distant tests/ directory. Such layout is reserved for crate-level (“integration”) tests. Unit tests, on the other hand, are predestined to live among production code1. So let’s at least relocate them to separate files. To make this goal more concrete, we will try to emulate the project layout described in Google’s C++ style guide. By this convention, a conceptual “module” or “unit” consists of the following files: foo.h foo.cc foo_test.cc Translating this to Rust, we get: foo.rs foo_test.rs The first one is obviously our production code. The second file, foo_test.rs, contains all the tests we would previously put in the mod tests { } construct. Seems pretty clean and straightforward, right? Unfortunately, Rust will not accept this setup without some convincing. Family problems To understand why, recall that the mere presence of some .rs files is not enough for the Rust compiler to care. If we want them picked up and included in the project, we also need to add some module declarations first. In other words, there must also be a mod.rs file in this directory, containing at the very least the following content: // (mod.rs) mod foo; #[cfg(test)] mod foo_test; Now it should be clearer that something is wrong. We got two modules here, but they are siblings. Both foo and foo_test are on the same level, children of whatever parent module contains them both. More to the point, it’s foo_test that’s not a child module of foo, meaning it can only see the public symbols of the latter. This is not quite enough to write a proper unit test. It definitely isn’t for our initial FizzBuzz example, because the fizzbuzz_string function cannot even be imported! Existential crises Okay, so how about we move the mod foo_test; declaration to foo.rs? This should be enough to establish the proper hierarchy. After all, this is how the module tree is normally reconstructed: from the appropriate placement of the mod statements. So, here we go: // (foo.rs) #[cfg(test)] mod foo_test; error: cannot declare a new module at this location --&gt; src/parent/foo.rs:4:5 | 4 | mod foo_test; …Really? Well, yes. A declaration like this simply isn’t allowed. The reason for this is actually much less arbitrary than the error message would indicate. To put it bluntly, foo_test simply cannot exist if it’s introduced there. To deliver on its declaration promise, the submodule would have to reside within foo itself. But of course, foo.rs is just a file, so this setup is evidently impossible. All in all, Rust seems to be looking for our module in all the wrong places. Perhaps we can just tell it where it should be going instead?… The right path Enter the #[path] attribute, which fulfills this exact purpose: // (foo.rs) #[cfg(test)] #[path = &#34;./foo_test.rs&#34;] mod foo_test; #[path] tells the Rust compiler where to look for the module it is attached to. Its argument is relative to the location of the outer module (like foo here), and can be either a single file, or a directory with mod.rs. Conceptually, this is similar to a custom ClassLoader in Java, or the common sys.path hacks in Python. Unlike those two languages, however, the #[path] attribute is only relevant at compile time. Additionally, and somewhat confusingly, #[path] can also be applied retroactively to a module that the compiler has already located. In such case, it will affect the lookup of any child modules by making rustc search for them in the new location. With #[path] handy, it is therefore possible to implement custom layouts of regular source modules and test files. But like with every tool that can be used to defy conventions, it should be used with the appropriate care. While a straightforward and self-documenting approach described here is unlikely to raise any eyebrows, rewriting module paths willy-nilly is most certainly a bad idea. Okay, technically it is possible to completely isolate them, essentially by abusing the approach I describe later in this post. ↩"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/drafts/rust-unit-test-placement.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2017-01-06 18:53:00+01:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Rust"/>
+<meta property="article:tag" content="unit tests"/>
+<meta property="article:tag" content="testing"/>
+<meta property="article:tag" content="modules"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Better location for unit tests in Rust</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="rust-unit-test-placement">Better location for unit tests in&nbsp;Rust</h1>
+    <p>Posted on Fri 06 January 2017 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>For a unit test to be comprehensive,
+it must often access some private symbols from the module it&nbsp;checks.</p>
+<p>In Rust, this is permitted for submodules:
+they can freely refer to anything defined &#8220;upwards&#8221; in the module hierarchy.
+The only requirement is that they import it explicitly by name,
+using statements such as <code>use super::foo</code>.</p>
+<p>To illustrate this,
+here&#8217;s an <a href="https://is.gd/xTgUEd">example</a>
+of a ridiculously well-factored <a href="http://wiki.c2.com/?FizzBuzzTest">FizzBuzz</a>
+along with its accompanying unit&nbsp;test:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">borrow</span><span class="o">::</span><span class="n">Cow</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">fizzbuzz</span><span class="p">(</span><span class="n">n</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mf">1.</span><span class="p">.</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="n">i</span><span class="p">));</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Cow</span><span class="o">&lt;</span><span class="nl">&#39;static</span><span class="p">,</span><span class="w"> </span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">by3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">by5</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">by3</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">by5</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;FizzBuzz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">by3</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Fizz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">by5</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Buzz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">else</span><span class="w">          </span><span class="p">{</span><span class="w"> </span><span class="n">format</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">).</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">tests</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kn">use</span><span class="w"> </span><span class="n">super</span><span class="o">::</span><span class="n">fizzbuzz_string</span><span class="p">;</span><span class="w"></span>
+
+<span class="w">    </span><span class="cp">#[test]</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">single_numbers</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;2&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">2</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Fizz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Buzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;7&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">7</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Fizz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">9</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Buzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;FizzBuzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">15</span><span class="p">));</span><span class="w"></span>
+<span class="w">        </span><span class="err">#</span><span class="w"> </span><span class="n">etc</span><span class="p">.</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The internal function, as shown above, can be imported and verified independently
+of the <code>pub</code>lic one.
+This is done through a <code>#[test]</code> procedure in an inline&nbsp;submodule.</p>
+<p>Such factorization and granular testing is commonplace,
+especially when the public <span class="caps">API</span> may cause unwanted side effects,
+such as printing stuff to stdout&nbsp;here.</p>
+<h4>The issue of&nbsp;length</h4>
+<p>But if you are like me and prefer your modules to be short and sweet,
+you may feel justifiably concerned about this <em>inline</em> submodule&nbsp;business.</p>
+<p>In the toy example above,
+tests have already taken at least as many lines as the actual code.
+Real world usually <a href="https://github.com/Geal/nom/blob/80a1deab58d1faf41c05a5d741d9e3f51bde3a55/src/nom.rs#L599">matches</a> this ratio.
+A module with a couple hundred lines of regular code starts
+to be measured in <a href="https://en.wikipedia.org/wiki/Source_lines_of_code#Related_terms">KLOCs</a>
+if we also include its&nbsp;tests.</p>
+<p>While this could be taken as a strong hint to split things up,
+it can just as easily disincentivize testing&nbsp;instead.</p>
+<p>The obvious solution is to move those tests somewhere else.
+What is not so evident is how to preserve this crucial module-submodule relation,
+enabling us to write comprehensive tests in the first&nbsp;place.</p>
+<h4>Looking for&nbsp;inspiration</h4>
+<p>I must quickly disappoint anyone who would like to round up all their unit tests
+and sequester them in some distant <em>tests/</em> directory.
+Such layout is reserved for
+<a href="https://doc.rust-lang.org/book/testing.html#the-tests-directory">crate-level</a> (&#8220;integration&#8221;) tests.
+Unit tests, on the other hand, are predestined to live among production code<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>So let&#8217;s at least relocate them to separate&nbsp;files.</p>
+<p>To make this goal more concrete,
+we will try to emulate the project layout described in
+<a href="https://google.github.io/styleguide/cppguide.html#File_Names">Google&#8217;s C++ style guide</a>.
+By this convention, a conceptual &#8220;module&#8221; or &#8220;unit&#8221; consists of the following&nbsp;files:</p>
+<ul>
+<li><em>foo.h</em></li>
+<li><em>foo.cc</em></li>
+<li><em>foo_test.cc</em></li>
+</ul>
+<p>Translating this to Rust, we&nbsp;get:</p>
+<ul>
+<li><em>foo.rs</em></li>
+<li><em>foo_test.rs</em></li>
+</ul>
+<p>The first one is obviously our production code.
+The second file, <em>foo_test.rs</em>,
+contains all the tests we would previously put in the <code>mod tests { }</code> construct.</p>
+<p>Seems pretty clean and straightforward, right?
+Unfortunately, Rust will not accept this setup without some&nbsp;convincing.</p>
+<h4>Family&nbsp;problems</h4>
+<p>To understand why,
+recall that the mere presence of some <em>.rs</em> files
+is not enough for the Rust compiler to care.
+If we want them picked up and included in the project,
+we also need to add some <em>module declarations</em>&nbsp;first.</p>
+<p>In other words, there must also be a <em>mod.rs</em> file in this directory,
+containing at the very least the following&nbsp;content:</p>
+<div class="highlight"><pre><span class="c1">// (mod.rs)</span>
+
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo</span><span class="p">;</span><span class="w"></span>
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Now it should be clearer that something is&nbsp;wrong.</p>
+<p>We got two modules here, but they are <em>siblings</em>.
+Both <code>foo</code> and <code>foo_test</code> are on the same level,
+children of whatever parent module contains them both.
+More to the point, it&#8217;s <code>foo_test</code> that&#8217;s not a child module of <code>foo</code>,
+meaning it can only see the <code>pub</code>lic symbols of the&nbsp;latter.</p>
+<p>This is not quite enough to write a proper unit test.
+It definitely isn&#8217;t for our initial FizzBuzz example,
+because the <code>fizzbuzz_string</code> function cannot even be&nbsp;imported!</p>
+<h4>Existential&nbsp;crises</h4>
+<p>Okay, so how about we move the <code>mod foo_test;</code> declaration to <em>foo.rs</em>?
+This should be enough to establish the proper hierarchy.
+After all, this is how the module tree is
+<a href="https://doc.rust-lang.org/book/crates-and-modules.html#defining-modules">normally reconstructed</a>:
+from the appropriate placement of the <code>mod</code> statements.</p>
+<p>So, here we&nbsp;go:</p>
+<div class="highlight"><pre><span class="c1">// (foo.rs)</span>
+
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>error: cannot declare a new module at this location
+  --&gt; src/parent/foo.rs:4:5
+   |
+ 4 | mod foo_test;
+</pre></div>
+
+
+<p>&#8230;Really?</p>
+<p>Well, yes. A declaration like this simply isn&#8217;t allowed.
+The reason for this is actually much less arbitrary than the error message would&nbsp;indicate.</p>
+<p>To put it bluntly, <code>foo_test</code> simply cannot <em>exist</em> if it&#8217;s introduced there.
+To deliver on its declaration promise,
+the submodule would have to reside <em>within <code>foo</code> itself</em>.
+But of course, <em>foo.rs</em> is just a file, so this setup is evidently&nbsp;impossible.</p>
+<p>All in all, Rust seems to be looking for our module in all the wrong&nbsp;places.</p>
+<p>Perhaps we can just <em>tell it</em> where it should be going&nbsp;instead?&#8230;</p>
+<h4>The right&nbsp;path</h4>
+<p>Enter the <code>#[path]</code> attribute,
+which fulfills this exact&nbsp;purpose:</p>
+<div class="highlight"><pre><span class="c1">// (foo.rs)</span>
+
+<span class="cp">#[cfg(test)]</span><span class="w"></span>
+<span class="cp">#[path = </span><span class="s">&quot;./foo_test.rs&quot;</span><span class="cp">]</span><span class="w"></span>
+<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p><code>#[path]</code> tells the Rust compiler where to look for the <code>mod</code>ule it is attached to.
+Its argument is relative to the location of the outer module (like <code>foo</code> here),
+and can be either a single file, or a directory with <em>mod.rs</em>.</p>
+<p>Conceptually, this is similar to a custom <code>ClassLoader</code> in Java,
+or the common <a href="http://xion.org.pl/2012/05/06/hacking-python-imports/"><code>sys.path</code> hacks</a> in Python.
+Unlike those two languages, however,
+the <code>#[path]</code> attribute is only relevant at compile&nbsp;time.</p>
+<p>Additionally, and somewhat <a href="https://github.com/rust-lang/rust/issues/13156">confusingly</a>,
+<code>#[path]</code> can also be applied <em>retroactively</em>
+to a module that the compiler has already located.
+In such case, it will affect <a href="https://doc.rust-lang.org/reference.html#modules">the lookup of any child modules</a>
+by making <code>rustc</code> search for them in the new&nbsp;location.</p>
+<hr />
+<p>With <code>#[path]</code> handy,
+it is therefore possible to implement custom layouts
+of regular source modules and test&nbsp;files.</p>
+<p>But like with every tool that can be used to defy conventions,
+it should be used with the appropriate care.
+While a straightforward and self-documenting approach described here
+is unlikely to raise any eyebrows,
+rewriting module paths willy-nilly is most certainly a bad&nbsp;idea.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Okay, technically it <em>is</em> possible to completely isolate them,
+essentially by abusing the approach I describe later in this post.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/rust.html">Rust</a>
+      <a href="http://xion.io/tag/unit-tests.html">unit tests</a>
+      <a href="http://xion.io/tag/testing.html">testing</a>
+      <a href="http://xion.io/tag/modules.html">modules</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Better location for unit tests in Rust",
+  "headline": "Better location for unit tests in Rust",
+  "datePublished": "2017-01-06 18:53:00+01:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/drafts/rust-unit-test-placement.html",
+  "description": "For a unit test to be comprehensive, it must often access some private symbols from the module it checks. In Rust, this is permitted for submodules: they can freely refer to anything defined “upwards” in the module hierarchy. The only requirement is that they import it explicitly by name, using statements such as use super::foo. To illustrate this, here’s an example of a ridiculously well-factored FizzBuzz along with its accompanying unit test: use std::borrow::Cow; pub fn fizzbuzz(n: u32) { for i in 1..n+1 { println!("{}", fizzbuzz_string(i)); } } fn fizzbuzz_string(i: u32) -> Cow<'static, str> { let by3 = i % 3 == 0; let by5 = i % 5 == 0; if by3 && by5 { "FizzBuzz".into() } else if by3 { "Fizz".into() } else if by5 { "Buzz".into() } else { format!("{}", i).into() } } #[cfg(test)] mod tests { use super::fizzbuzz_string; #[test] fn single_numbers() { assert_eq!("1", fizzbuzz_string(1)); assert_eq!("2", fizzbuzz_string(2)); assert_eq!("Fizz", fizzbuzz_string(3)); assert_eq!("Buzz", fizzbuzz_string(5)); assert_eq!("7", fizzbuzz_string(7)); assert_eq!("Fizz", fizzbuzz_string(9)); assert_eq!("Buzz", fizzbuzz_string(10)); assert_eq!("FizzBuzz", fizzbuzz_string(15)); # etc. } } The internal function, as shown above, can be imported and verified independently of the public one. This is done through a #[test] procedure in an inline submodule. Such factorization and granular testing is commonplace, especially when the public API may cause unwanted side effects, such as printing stuff to stdout here. The issue of length But if you are like me and prefer your modules to be short and sweet, you may feel justifiably concerned about this inline submodule business. In the toy example above, tests have already taken at least as many lines as the actual code. Real world usually matches this ratio. A module with a couple hundred lines of regular code starts to be measured in KLOCs if we also include its tests. While this could be taken as a strong hint to split things up, it can just as easily disincentivize testing instead. The obvious solution is to move those tests somewhere else. What is not so evident is how to preserve this crucial module-submodule relation, enabling us to write comprehensive tests in the first place. Looking for inspiration I must quickly disappoint anyone who would like to round up all their unit tests and sequester them in some distant tests/ directory. Such layout is reserved for crate-level (“integration”) tests. Unit tests, on the other hand, are predestined to live among production code1. So let’s at least relocate them to separate files. To make this goal more concrete, we will try to emulate the project layout described in Google’s C++ style guide. By this convention, a conceptual “module” or “unit” consists of the following files: foo.h foo.cc foo_test.cc Translating this to Rust, we get: foo.rs foo_test.rs The first one is obviously our production code. The second file, foo_test.rs, contains all the tests we would previously put in the mod tests { } construct. Seems pretty clean and straightforward, right? Unfortunately, Rust will not accept this setup without some convincing. Family problems To understand why, recall that the mere presence of some .rs files is not enough for the Rust compiler to care. If we want them picked up and included in the project, we also need to add some module declarations first. In other words, there must also be a mod.rs file in this directory, containing at the very least the following content: // (mod.rs) mod foo; #[cfg(test)] mod foo_test; Now it should be clearer that something is wrong. We got two modules here, but they are siblings. Both foo and foo_test are on the same level, children of whatever parent module contains them both. More to the point, it’s foo_test that’s not a child module of foo, meaning it can only see the public symbols of the latter. This is not quite enough to write a proper unit test. It definitely isn’t for our initial FizzBuzz example, because the fizzbuzz_string function cannot even be imported! Existential crises Okay, so how about we move the mod foo_test; declaration to foo.rs? This should be enough to establish the proper hierarchy. After all, this is how the module tree is normally reconstructed: from the appropriate placement of the mod statements. So, here we go: // (foo.rs) #[cfg(test)] mod foo_test; error: cannot declare a new module at this location --> src/parent/foo.rs:4:5 | 4 | mod foo_test; …Really? Well, yes. A declaration like this simply isn’t allowed. The reason for this is actually much less arbitrary than the error message would indicate. To put it bluntly, foo_test simply cannot exist if it’s introduced there. To deliver on its declaration promise, the submodule would have to reside within foo itself. But of course, foo.rs is just a file, so this setup is evidently impossible. All in all, Rust seems to be looking for our module in all the wrong places. Perhaps we can just tell it where it should be going instead?… The right path Enter the #[path] attribute, which fulfills this exact purpose: // (foo.rs) #[cfg(test)] #[path = "./foo_test.rs"] mod foo_test; #[path] tells the Rust compiler where to look for the module it is attached to. Its argument is relative to the location of the outer module (like foo here), and can be either a single file, or a directory with mod.rs. Conceptually, this is similar to a custom ClassLoader in Java, or the common sys.path hacks in Python. Unlike those two languages, however, the #[path] attribute is only relevant at compile time. Additionally, and somewhat confusingly, #[path] can also be applied retroactively to a module that the compiler has already located. In such case, it will affect the lookup of any child modules by making rustc search for them in the new location. With #[path] handy, it is therefore possible to implement custom layouts of regular source modules and test files. But like with every tool that can be used to defy conventions, it should be used with the appropriate care. While a straightforward and self-documenting approach described here is unlikely to raise any eyebrows, rewriting module paths willy-nilly is most certainly a bad idea. Okay, technically it is possible to completely isolate them, essentially by abusing the approach I describe later in this post. ↩"
+}
+</script></body>
+</html>
