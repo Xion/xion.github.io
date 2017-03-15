@@ -63,6 +63,426 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-generator-args.html#python-generator-args">Arguments to Python generator&nbsp;functions</a></h2>
+    <p>
+      Posted on Tue 14 March 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/generators.html">generators</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/closures.html">closures</a>      &#8226; <a href="http://xion.io/post/code/python-generator-args.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In Python, a <em>generator function</em> is one that
+contains a <code>yield</code> statement inside the function body.
+Although this language construct has many fascinating use cases
+(<a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"><span class="caps">PDF</span></a>),
+the most common one is creating concise and readable&nbsp;iterators.</p>
+<h4>A typical&nbsp;case</h4>
+<p>Consider, for example, this simple&nbsp;function:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">x</span>
+        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+</pre></div>
+
+
+<p>which creates an (infinite) iterator over all multiples of given integer.
+A sample of its output looks like&nbsp;this:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">islice</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">islice</span><span class="p">(</span><span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span> <span class="mi">10</span><span class="p">))</span>
+<span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">35</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">45</span><span class="p">,</span> <span class="mi">50</span><span class="p">]</span>
+</pre></div>
+
+
+<p>If you were to replicate in a language such as Java or Rust
+&#8212; neither of which supports an equivalent of <code>yield</code> &#8212;
+you&#8217;d end up writing an <em>iterator</em> class.
+Python also has them, of&nbsp;course:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Multiples</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">of</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">of</span> <span class="o">=</span> <span class="n">of</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">of</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">current</span>
+
+    <span class="n">___next__</span> <span class="o">=</span> <span class="nb">next</span>  <span class="c"># Python 3</span>
+</pre></div>
+
+
+<p>but they usually are not the first choice<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>It&#8217;s also pretty easy to see why:
+they require explicit bookkeeping of any auxiliary state between iterations.
+Perhaps it&#8217;s not too much to ask for a trivial walk over integers,
+but it can get quite tricky if we were to iterate over recursive data structures,
+like trees or graphs. In <code>yield</code>-based generators, this isn&#8217;t a problem,
+because the state is stored within local variables on the coroutine&nbsp;stack.</p>
+<h4>Lazy!</h4>
+<p>It&#8217;s important to remember, however, that
+generator functions behave differently than regular functions do,
+even if the surface appearance often says&nbsp;otherwise.</p>
+<p>The difference I wanted to explore in this post becomes apparent
+when we add some argument checking to the initial&nbsp;example:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">x</span>
+        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+</pre></div>
+
+
+<p>With that <code>if</code> in place, passing a negative number shall result in an exception.
+Yet when we attempt to do just that, it will seem as if nothing is&nbsp;happening:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span> <span class="o">=</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span>
+</pre></div>
+
+
+<p>And to a certain degree, this is pretty much correct.
+Simply <em>calling</em> a generator function does comparatively little,
+and doesn&#8217;t actually execute any of its code!
+Instead, we get back a <em>generator object</em>:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span>
+<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x10f0ceb40</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>which is essentially a built-in analogue to the <code>Multiples</code> iterator instance.
+Commonly, it is said that both generator functions and iterator classes are <em>lazy</em>:
+they only do work when we asked (i.e. iterated&nbsp;over).</p>
+<h4>Getting&nbsp;eager</h4>
+<p>Oftentimes, this is perfectly okay.
+The laziness of generators is in fact one of their great strengths,
+which is particularly evident in the <a href="https://pymotw.com/2/itertools/">immense usefulness</a>
+of <a href="http://docs.python.org/2/library/itertools.html">the<code>itertools</code> module</a>.</p>
+<p>On the other hand, however,
+delaying argument checks and similar operations until later may hamper debugging.
+The classic engineering principle of <a href="https://en.wikipedia.org/wiki/Fail-fast">failing fast</a>
+applies here very fittingly: any errors should be signaled immediately.
+In Python, this means raising exceptions as soon as problems are&nbsp;detected.</p>
+<p>Fortunately, it is possible to reconcile the benefits of laziness
+with (more) defensive programming.
+We can make the generator functions only a <em>little</em> more eager,
+just enough to verify the correctness of their&nbsp;arguments.</p>
+<p>The trick is simple. We shall extract an <em>inner</em> generator function
+and only call it after we have checked the&nbsp;arguments:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
+
+    <span class="k">def</span> <span class="nf">multiples</span><span class="p">():</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">x</span>
+            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+
+    <span class="k">return</span> <span class="n">multiples</span><span class="p">()</span>
+</pre></div>
+
+
+<p>From the caller&#8217;s point of view, nothing has changed in the typical&nbsp;case:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x110579190</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>but if we try to make an incorrect invocation now,
+the problem is detected <em>immediately</em>:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">)</span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>Traceback (most recent call last):
+  File &quot;&lt;pyshell#2&gt;&quot;, line 1, in &lt;module&gt;
+    multiples(of=-5)
+  File &quot;&lt;pyshell#0&gt;&quot;, line 4, in multiples
+    raise ValueError(&quot;expected a natural number, got %r&quot; % (of,))
+ValueError: expected a natural number, got -5
+</pre></div>
+
+
+<p>Pretty neat, especially for something that requires only two lines of&nbsp;code!</p>
+<h4>The last&nbsp;(micro)optimization</h4>
+<p>Indeed, we didn&#8217;t even have to pass the arguments to the inner (generator) function,
+because they are already captured by the&nbsp;closure.</p>
+<p>Unfortunately, this also has a slight performance cost.
+A captured variable (also known as a <em>cell variable</em>) is stored on the function object itself,
+so Python has to emit
+<a href="http://holdenweb.blogspot.com/2014/07/closures-arent-easy.html">a different bytecode instruction</a>
+(<code>LOAD_DEREF</code>) that involves
+an <a href="http://stupidpythonideas.blogspot.com/2015/12/how-lookup-works.html">extra pointer dereference</a>.
+Normally, this is not a problem, but in a tight generator loop it can make a&nbsp;difference.</p>
+<p>We can eliminate this extra work<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> by passing the parameters&nbsp;explicitly:</p>
+<div class="highlight"><pre>    <span class="c"># (snip)</span>
+
+    <span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">x</span>
+            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+
+    <span class="k">return</span> <span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This turns them into local variables of the inner function,
+replacing the <code>LOAD_DEREF</code> instructions with (aptly named) <code>LOAD_FAST</code> ones.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Technically, the <em>Multiples</em> class is here is both an <em>iterator</em>
+(because it has the <code>next</code>/<code>__next__</code> methods) and <em>iterable</em>
+(because it has <code>__iter__</code> method that returns an iterator, which happens to be the same object).
+This is common feature of iterators that are not associated with any collection,
+like the ones defined in the built-in <a href="http://docs.python.org/2/library/itertools.html"><code>itertools</code> module</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Note that if you engage in this kind of microoptimizations,
+I&#8217;d assume you have already <a href="https://www.python.org/doc/essays/list2str/">changed your global lookup into local ones</a> :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-let-unit.html#rust-let-unit">The &#8220;let&#8221; type trick in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Wed 01 February 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/types.html">types</a>,      <a href="http://xion.io/tag/pattern-matching.html">pattern matching</a>      &#8226; <a href="http://xion.io/post/code/rust-let-unit.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a neat little trick
+that&#8217;s especially useful if you&#8217;re just starting out with&nbsp;Rust.</p>
+<p>Because the language uses <a href="https://en.wikipedia.org/wiki/Type_inference">type inference</a> all over the place
+(or at least within a single function),
+it can often be difficult to figure out the type of an expression by yourself.
+Such knowledge is very handy in resolving compiler errors,
+which may be rather complex when generics and traits are&nbsp;involved.</p>
+<p>The formula itself is very simple.
+Its shortest, most common version &#8212; and arguably the cleverest one, too &#8212;
+is the following <code>let</code> binding:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>In virtually all cases, this binding will cause a type error on its own,
+so it&#8217;s not something you&#8217;d leave permanently in your regular&nbsp;code.</p>
+<p>But the important part here is the exact error message you&nbsp;get:</p>
+<div class="highlight"><pre>error[E0308]: mismatched types
+  --&gt; &lt;anon&gt;:42:13
+   |
+42 |         let () = some_expression;
+   |             ^^ expected f64, found ()
+   |
+   = note: expected type `f64`
+   = note:    found type `()`
+</pre></div>
+
+
+<p>The type expected by Rust here (in this example, <code>f64</code>)
+is also the type of <code>some_expression</code>. No more, no&nbsp;less.</p>
+<p>There is nothing particularly wrong with using this technique
+and not caring too much how it works under the hood.
+But if you do want to know a little more what exactly is going on here,
+the rest of this post covers it in some&nbsp;detail.</p>
+<h4>The&nbsp;unit</h4>
+<p>Firstly, you may be wondering about this curious <code>()</code> type
+that the compiler has apparently found in the statement above.
+The official name for it is the <em>unit type</em>,
+and it has several notable&nbsp;characteristics:</p>
+<ol>
+<li>There exists only one value<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> of this type: <code>()</code> (same symbol as the type&nbsp;itself).</li>
+<li>It represents an empty tuple and has therefore the size of&nbsp;zero.</li>
+<li>It is the type of any expression that&#8217;s turned into a <em>statement</em>.</li>
+</ol>
+<p>That last fact is particularly interesting,
+as it makes <code>()</code> appear in error messages that are more indicative of syntactic mishaps
+rather than mismatched&nbsp;types:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">positive_signum</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="mi">1</span><span class="k">i32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="mi">0</span><span class="k">i32</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>error[E0308]: mismatched types
+ --&gt; &lt;anon&gt;:2:17
+  |
+2 |     if x &gt; 0 { 1i32 }
+  |                ^^^^ expected (), found i32
+  |
+  = note: expected type `()`
+  = note:    found type `i32`
+</pre></div>
+
+
+<p>If you think about it, however, it makes perfect sense.
+The last expression inside a function body is the return value.
+This also means that everything <em>before</em> it has to be a statement:
+an expression of type <code>()</code>.</p>
+<p>Working its way backward,
+Rust will therefore expect only such expressions before the final <code>0i32</code>.
+This, in turn, puts the same constraint on the body of the <code>if</code> statement.
+The expression <code>1i32</code> (with its type of <code>i32</code>) clearly violates it,
+causing the above error<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4><span class="dquo">&#8220;</span>Expanded&#8221;&nbsp;version</h4>
+<p>A natural question now arises:
+is <code>()</code> inside of the <code>let () = ...</code> formula a <em>type</em> <code>()</code> or a <em>value</em> <code>()</code>?&#8230;</p>
+<p>To answer that,
+it&#8217;s quite helpful to compare and contrast the original binding with its longer&nbsp;&#8220;equivalent&#8221;:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="o">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>This statement is conceptually very similar to our original one.
+The error message it causes can also be used to debug issues with type&nbsp;inference.</p>
+<p>Despite some cryptic symbols, the syntax here should also be more familiar.
+It occurs in many typical, ordinary bindings you can see in everyday Rust code.
+Here&#8217;s an&nbsp;example:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>where it&#8217;s abundantly clear that <code>i32</code> is the type of variable <code>x</code>.</p>
+<p>Analogously above, you can see that
+an unnamed symbol (<code>_</code>, the underscore) is declared to be of type <code>()</code>.</p>
+<p>So in this alternate phrasing, <code>()</code> denotes a <em>type</em>.</p>
+<h4>Let a pattern&nbsp;emerge</h4>
+<p>What about the original form, <code>let () = ...</code>?
+There is no explicit type declaration here (i.e. no colon),
+and a pair of empty parentheses isn&#8217;t a name that could be assigned a new&nbsp;value.</p>
+<p>What exactly is happening there,&nbsp;then?&#8230;</p>
+<p>Well, it isn&#8217;t really anything special.
+While it may look exceptional, and totally unlike common usages of <code>let</code>,
+it is in fact exactly the same thing as a mundane <code>let x = 5</code>.
+The potential misconception here is about the exact meaning of <code>x</code>.</p>
+<p>The simple version is that it&#8217;s a name for the bound expression.<br>
+But the actual truth is that it&#8217;s a <em>pattern</em> which is matched against that&nbsp;expression.</p>
+<p>The terms &#8220;pattern&#8221; and &#8220;matching&#8221; here refer to the same mechanism
+that occurrs within <a href="https://doc.rust-lang.org/book/match.html">the <code>match</code> statement</a>.
+You could even imagine a peculiar form of desugaring,
+where a <code>let</code> statement is converted into a semantically equivalent <code>match</code>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">original</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">desugared</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">x</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="mi">6</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="n">y</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>This analogy works perfectly<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>, because the patterns here are <em>irrefutable</em>:
+any value can match them, as all we&#8217;re doing is giving the value a name.
+Should the case be any different, Rust would reject our <code>let</code> statement &#8212;
+just like it rejects a <code>match</code> block that doesn&#8217;t include branches for all possible&nbsp;outcomes.</p>
+<h4>An empty&nbsp;pattern</h4>
+<p>But just because a pattern has to always match the expression,
+it doesn&#8217;t mean only simple identifiers like <code>x</code> or <code>y</code> are permitted in <code>let</code>.
+If Rust is able to statically ensure a match,
+it is perfectly <span class="caps">OK</span> to use a pattern with an internal structure<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">num</span><span class="o">::</span><span class="n">Wrapping</span><span class="p">;</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>Of course, something like this is just superfluous and silly.
+Same mechanism, however, is also behind the ability to &#8220;initialize multiple&nbsp;variables&#8221;:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>What really happens is that we take a <em>tuple expression</em> <code>(0, 1)</code>
+and match it against a pattern <code>(x, y)</code>.
+Because it is trivially satisified,
+we have the symbols <code>x</code> and <code>y</code> bound to the tuple elements.
+For all intents and purposes, this is equivalent to having two separate <code>let</code> statements:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Of course, a 2-tuple is not the only pattern of this kind we can use in <code>let</code>.
+Others possible patterns include, for example, the <em>0-tuple</em>.</p>
+<p>Or, as we express it in Rust, <code>()</code>:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>Now that&#8217;s a truly useless statement!
+But it also harkens straight to our debug binding.
+It should be pretty clear now how it&nbsp;works:</p>
+<ul>
+<li>The <code>()</code> stanza on the left is neither a type nor a name, but a <em>pattern</em>.</li>
+<li>The expression on the right is being <em>matched</em> against this&nbsp;pattern.</li>
+<li>Because the types of both of those things differ, the compiler signals an appropriate&nbsp;error.</li>
+</ul>
+<p>The curious thing is that there is nothing inherently magical about using <code>()</code> on the left hand side.
+It&#8217;s simply the shortest pattern we can put after <code>let</code>.
+It&#8217;s also one that&#8217;s extremely unlikely to actually match the right hand side,
+which ensures we get the desired error.
+But if you substituted something equally exotic and rare &#8212; say, <code>(x, ((y, z), Wrapping(w)))</code> &#8212;
+it would work equally well as a rudimentary type&nbsp;detector.</p>
+<p>Except for one thing, of course: nobody wants to type this much!
+Borne out of this frugality (and/or laziness), a custom thus emerged to use <code>()</code>.</p>
+<p>Short, sweet, and <em>clever</em>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A more formal, type-theoretic formulation of this fact
+is saying that <code>()</code> is <em>inhabited</em> by only one value.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>In case you are wondering, one possible fix here is to <code>return 1i32;</code> inside the <code>if</code>.
+An (arguably more idiomatic) alternative is to put <code>0i32</code> in an <code>else</code> branch,
+turning the entire <code>if</code> construct into the last &#8212; and only &#8212; expression in the function body.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Note how each nested <code>match</code> is also introducing a new scope,
+exactly like the
+<a href="https://doc.rust-lang.org/1.10.0/book/references-and-borrowing.html#thinking-in-scopes">canonical desugaring</a>
+of <code>let</code> which is often used to explain lifetimes and borrowing.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Unfortunately, Rust isn&#8217;t currently capable of proving that the pattern is irrefutable in all obvious cases.
+For example, <code>let Some(x) = Some(42);</code> will be rejected due to the existence of a <code>None</code> variant in <code>Option</code>,
+even though it isn&#8217;t actually used in the (constant) expression on the right.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-unit-test-placement.html#rust-unit-test-placement">Better location for unit tests in&nbsp;Rust</a></h2>
     <p>
       Posted on Fri 06 January 2017 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1289,461 +1709,6 @@ is closer to the actual continuous processing in the background.&#160;<a class="
 <li id="fn:4">
 <p>Regular programs could simply call <a href="http://man7.org/linux/man-pages/man2/alarm.2.html">the <code>alarm</code> function</a>
 instead of forking a subprocess. But then again, regular programs could just run a normal game loop.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
-    <p>
-      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
-<p>For a long time, I resisted the appeal of various incremental improvements
-that early 3.x releases offered.
-And the world agreed with me:
-a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
-<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
-<p>As if to compensate for years of &#8220;good enough&#8221;,
-Python 3 development team has given in to a steadily accelerating feature creep.
-Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
-(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
-but it nevertheless causes an increasingly wide functional gap
-between the 2.x and 3.x&nbsp;series.</p>
-<p>Starting from around Python 3.5, this gap becomes really noticeable,
-even when partially bridged with many excellent backports.
-The ecosystem support is also mostly there,
-at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
-<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
-<p>Given all those portents,
-even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
-For better or for worse, 3.x is how Python will look like in the coming years and decades.
-Might as well prepare for&nbsp;it.</p>
-<p>In this post, I will discuss some important issues
-one should be aware of before trying to switch from Python 2 to 3.
-I won&#8217;t be talking about all the minute changes and additions,
-but cover the more significant, broader concepts
-that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
-<p>The two concepts I&#8217;ll be mentioning here are
-<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
-<h4>Unicode&nbsp;handling</h4>
-<p>You have probably heard it before.
-Python 3 was going to solve your Unicode problems once and for all.
-You haven&#8217;t believed it, of course,
-like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
-<p>Still, it may be rather surprising to learn
-that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
-<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
-<p>In any case, either version of Python gets the most important thing about Unicode right.
-They both distinguish, at the type level,
-between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
-The type that holds the latter is called <code>bytes</code> in both versions,
-while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
-<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
-where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
-<p>But where Python 2 does poorly is in the choice of defaults.
-You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
-That <code>str</code> is a fully functional string type,
-even though it can only contain <span class="caps">ASCII</span> characters.
-Moreover, it is also the <em>default</em>:
-quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
-<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
-<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
-If you already deal with Unicode correctly in your programs
-&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
-your main benefit will be not having to write that <code>u""</code> quotes anymore.
-Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
-rather than letting you write &#8220;working&#8221; programs
-that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
-<h4>Laziness by&nbsp;default</h4>
-<p>The second major change that Python 3 brings is of similar nature.
-It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
-<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
-are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
-Included in these are functions like <code>map</code> or <code>filter</code>,
-as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
-<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
-<ul>
-<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
-<li><code>xrange</code> is now just <code>range</code></li>
-<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
-</ul>
-<p>and so&nbsp;on.</p>
-<p>In some cases, this is exactly what happens.
-For example, there is virtually no downside to the new implementation of <code>range</code>,
-especially considering the way it is used most&nbsp;often.</p>
-<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
-Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
-their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
-i.e. the most simplistic and limited flavor of Python iterables.
-Working with them is trickier and more error-prone than with lists,
-which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
-that generators expose us&nbsp;to.</p>
-<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
-by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
-and using its functions in place of the built-ins.
-What you could gain in return was increased performance, and a lesser memory footprint.
-All those benefits came from making the computations <em>lazy</em>
-and refraining from storage of the intermediate&nbsp;results.</p>
-<p>In Python 3, however, laziness is <em>preordained</em>.
-Even if we don&#8217;t need or care about the aforementioned perks,
-we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
-<p>One option is to embrace lazy evaluation fully,
-and adapt to handling unspecified iterables throughout our code bases.<br>
-The risk is an increased frequency of bugs stemming from generator misuse &#8212;
-including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
-deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
-<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
-wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
-in order to &#8220;sanitize&#8221; them for later (re)use.<br>
-Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
-<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
-</pre></div>
-
-
-<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
-    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
-    <span class="c"># ...the rest of a long function...</span>
-</pre></div>
-
-
-<p>Even if you choose the first path, and somehow use lazy generators everywhere,
-conversions are still required at the serialization&nbsp;boundaries:</p>
-<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
-<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
-<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
-</pre></div>
-
-
-<p>At least in this case, the lazy iterable will vocally fail with an exception,
-rather than silently doing nothing (in case of repeated iteration)
-or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
-<h4>from __future__ import&nbsp;doubts</h4>
-<p>So, here they are: the highlights of Python 3.
-If you are disappointed they all turned out to be mixed blessings,
-don&#8217;t worry: you are
-<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
-<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
-<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
-<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
-<p>The truth is that Python 3 is more finnicky, less forgiving,
-and much less beginner-friendly than its predecessor.
-Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
-by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
-<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
-Perhaps it&#8217;s not a coincidence
-that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
-has passed between the first public version of Python (0.9)
-and the release of Python 3.0.
-By no conceivable means it is a toy language anymore,
-and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
-<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
-<p>It&#8217;s becoming harder to claim the language favors simplicity
-over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
-It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
-is the <em>obvious</em> way to do it.<br>
-It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
-and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
-<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
-The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
-But who knows? Maybe after two decades,
-a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
-<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
-are about to get&nbsp;in!</p>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">for loops in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Tue 26 July 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/loops.html">loops</a>,      <a href="http://xion.io/tag/iterators.html">iterators</a>      &#8226; <a href="http://xion.io/post/code/rust-for-loop.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In this post, I&#8217;m going to talk about the <code>for</code> loop construct in <a href="https://rust-lang.org">Rust</a>,
-as well as the related concepts of <em>iterators</em> and&nbsp;&#8220;iterables&#8221;.</p>
-<p>Depending on your programming language background,
-they may seem somewhat familiar in terms of syntax <span class="amp">&amp;</span> semantics,
-or rather mysterious and surprising.
-Their closest analogues exist in Python,
-but programmers of Java, C#, or (modern) C++ should recognize many relevant features and ideas as&nbsp;well.</p>
-<h4>Basics</h4>
-<p>The syntax of a <code>for</code> loop is so modest it&#8217;s almost spartan<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;3&quot;</span><span class="p">];</span><span class="w"></span>
-<span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>As you would expect, <a href="https://is.gd/qtxqLD">this prints three lines</a> with <code>1</code>, <code>2</code>, <code>3</code>.
-What is probably not as obvious is that
-over the course of this loop the <code>v</code> vector was <em>expended</em>.
-Trying to <a href="https://is.gd/1mv7RV">use it</a> after the iteration,
-we&#8217;ll get a borrow checker&nbsp;error:</p>
-<div class="highlight"><pre>&lt;anon&gt;:6:22: 6:23 error: use of moved value: `v` [E0382]
-&lt;anon&gt;:4         println!(&quot;{}&quot;, x);
-&lt;anon&gt;:5     }
-&lt;anon&gt;:6     println!(&quot;{:?}&quot;, v);
-                              ^
-</pre></div>
-
-
-<p>In Rust jargon, the vector has been <strong>moved</strong> into the loop.
-Its ownership &#8212; and that of its individual elements &#8212; has been transfered there permanently.
-While definitely surprising when compared to other languages,
-this behavior is consistent with Rust&#8217;s ubiquitous policy of moving values by&nbsp;default.</p>
-<p>Still, you may not expect it here
-because moving ownership is mostly seen at the function call boundaries.
-For most intents and purposes, however,
-you can picture a <code>for_each</code> function like this to be the equivalent of the <code>for</code> loop&nbsp;above:</p>
-<div class="highlight"><pre><span class="n">for_each</span><span class="p">(</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
-</pre></div>
-
-
-<p>This also gives us a hint on how we could prevent the move from happening.
-Rather than taking the vector itself,
-the function could accept only a reference to&nbsp;it:</p>
-<div class="highlight"><pre><span class="n">for_each_ref</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
-</pre></div>
-
-
-<p>After we translate this <a href="https://is.gd/Zrq0JL">back to the looping syntax</a>:</p>
-<div class="highlight"><pre><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-<span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">);</span><span class="w"></span>
-</pre></div>
-
-
-<p>we won&#8217;t get any more objections from the&nbsp;compiler.</p>
-<h4>Iterators and &#8220;iterables&#8221; in&nbsp;Rust</h4>
-<p>It is important to emphasize that this new ampersand symbol (<code>&amp;</code>)
-is by no means a part of the syntax of the <code>for</code> loop itself.
-We have actually changed <em>what object</em> we&#8217;re iterating here.
-It is no longer <code>Vec&lt;T&gt;</code> &#8212; a vector itself &#8212; but <code>&amp;Vec&lt;T&gt;</code>, an immutable reference to it.
-As a consequence, <code>x</code> is not a <code>T</code> (the element type) anymore,
-but a <code>&amp;T</code> &#8212; a <em>reference</em> to an element<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
-<p>So it seems that in Rust, both <code>Vec&lt;T&gt;</code> and <code>&amp;Vec&lt;T&gt;</code> are what we would call &#8220;iterables&#8221;:
-collections (or other objects) that we can get iterate over.
-The usual way this is implemented in various programming languages
-is by introducing an <em>iterator</em>&nbsp;object.</p>
-<p>The iterator keeps track of what element it&#8217;s currently pointing to
-and supports at least the following basic&nbsp;operations:</p>
-<ul>
-<li>getting the current&nbsp;element</li>
-<li>advancing to the next&nbsp;element</li>
-<li>signaling when no more elements are&nbsp;available</li>
-</ul>
-<p>Some languages provide separate iterator methods for each of those tasks,
-but Rust chooses to combine them all into one.
-You can see that when looking at the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>:
-<code>next</code> is the only method to be provided by its&nbsp;implementations.</p>
-<h4>Desugaring with&nbsp;into-iterators</h4>
-<p>How is the iterator object created,&nbsp;though?</p>
-<p>In a typical Rust manner, this job is delegated to another trait.
-This one is called <code>IntoIterator</code>,
-and it roughly corresponds to the &#8220;iterable&#8221; concept I&#8217;ve alluded to&nbsp;earlier:</p>
-<div class="highlight"><pre><span class="c1">// (simplified)</span>
-<span class="k">trait</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="p">;</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>What is uniquely Rusty is the fact that <code>into_iter</code> &#8212; the sole method of this trait &#8212;
-doesn&#8217;t just create a new iterator for the collection.
-Instead, it effectively <em>consumes</em> the whole thing,
-leaving the new iterator as its only remnant and the only way to access the items<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
-<p>This, of course, is a direct manifestation of the Rust&#8217;s move-by-default policy.
-In this case, it protects us from the common problem of <strong>iterator invalidation</strong>
-which is probably all-too-familiar to C++ programmers.
-Because the collection is essentially &#8220;converted&#8221; to an iterator here, it is&nbsp;impossible:</p>
-<ul>
-<li>for more than one iterator to exist at a&nbsp;time</li>
-<li>to modify the collection while any iterators are in&nbsp;scope</li>
-</ul>
-<p>Doesn&#8217;t all this &#8220;moving&#8221; and &#8220;consuming&#8221; sound familiar, by the way?
-I&#8217;ve mentioned earlier that when we iterate over a vector with a <code>for</code> loop,
-we essentially move it &#8220;into the&nbsp;loop&#8221;.</p>
-<p>As you can probably deduce by now,
-what really happens is that <code>IntoIterator::into_iter</code> is invoked on the vector.
-Its result &#8212; the iterator object &#8212; is then repeatedly <code>next</code><span class="quo">&#8216;</span>ed until it returns <code>None</code>.</p>
-<p>In a way, a <code>for</code> loop like&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="c1">// body</span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>is therefore nothing else but a syntactic sugar for the following expanded&nbsp;version:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">iter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="n">v</span><span class="p">);</span><span class="w"></span>
-<span class="k">loop</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">iter</span><span class="p">.</span><span class="n">next</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nb">Some</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="c1">// body</span>
-<span class="w">        </span><span class="p">},</span><span class="w"></span>
-<span class="w">        </span><span class="nb">None</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">break</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>You can see quite clearly that <code>v</code> is unusable not only after the loop ends,
-but before it even <em>begins</em>.
-This is because it has been moved into <code>iter</code> &#8212; into an iterator &#8212;
-through an <code>into_iter</code> method&#8230; of <code>IntoIterator</code>!</p>
-<p>Simple, huh?&nbsp;:)</p>
-<blockquote>
-<p><code>for</code> loop is just a syntactic sugar for an <code>IntoIterator::into_iter</code> invocation,
-followed by repeated calling of <code>Iterator::next</code>.</p>
-</blockquote>
-<h4>The&nbsp;ampersand</h4>
-<p>On a more serious note, this move isn&#8217;t something that we&#8217;d always want to happen.
-Fortunately, we know a way to prevent it.
-Rather than iterating over the vector itself, use a <em>reference</em> to&nbsp;it:</p>
-<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="c1">// body</span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>The great thing about this syntax is that everything said above still applies,
-up to and including the desugaring procedure.
-The <code>into_iter</code> method is still being invoked,
-except that this time it is done on the <em>reference to the collection</em> &#8212;
-<code>&amp;Vec&lt;T&gt;</code> rather than <code>Vec&lt;T&gt;</code>:</p>
-<div class="highlight"><pre><span class="c1">// (simplified)</span>
-<span class="k">impl</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="o">&lt;</span><span class="n">Item</span><span class="o">=&amp;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>The result is therefore an iterator that yields <em>references</em> to the elements (<code>&amp;T</code>),
-rather than elements themselves (<code>T</code>).
-And because <code>self</code> above is also a reference,
-the collection isn&#8217;t really moved anywhere,
-which is why we can freely access it after the loop&nbsp;ends.</p>
-<p>The exact same thing happens when looping over a <em>mutable</em>&nbsp;reference:</p>
-<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="c1">// body</span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>except that this time <code>into_iter</code> is called for <code>&amp;mut Vec&lt;T&gt;</code>.
-Result is therefore of type <code>Iterator&lt;Item=&amp;mut T&gt;</code>,
-enabling us to modify the elements as we go through&nbsp;them.</p>
-<p>No further compiler machinery is required to support those two cases,
-because everything is already handled by the same&nbsp;trait.</p>
-<blockquote>
-<p>The <code>IntoIterator</code> desugaring works the same way for collections
-<em>and</em> both immutable and mutable references to&nbsp;them.</p>
-</blockquote>
-<h4>What about the iter()&nbsp;method?</h4>
-<p>So far, we&#8217;ve talked about regular <code>for</code> loops,
-and the very imperative style of computation they&nbsp;represent.</p>
-<p>If you are more inclined towards functional programming, though,
-you may have seen and written rather different constructs,
-combining various &#8220;fluent&#8221; methods into expressions such as this&nbsp;one:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">numbers</span><span class="p">.</span><span class="n">iter</span><span class="p">()</span><span class="w"></span>
-<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>Methods like <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"><code>map</code></a>
-and <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"><code>filter</code></a> here
-are called <em>iterator adapters</em>,
-and they are all defined on the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>.
-Not only are they very powerful and numerous,
-but they can also be supplemented through several <a href="https://crates.io/crates/itertools">third-party crates</a>.</p>
-<p>In order to take advantage of the adapters, however,
-we need to obtain an iterator for our collection first.
-We know that <code>into_iter</code> is the way loops normally do it,
-so in principle we could follow the same approach&nbsp;here:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="o">&amp;</span><span class="n">numbers</span><span class="p">)</span><span class="w"></span>
-<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>To spare us the verbosity of this explicit syntax,
-collections normally offer an <code>iter</code> method which is exactly equivalent<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
-This method is what you will normally see in chained expressions like the one&nbsp;above.</p>
-<blockquote>
-<p><code>v.iter()</code> is just a shorthand for <code>IntoIterator::into_iter(&amp;v)</code>.</p>
-</blockquote>
-<h4>Why not&nbsp;both?</h4>
-<p>The last thing to note is that Rust mandates neither loops nor iterator adapters
-when writing code that operates on collections of elements.
-When optimizations are turned on in the <a href="http://doc.crates.io/manifest.html#the-profile-sections">release mode</a>,
-both versions should compile to equally efficient machine code,
-with closures inlined and loops unrolled where&nbsp;necessary.</p>
-<p>Choosing one style over the other is therefore a matter of convention and style.
-Sometimes the right choice may actually be a <em>mix</em> of both approaches,
-and Rust allows it without any&nbsp;complaints:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">print_prime_numbers_upto</span><span class="p">(</span><span class="n">n</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Prime numbers lower than {}:&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="mf">2.</span><span class="p">.</span><span class="n">n</span><span class="p">).</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">i</span><span class="o">|</span><span class="w"> </span><span class="n">is_prime</span><span class="p">(</span><span class="n">i</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>Like before, this is possible through the same <code>for</code> loop desugaring
-that involves the <code>IntoIterator</code> trait.
-In this case, Rust will simply use a
-<a href="https://github.com/rust-lang/rust/blob/bbfcb471db0799a7d92d62e66cf44bbd68051675/src/libcore/iter/traits.rs#L253">no-op implementation</a>
-of this trait, &#8220;converting&#8221; any existing <code>Iterator</code> <span class="dquo">&#8220;</span>into&#8221;&nbsp;itself.</p>
-<blockquote>
-<p>Iterators themselves are also &#8220;iterables&#8221;,
-implementing <code>IntoIterator::into_iter</code> as a&nbsp;pass-through.</p>
-</blockquote>
-<h4>Looping&nbsp;around</h4>
-<p>If you want to know even more about iterators and loops in Rust,
-the best source at this point is probably just
-<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the official documentation</a>.
-And although mastering all the iterator adapters is of course not necessary to write effective Rust code,
-taking a careful look at least at
-<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the <code>collect</code> method</a>
-(and the associated <a href="https://doc.rust-lang.org/std/iter/trait.FromIterator.html"><code>FromIterator</code> trait</a>)
-is definitely&nbsp;helpful.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>The &#8220;two-semicolon&#8221; variant of the <code>for</code> loop doesn&#8217;t exist in Rust. Just like in Python, the equivalent is
-iterating over a <a href="http://rustbyexample.com/flow_control/for.html">range object</a>, or using a regular <code>while</code> loop
-for more complex cases.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>This shift is completely transparent in the loop&#8217;s body. The way it works is based on Rust&#8217;s special mechanism
-called <a href="https://doc.rust-lang.org/book/deref-coercions.html">the <code>Deref</code> coercions</a>.
-Without going into too much detail (as it is way out of scope for this post),
-this feature allows us to treat references to objects (<code>&amp;T</code>) as if they were the objects themselves (<code>T</code>).
-The compiler will perform the necessary <em>derefencing</em> where possible,
-or signal an error in case of a (rare) ambiguity.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>How do we know that? It&#8217;s because <code>into_iter</code> takes <code>self</code> (rather than <code>&amp;self</code> or <code>&amp;mut self</code>)
-as its first parameter. It means that the entire object for which this method is called is moved <em>into</em> its body
-(hence the method&#8217;s name).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-<li id="fn:4">
-<p>Curiously enough, this equivalence isn&#8217;t encoded in the type system in any way,
-making it technically just a convention. It is followed consistently at least in the standard library, though.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Here’s a neat little trick that’s especially useful if you’re just starting out with Rust. Because the language uses type inference all over the place (or at least within a single function), it can often be difficult to figure out the type of an expression by yourself. Such knowledge is very handy in resolving compiler errors, which may be rather complex when generics and traits are involved. The formula itself is very simple. Its shortest, most common version — and arguably the cleverest one, too — is the following let binding: let () = some_expression; In virtually all cases, this binding will cause a type error on its own, so it’s not something you’d leave permanently in your regular code. But the important part here is the exact error message you get: error[E0308]: mismatched types --&gt; &lt;anon&gt;:42:13 | 42 | let () = some_expression; | ^^ expected f64, found () | = note: expected type `f64` = note: found type `()` The type expected by Rust here (in this example, f64) is also the type of some_expression. No more, no less. There is nothing particularly wrong with using this technique and not caring too much how it works under the hood. But if you do want to know a little more what exactly is going on here, the rest of this post covers it in some detail. The unit Firstly, you may be wondering about this curious () type that the compiler has apparently found in the statement above. The official name for it is the unit type, and it has several notable characteristics: There exists only one value1 of this type: () (same symbol as the type itself). It represents an empty tuple and has therefore the size of zero. It is the type of any expression that’s turned into a statement. That last fact is particularly interesting, as it makes () appear in error messages that are more indicative of syntactic mishaps rather than mismatched types: fn positive_signum(x: i32) -&gt; i32 { if x &gt; 0 { 1i32 } 0i32 } error[E0308]: mismatched types --&gt; &lt;anon&gt;:2:17 | 2 | if x &gt; 0 { 1i32 } | ^^^^ expected (), found i32 | = note: expected type `()` = note: found type `i32` If you think about it, however, it makes perfect sense. The last expression inside a function body is the return value. This also means that everything before it has to be a statement: an expression of type (). Working its way backward, Rust will therefore expect only such expressions before the final 0i32. This, in turn, puts the same constraint on the body of the if statement. The expression 1i32 (with its type of i32) clearly violates it, causing the above error2. “Expanded” version A natural question now arises: is () inside of the let () = ... formula a type () or a value ()?… To answer that, it’s quite helpful to compare and contrast the original binding with its longer “equivalent”: let _: () = some_expression; This statement is conceptually very similar to our original one. The error message it causes can also be used to debug issues with type inference. Despite some cryptic symbols, the syntax here should also be more familiar. It occurs in many typical, ordinary bindings you can see in everyday Rust code. Here’s an example: let x: i32 = 42; where it’s abundantly clear that i32 is the type of variable x. Analogously above, you can see that an unnamed symbol (_, the underscore) is declared to be of type (). So in this alternate phrasing, () denotes a type. Let a pattern emerge What about the original form, let () = ...? There is no explicit type declaration here (i.e. no colon), and a pair of empty parentheses isn’t a name that could be assigned a new value. What exactly is happening there, then?… Well, it isn’t really anything special. While it may look exceptional, and totally unlike common usages of let, it is in fact exactly the same thing as a mundane let x = 5. The potential misconception here is about the exact meaning of x. The simple version is that it’s a name for the bound expression. But the actual truth is that it’s a pattern which is matched against that expression. The terms “pattern” and “matching” here refer to the same mechanism that occurrs within the match statement. You could even imagine a peculiar form of desugaring, where a let statement is converted into a semantically equivalent match: fn original() -&gt; i32 { let x = 5; let y = 6; x + y } fn desugared() -&gt; i32 { match 5 { x =&gt; match 6 { y =&gt; x + y } } } This analogy works perfectly3, because the patterns here are irrefutable: any value can match them, as all we’re doing is giving the value a name. Should the case be any different, Rust would reject our let statement — just like it rejects a match block that doesn’t include branches for all possible outcomes. An empty pattern But just because a pattern has to always match the expression, it doesn’t mean only simple identifiers like x or y are permitted in let. If Rust is able to statically ensure a match, it is perfectly OK to use a pattern with an internal structure4: use std::num::Wrapping; let Wrapping(x) = Wrapping(42); Of course, something like this is just superfluous and silly. Same mechanism, however, is also behind the ability to “initialize multiple variables”: let (x, y) = (0, 1); What really happens is that we take a tuple expression (0, 1) and match it against a pattern (x, y). Because it is trivially satisified, we have the symbols x and y bound to the tuple elements. For all intents and purposes, this is equivalent to having two separate let statements: let x = 0; let y = 1; Of course, a 2-tuple is not the only pattern of this kind we can use in let. Others possible patterns include, for example, the 0-tuple. Or, as we express it in Rust, (): let () = (); Now that’s a truly useless statement! But it also harkens straight to our debug binding. It should be pretty clear now how it works: The () stanza on the left is neither a type nor a name, but a pattern. The expression on the right is being matched against this pattern. Because the types of both of those things differ, the compiler signals an appropriate error. The curious thing is that there is nothing inherently magical about using () on the left hand side. It’s simply the shortest pattern we can put after let. It’s also one that’s extremely unlikely to actually match the right hand side, which ensures we get the desired error. But if you substituted something equally exotic and rare — say, (x, ((y, z), Wrapping(w))) — it would work equally well as a rudimentary type detector. Except for one thing, of course: nobody wants to type this much! Borne out of this frugality (and/or laziness), a custom thus emerged to use (). Short, sweet, and clever. A more formal, type-theoretic formulation of this fact is saying that () is inhabited by only one value. ↩ In case you are wondering, one possible fix here is to return 1i32; inside the if. An (arguably more idiomatic) alternative is to put 0i32 in an else branch, turning the entire if construct into the last — and only — expression in the function body. ↩ Note how each nested match is also introducing a new scope, exactly like the canonical desugaring of let which is often used to explain lifetimes and borrowing. ↩ Unfortunately, Rust isn’t currently capable of proving that the pattern is irrefutable in all obvious cases. For example, let Some(x) = Some(42); will be rejected due to the existence of a None variant in Option, even though it isn’t actually used in the (constant) expression on the right. ↩" />
+<meta name="keywords" content="Rust, types, pattern matching">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="The “let” type trick in Rust"/>
+<meta property="og:description" content="Here’s a neat little trick that’s especially useful if you’re just starting out with Rust. Because the language uses type inference all over the place (or at least within a single function), it can often be difficult to figure out the type of an expression by yourself. Such knowledge is very handy in resolving compiler errors, which may be rather complex when generics and traits are involved. The formula itself is very simple. Its shortest, most common version — and arguably the cleverest one, too — is the following let binding: let () = some_expression; In virtually all cases, this binding will cause a type error on its own, so it’s not something you’d leave permanently in your regular code. But the important part here is the exact error message you get: error[E0308]: mismatched types --&gt; &lt;anon&gt;:42:13 | 42 | let () = some_expression; | ^^ expected f64, found () | = note: expected type `f64` = note: found type `()` The type expected by Rust here (in this example, f64) is also the type of some_expression. No more, no less. There is nothing particularly wrong with using this technique and not caring too much how it works under the hood. But if you do want to know a little more what exactly is going on here, the rest of this post covers it in some detail. The unit Firstly, you may be wondering about this curious () type that the compiler has apparently found in the statement above. The official name for it is the unit type, and it has several notable characteristics: There exists only one value1 of this type: () (same symbol as the type itself). It represents an empty tuple and has therefore the size of zero. It is the type of any expression that’s turned into a statement. That last fact is particularly interesting, as it makes () appear in error messages that are more indicative of syntactic mishaps rather than mismatched types: fn positive_signum(x: i32) -&gt; i32 { if x &gt; 0 { 1i32 } 0i32 } error[E0308]: mismatched types --&gt; &lt;anon&gt;:2:17 | 2 | if x &gt; 0 { 1i32 } | ^^^^ expected (), found i32 | = note: expected type `()` = note: found type `i32` If you think about it, however, it makes perfect sense. The last expression inside a function body is the return value. This also means that everything before it has to be a statement: an expression of type (). Working its way backward, Rust will therefore expect only such expressions before the final 0i32. This, in turn, puts the same constraint on the body of the if statement. The expression 1i32 (with its type of i32) clearly violates it, causing the above error2. “Expanded” version A natural question now arises: is () inside of the let () = ... formula a type () or a value ()?… To answer that, it’s quite helpful to compare and contrast the original binding with its longer “equivalent”: let _: () = some_expression; This statement is conceptually very similar to our original one. The error message it causes can also be used to debug issues with type inference. Despite some cryptic symbols, the syntax here should also be more familiar. It occurs in many typical, ordinary bindings you can see in everyday Rust code. Here’s an example: let x: i32 = 42; where it’s abundantly clear that i32 is the type of variable x. Analogously above, you can see that an unnamed symbol (_, the underscore) is declared to be of type (). So in this alternate phrasing, () denotes a type. Let a pattern emerge What about the original form, let () = ...? There is no explicit type declaration here (i.e. no colon), and a pair of empty parentheses isn’t a name that could be assigned a new value. What exactly is happening there, then?… Well, it isn’t really anything special. While it may look exceptional, and totally unlike common usages of let, it is in fact exactly the same thing as a mundane let x = 5. The potential misconception here is about the exact meaning of x. The simple version is that it’s a name for the bound expression. But the actual truth is that it’s a pattern which is matched against that expression. The terms “pattern” and “matching” here refer to the same mechanism that occurrs within the match statement. You could even imagine a peculiar form of desugaring, where a let statement is converted into a semantically equivalent match: fn original() -&gt; i32 { let x = 5; let y = 6; x + y } fn desugared() -&gt; i32 { match 5 { x =&gt; match 6 { y =&gt; x + y } } } This analogy works perfectly3, because the patterns here are irrefutable: any value can match them, as all we’re doing is giving the value a name. Should the case be any different, Rust would reject our let statement — just like it rejects a match block that doesn’t include branches for all possible outcomes. An empty pattern But just because a pattern has to always match the expression, it doesn’t mean only simple identifiers like x or y are permitted in let. If Rust is able to statically ensure a match, it is perfectly OK to use a pattern with an internal structure4: use std::num::Wrapping; let Wrapping(x) = Wrapping(42); Of course, something like this is just superfluous and silly. Same mechanism, however, is also behind the ability to “initialize multiple variables”: let (x, y) = (0, 1); What really happens is that we take a tuple expression (0, 1) and match it against a pattern (x, y). Because it is trivially satisified, we have the symbols x and y bound to the tuple elements. For all intents and purposes, this is equivalent to having two separate let statements: let x = 0; let y = 1; Of course, a 2-tuple is not the only pattern of this kind we can use in let. Others possible patterns include, for example, the 0-tuple. Or, as we express it in Rust, (): let () = (); Now that’s a truly useless statement! But it also harkens straight to our debug binding. It should be pretty clear now how it works: The () stanza on the left is neither a type nor a name, but a pattern. The expression on the right is being matched against this pattern. Because the types of both of those things differ, the compiler signals an appropriate error. The curious thing is that there is nothing inherently magical about using () on the left hand side. It’s simply the shortest pattern we can put after let. It’s also one that’s extremely unlikely to actually match the right hand side, which ensures we get the desired error. But if you substituted something equally exotic and rare — say, (x, ((y, z), Wrapping(w))) — it would work equally well as a rudimentary type detector. Except for one thing, of course: nobody wants to type this much! Borne out of this frugality (and/or laziness), a custom thus emerged to use (). Short, sweet, and clever. A more formal, type-theoretic formulation of this fact is saying that () is inhabited by only one value. ↩ In case you are wondering, one possible fix here is to return 1i32; inside the if. An (arguably more idiomatic) alternative is to put 0i32 in an else branch, turning the entire if construct into the last — and only — expression in the function body. ↩ Note how each nested match is also introducing a new scope, exactly like the canonical desugaring of let which is often used to explain lifetimes and borrowing. ↩ Unfortunately, Rust isn’t currently capable of proving that the pattern is irrefutable in all obvious cases. For example, let Some(x) = Some(42); will be rejected due to the existence of a None variant in Option, even though it isn’t actually used in the (constant) expression on the right. ↩"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/rust-let-unit.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2017-02-01 18:42:00-08:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Rust"/>
+<meta property="article:tag" content="types"/>
+<meta property="article:tag" content="pattern matching"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; The “let” type trick in Rust</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="rust-let-unit">The &#8220;let&#8221; type trick in&nbsp;Rust</h1>
+    <p>Posted on Wed 01 February 2017 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Here&#8217;s a neat little trick
+that&#8217;s especially useful if you&#8217;re just starting out with&nbsp;Rust.</p>
+<p>Because the language uses <a href="https://en.wikipedia.org/wiki/Type_inference">type inference</a> all over the place
+(or at least within a single function),
+it can often be difficult to figure out the type of an expression by yourself.
+Such knowledge is very handy in resolving compiler errors,
+which may be rather complex when generics and traits are&nbsp;involved.</p>
+<p>The formula itself is very simple.
+Its shortest, most common version &#8212; and arguably the cleverest one, too &#8212;
+is the following <code>let</code> binding:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>In virtually all cases, this binding will cause a type error on its own,
+so it&#8217;s not something you&#8217;d leave permanently in your regular&nbsp;code.</p>
+<p>But the important part here is the exact error message you&nbsp;get:</p>
+<div class="highlight"><pre>error[E0308]: mismatched types
+  --&gt; &lt;anon&gt;:42:13
+   |
+42 |         let () = some_expression;
+   |             ^^ expected f64, found ()
+   |
+   = note: expected type `f64`
+   = note:    found type `()`
+</pre></div>
+
+
+<p>The type expected by Rust here (in this example, <code>f64</code>)
+is also the type of <code>some_expression</code>. No more, no&nbsp;less.</p>
+<p>There is nothing particularly wrong with using this technique
+and not caring too much how it works under the hood.
+But if you do want to know a little more what exactly is going on here,
+the rest of this post covers it in some&nbsp;detail.</p>
+<h4>The&nbsp;unit</h4>
+<p>Firstly, you may be wondering about this curious <code>()</code> type
+that the compiler has apparently found in the statement above.
+The official name for it is the <em>unit type</em>,
+and it has several notable&nbsp;characteristics:</p>
+<ol>
+<li>There exists only one value<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> of this type: <code>()</code> (same symbol as the type&nbsp;itself).</li>
+<li>It represents an empty tuple and has therefore the size of&nbsp;zero.</li>
+<li>It is the type of any expression that&#8217;s turned into a <em>statement</em>.</li>
+</ol>
+<p>That last fact is particularly interesting,
+as it makes <code>()</code> appear in error messages that are more indicative of syntactic mishaps
+rather than mismatched&nbsp;types:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">positive_signum</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="mi">1</span><span class="k">i32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="mi">0</span><span class="k">i32</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>error[E0308]: mismatched types
+ --&gt; &lt;anon&gt;:2:17
+  |
+2 |     if x &gt; 0 { 1i32 }
+  |                ^^^^ expected (), found i32
+  |
+  = note: expected type `()`
+  = note:    found type `i32`
+</pre></div>
+
+
+<p>If you think about it, however, it makes perfect sense.
+The last expression inside a function body is the return value.
+This also means that everything <em>before</em> it has to be a statement:
+an expression of type <code>()</code>.</p>
+<p>Working its way backward,
+Rust will therefore expect only such expressions before the final <code>0i32</code>.
+This, in turn, puts the same constraint on the body of the <code>if</code> statement.
+The expression <code>1i32</code> (with its type of <code>i32</code>) clearly violates it,
+causing the above error<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4><span class="dquo">&#8220;</span>Expanded&#8221;&nbsp;version</h4>
+<p>A natural question now arises:
+is <code>()</code> inside of the <code>let () = ...</code> formula a <em>type</em> <code>()</code> or a <em>value</em> <code>()</code>?&#8230;</p>
+<p>To answer that,
+it&#8217;s quite helpful to compare and contrast the original binding with its longer&nbsp;&#8220;equivalent&#8221;:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="o">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>This statement is conceptually very similar to our original one.
+The error message it causes can also be used to debug issues with type&nbsp;inference.</p>
+<p>Despite some cryptic symbols, the syntax here should also be more familiar.
+It occurs in many typical, ordinary bindings you can see in everyday Rust code.
+Here&#8217;s an&nbsp;example:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>where it&#8217;s abundantly clear that <code>i32</code> is the type of variable <code>x</code>.</p>
+<p>Analogously above, you can see that
+an unnamed symbol (<code>_</code>, the underscore) is declared to be of type <code>()</code>.</p>
+<p>So in this alternate phrasing, <code>()</code> denotes a <em>type</em>.</p>
+<h4>Let a pattern&nbsp;emerge</h4>
+<p>What about the original form, <code>let () = ...</code>?
+There is no explicit type declaration here (i.e. no colon),
+and a pair of empty parentheses isn&#8217;t a name that could be assigned a new&nbsp;value.</p>
+<p>What exactly is happening there,&nbsp;then?&#8230;</p>
+<p>Well, it isn&#8217;t really anything special.
+While it may look exceptional, and totally unlike common usages of <code>let</code>,
+it is in fact exactly the same thing as a mundane <code>let x = 5</code>.
+The potential misconception here is about the exact meaning of <code>x</code>.</p>
+<p>The simple version is that it&#8217;s a name for the bound expression.<br>
+But the actual truth is that it&#8217;s a <em>pattern</em> which is matched against that&nbsp;expression.</p>
+<p>The terms &#8220;pattern&#8221; and &#8220;matching&#8221; here refer to the same mechanism
+that occurrs within <a href="https://doc.rust-lang.org/book/match.html">the <code>match</code> statement</a>.
+You could even imagine a peculiar form of desugaring,
+where a <code>let</code> statement is converted into a semantically equivalent <code>match</code>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">original</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">desugared</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">x</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="mi">6</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="n">y</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>This analogy works perfectly<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>, because the patterns here are <em>irrefutable</em>:
+any value can match them, as all we&#8217;re doing is giving the value a name.
+Should the case be any different, Rust would reject our <code>let</code> statement &#8212;
+just like it rejects a <code>match</code> block that doesn&#8217;t include branches for all possible&nbsp;outcomes.</p>
+<h4>An empty&nbsp;pattern</h4>
+<p>But just because a pattern has to always match the expression,
+it doesn&#8217;t mean only simple identifiers like <code>x</code> or <code>y</code> are permitted in <code>let</code>.
+If Rust is able to statically ensure a match,
+it is perfectly <span class="caps">OK</span> to use a pattern with an internal structure<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">num</span><span class="o">::</span><span class="n">Wrapping</span><span class="p">;</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>Of course, something like this is just superfluous and silly.
+Same mechanism, however, is also behind the ability to &#8220;initialize multiple&nbsp;variables&#8221;:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>What really happens is that we take a <em>tuple expression</em> <code>(0, 1)</code>
+and match it against a pattern <code>(x, y)</code>.
+Because it is trivially satisified,
+we have the symbols <code>x</code> and <code>y</code> bound to the tuple elements.
+For all intents and purposes, this is equivalent to having two separate <code>let</code> statements:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Of course, a 2-tuple is not the only pattern of this kind we can use in <code>let</code>.
+Others possible patterns include, for example, the <em>0-tuple</em>.</p>
+<p>Or, as we express it in Rust, <code>()</code>:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>Now that&#8217;s a truly useless statement!
+But it also harkens straight to our debug binding.
+It should be pretty clear now how it&nbsp;works:</p>
+<ul>
+<li>The <code>()</code> stanza on the left is neither a type nor a name, but a <em>pattern</em>.</li>
+<li>The expression on the right is being <em>matched</em> against this&nbsp;pattern.</li>
+<li>Because the types of both of those things differ, the compiler signals an appropriate&nbsp;error.</li>
+</ul>
+<p>The curious thing is that there is nothing inherently magical about using <code>()</code> on the left hand side.
+It&#8217;s simply the shortest pattern we can put after <code>let</code>.
+It&#8217;s also one that&#8217;s extremely unlikely to actually match the right hand side,
+which ensures we get the desired error.
+But if you substituted something equally exotic and rare &#8212; say, <code>(x, ((y, z), Wrapping(w)))</code> &#8212;
+it would work equally well as a rudimentary type&nbsp;detector.</p>
+<p>Except for one thing, of course: nobody wants to type this much!
+Borne out of this frugality (and/or laziness), a custom thus emerged to use <code>()</code>.</p>
+<p>Short, sweet, and <em>clever</em>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A more formal, type-theoretic formulation of this fact
+is saying that <code>()</code> is <em>inhabited</em> by only one value.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>In case you are wondering, one possible fix here is to <code>return 1i32;</code> inside the <code>if</code>.
+An (arguably more idiomatic) alternative is to put <code>0i32</code> in an <code>else</code> branch,
+turning the entire <code>if</code> construct into the last &#8212; and only &#8212; expression in the function body.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Note how each nested <code>match</code> is also introducing a new scope,
+exactly like the
+<a href="https://doc.rust-lang.org/1.10.0/book/references-and-borrowing.html#thinking-in-scopes">canonical desugaring</a>
+of <code>let</code> which is often used to explain lifetimes and borrowing.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Unfortunately, Rust isn&#8217;t currently capable of proving that the pattern is irrefutable in all obvious cases.
+For example, <code>let Some(x) = Some(42);</code> will be rejected due to the existence of a <code>None</code> variant in <code>Option</code>,
+even though it isn&#8217;t actually used in the (constant) expression on the right.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/rust.html">Rust</a>
+      <a href="http://xion.io/tag/types.html">types</a>
+      <a href="http://xion.io/tag/pattern-matching.html">pattern matching</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "The “let” type trick in Rust",
+  "headline": "The “let” type trick in Rust",
+  "datePublished": "2017-02-01 18:42:00-08:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/rust-let-unit.html",
+  "description": "Here’s a neat little trick that’s especially useful if you’re just starting out with Rust. Because the language uses type inference all over the place (or at least within a single function), it can often be difficult to figure out the type of an expression by yourself. Such knowledge is very handy in resolving compiler errors, which may be rather complex when generics and traits are involved. The formula itself is very simple. Its shortest, most common version — and arguably the cleverest one, too — is the following let binding: let () = some_expression; In virtually all cases, this binding will cause a type error on its own, so it’s not something you’d leave permanently in your regular code. But the important part here is the exact error message you get: error[E0308]: mismatched types --> <anon>:42:13 | 42 | let () = some_expression; | ^^ expected f64, found () | = note: expected type `f64` = note: found type `()` The type expected by Rust here (in this example, f64) is also the type of some_expression. No more, no less. There is nothing particularly wrong with using this technique and not caring too much how it works under the hood. But if you do want to know a little more what exactly is going on here, the rest of this post covers it in some detail. The unit Firstly, you may be wondering about this curious () type that the compiler has apparently found in the statement above. The official name for it is the unit type, and it has several notable characteristics: There exists only one value1 of this type: () (same symbol as the type itself). It represents an empty tuple and has therefore the size of zero. It is the type of any expression that’s turned into a statement. That last fact is particularly interesting, as it makes () appear in error messages that are more indicative of syntactic mishaps rather than mismatched types: fn positive_signum(x: i32) -> i32 { if x > 0 { 1i32 } 0i32 } error[E0308]: mismatched types --> <anon>:2:17 | 2 | if x > 0 { 1i32 } | ^^^^ expected (), found i32 | = note: expected type `()` = note: found type `i32` If you think about it, however, it makes perfect sense. The last expression inside a function body is the return value. This also means that everything before it has to be a statement: an expression of type (). Working its way backward, Rust will therefore expect only such expressions before the final 0i32. This, in turn, puts the same constraint on the body of the if statement. The expression 1i32 (with its type of i32) clearly violates it, causing the above error2. “Expanded” version A natural question now arises: is () inside of the let () = ... formula a type () or a value ()?… To answer that, it’s quite helpful to compare and contrast the original binding with its longer “equivalent”: let _: () = some_expression; This statement is conceptually very similar to our original one. The error message it causes can also be used to debug issues with type inference. Despite some cryptic symbols, the syntax here should also be more familiar. It occurs in many typical, ordinary bindings you can see in everyday Rust code. Here’s an example: let x: i32 = 42; where it’s abundantly clear that i32 is the type of variable x. Analogously above, you can see that an unnamed symbol (_, the underscore) is declared to be of type (). So in this alternate phrasing, () denotes a type. Let a pattern emerge What about the original form, let () = ...? There is no explicit type declaration here (i.e. no colon), and a pair of empty parentheses isn’t a name that could be assigned a new value. What exactly is happening there, then?… Well, it isn’t really anything special. While it may look exceptional, and totally unlike common usages of let, it is in fact exactly the same thing as a mundane let x = 5. The potential misconception here is about the exact meaning of x. The simple version is that it’s a name for the bound expression. But the actual truth is that it’s a pattern which is matched against that expression. The terms “pattern” and “matching” here refer to the same mechanism that occurrs within the match statement. You could even imagine a peculiar form of desugaring, where a let statement is converted into a semantically equivalent match: fn original() -> i32 { let x = 5; let y = 6; x + y } fn desugared() -> i32 { match 5 { x => match 6 { y => x + y } } } This analogy works perfectly3, because the patterns here are irrefutable: any value can match them, as all we’re doing is giving the value a name. Should the case be any different, Rust would reject our let statement — just like it rejects a match block that doesn’t include branches for all possible outcomes. An empty pattern But just because a pattern has to always match the expression, it doesn’t mean only simple identifiers like x or y are permitted in let. If Rust is able to statically ensure a match, it is perfectly OK to use a pattern with an internal structure4: use std::num::Wrapping; let Wrapping(x) = Wrapping(42); Of course, something like this is just superfluous and silly. Same mechanism, however, is also behind the ability to “initialize multiple variables”: let (x, y) = (0, 1); What really happens is that we take a tuple expression (0, 1) and match it against a pattern (x, y). Because it is trivially satisified, we have the symbols x and y bound to the tuple elements. For all intents and purposes, this is equivalent to having two separate let statements: let x = 0; let y = 1; Of course, a 2-tuple is not the only pattern of this kind we can use in let. Others possible patterns include, for example, the 0-tuple. Or, as we express it in Rust, (): let () = (); Now that’s a truly useless statement! But it also harkens straight to our debug binding. It should be pretty clear now how it works: The () stanza on the left is neither a type nor a name, but a pattern. The expression on the right is being matched against this pattern. Because the types of both of those things differ, the compiler signals an appropriate error. The curious thing is that there is nothing inherently magical about using () on the left hand side. It’s simply the shortest pattern we can put after let. It’s also one that’s extremely unlikely to actually match the right hand side, which ensures we get the desired error. But if you substituted something equally exotic and rare — say, (x, ((y, z), Wrapping(w))) — it would work equally well as a rudimentary type detector. Except for one thing, of course: nobody wants to type this much! Borne out of this frugality (and/or laziness), a custom thus emerged to use (). Short, sweet, and clever. A more formal, type-theoretic formulation of this fact is saying that () is inhabited by only one value. ↩ In case you are wondering, one possible fix here is to return 1i32; inside the if. An (arguably more idiomatic) alternative is to put 0i32 in an else branch, turning the entire if construct into the last — and only — expression in the function body. ↩ Note how each nested match is also introducing a new scope, exactly like the canonical desugaring of let which is often used to explain lifetimes and borrowing. ↩ Unfortunately, Rust isn’t currently capable of proving that the pattern is irrefutable in all obvious cases. For example, let Some(x) = Some(42); will be rejected due to the existence of a None variant in Option, even though it isn’t actually used in the (constant) expression on the right. ↩"
+}
+</script></body>
+</html>
