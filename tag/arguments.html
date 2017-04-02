@@ -113,11 +113,11 @@ Python also has them, of&nbsp;course:</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">of</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">current</span>
 
-    <span class="n">___next__</span> <span class="o">=</span> <span class="nb">next</span>  <span class="c"># Python 3</span>
+    <span class="n">__next__</span> <span class="o">=</span> <span class="nb">next</span>  <span class="c"># Python 3</span>
 </pre></div>
 
 
-<p>but they usually are not the first choice<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>but they are usually not the first choice<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
 <p>It&#8217;s also pretty easy to see why:
 they require explicit bookkeeping of any auxiliary state between iterations.
 Perhaps it&#8217;s not too much to ask for a trivial walk over integers,

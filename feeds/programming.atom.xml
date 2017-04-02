@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2016-12-24T20:57:00-08:00</updated><entry><title>A tale of two Rusts</title><link href="http://xion.io/post/programming/rust-nightly-vs-stable.html" rel="alternate"></link><updated>2016-12-24T20:57:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-24:post/programming/rust-nightly-vs-stable.html</id><summary type="html">&lt;p&gt;The writing has been on the wall for many months now,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-03-28T18:35:00+00:00</updated><entry><title>A tale of two Rusts</title><link href="http://xion.io/post/programming/rust-nightly-vs-stable.html" rel="alternate"></link><updated>2017-03-28T18:35:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-24:post/programming/rust-nightly-vs-stable.html</id><summary type="html">&lt;p&gt;The writing has been on the wall for many months now,
 but I think the time has come when we can officially declare&amp;nbsp;it.&lt;/p&gt;
 &lt;blockquote&gt;
 &lt;p&gt;Stable Rust is dead. Nightly Rust is the only&amp;nbsp;Rust.&lt;/p&gt;
 &lt;/blockquote&gt;
-&lt;h3&gt;Say&amp;nbsp;what?&lt;/h3&gt;
+&lt;h4&gt;Say&amp;nbsp;what?&lt;/h4&gt;
 &lt;p&gt;If you&amp;#8217;re out of the loop,
 &lt;a href="http://rust-lang.org/"&gt;Rust&lt;/a&gt; is this newfangled system programming language.
 Rust is meant to fit in the niches normally occupied by C,
