@@ -181,7 +181,7 @@ albeit a more verbose&amp;nbsp;one.&lt;/p&gt;
 &lt;hr /&gt;
 &lt;ol&gt;
 &lt;li id="fn:1"&gt;
-&lt;p&gt;A symmetrical technique is using &lt;code&gt;.filter_map(Result::err)&lt;/code&gt; to get just
+&lt;p&gt;A symmetrical technique is to use &lt;code&gt;.filter_map(Result::err)&lt;/code&gt; to get just
 the &lt;code&gt;Err&lt;/code&gt;or objects, but that&amp;#8217;s probably much less useful
 as it drops all the successful values.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
