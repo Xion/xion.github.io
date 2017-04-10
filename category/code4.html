@@ -63,6 +63,239 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Celery task in a Flask request&nbsp;context</a></h2>
+    <p>
+      Posted on Tue 03 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/celery.html">Celery</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/queue.html">queue</a>,      <a href="http://xion.io/tag/request-context.html">request context</a>      &#8226; <a href="http://xion.io/post/code/celery-include-flask-request-context.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://celeryproject.org">Celery</a> is an asynchronous task worker that&#8217;s frequently used for background processing
+in Python web apps. Rather than performing a time-consuming task within the request loop, we delegate it to a <em>queue</em>
+so that a <em>worker process</em> can pick it up when ready. The immediate benefit is much better latency for the end user.
+Pros also include easier scalability, since you can adjust the number of workers to your task&nbsp;load.</p>
+<p>Examples of tasks that are usually best done in the background vary from fetching data through a third-party <span class="caps">API</span>
+to sending emails, and from pushing mobile notifications to pruning the database of stale records. Anything that may
+take more than a couple hundred milliseconds to complete &#8212; and isn&#8217;t absolutely essential to the current <span class="caps">HTTP</span> request &#8212;
+is typically a good candidate for asynchronous&nbsp;processing.</p>
+<p>In Celery, workers are just regular Python processes, often running the exact same code that&#8217;s powering the app&#8217;s web
+frontend<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. But unlike most of that code, they aren&#8217;t servicing any <span class="caps">HTTP</span> requests &#8212; they simply run some function
+with given arguments, both specified by whomever sent a task for execution. Indeed, those functions don&#8217;t even <em>know</em>
+who or what asked for them to be&nbsp;executed.</p>
+<p>Neat, right? It is what we usually compliment as <em>decoupling</em>, or separation of concerns. They are valuable qualities even
+regardless of the <span class="caps">UI</span> and scaling benefits mentioned&nbsp;earlier.</p>
+<h4>Not quite&nbsp;web</h4>
+<p>But those qualities come with a trade-off. Task code is no longer a web frontend code: it doesn&#8217;t run within the
+comfy environment of our web framework of choice. Losing it may be quite unnerving, actually, because in a typical
+web application there will be many things tied directly to the <span class="caps">HTTP</span> request pipeline. After all, this is what web
+applications <em>do</em> &#8212; respond to <span class="caps">HTTP</span> requests &#8212; so it often makes perfect sense e.g. to marry the request flow
+with database transactions, committing or rolling those back according to <span class="caps">HTTP</span> status code that the app&nbsp;produced.</p>
+<p>Tasks may also require a database, though, if only to
+<a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#state">assert the expected state of the world</a>.
+Similar goes for memcache, a Redis instance, or basically any resource used by the frontend code.
+Alas, it&#8217;s quite possible <em>the very reason</em> we delegate work to a task is to shift lengthy interactions with those
+external systems away from the <span class="caps">UI</span>. Obviously, we&#8217;re going to need them for&nbsp;that!</p>
+<h4>Fake a&nbsp;request</h4>
+<p>So one way or another, our tasks will most likely need some initialization and/or cleanup code. And since it&#8217;s probably
+the same code that most <span class="caps">HTTP</span> request handlers require and use already, why not just <em>pretend we&#8217;re handling a request
+after all</em>?</p>
+<p>In <a href="http://flask.pocoo.org">Flask</a>, we can pull that off rather easily.
+The <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.test_request_context"><code>test_request_context</code> method</a>
+is conveniently provided to allow for faking the <em>request context</em> &#8212; that is, an execution environment for <span class="caps">HTTP</span> handlers.
+Like the name suggest, it is used mostly <a href="http://flask.pocoo.org/docs/0.10/testing/">for testing</a>, but there is nothing
+stopping us from using it in tasks run by&nbsp;Celery.</p>
+<p>We probably don&#8217;t want to call it directly, though. What would be better is to have Celery prepare the context first,
+and then run the task code as if it was an <span class="caps">HTTP</span> handler. For even better results, the context would preserve information
+extracted from the <em>actual <span class="caps">HTTP</span> request</em>, one that has sent the task for execution. Moving some work to the background
+would then be a trivial matter, for both the task and the original handler would operate within the same&nbsp;environment.</p>
+<p>Convenient? I believe so. And as I&#8217;ll demonstrate next, it isn&#8217;t very complicated to implement&nbsp;either.</p>
+<h4>Wrap the&nbsp;decorator?</h4>
+<p>At least one piece of the solution should stand out as pretty obvious. Since our intention is to wrap the task&#8217;s code
+in some additional packaging &#8212; the request context &#8212; it seems fairly natural to write our own <code>@task</code> decorator:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">functools</span>
+
+<span class="kn">from</span> <span class="nn">myapp</span> <span class="kn">import</span> <span class="n">app</span><span class="p">,</span> <span class="n">celery</span>
+
+
+<span class="k">def</span> <span class="nf">task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Decorator function to apply to Celery tasks.</span>
+<span class="sd">    Executes the actual task inside Flask&#39;s test request context.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Actual decorator.&quot;&quot;&quot;</span>
+        <span class="nd">@celery.task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nd">@functools.wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">wrapped</span>
+
+    <span class="k">return</span> <span class="n">decorator</span>
+</pre></div>
+
+
+<p>Here, <code>app</code> is the <a href="http://flask.pocoo.org/docs/0.10/api/#application-object"><code>Flask</code> application</a>, and <code>celery</code> is the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery-application-objects"><code>Celery</code> object</a>
+that&#8217;s often configured alongside&nbsp;it.</p>
+<h4>The <code>Task</code> class</h4>
+<p>While this technique will give us <em>a</em> request context inside the task code, it won&#8217;t be <em>the</em> request context
+from which the task has been sent for execution. To replicate that context correctly, we need additional support
+on the sender&nbsp;side.</p>
+<p>Internally, Celery is converting every function we annotate with <code>@task</code> decorator into a subclass of
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task"><code>Celery.app.task.Task</code></a>.
+This process can be customized, for example by providing an explicit <code>base=</code> parameter to <code>@task</code> which
+specifies a <a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#custom-task-classes">custom <code>Task</code> subclass</a>
+to use in place of the default one. Within that subclass, we&#8217;re free to override any functionality that we need&nbsp;to.</p>
+<p>In our case, we&#8217;ll scrape the current request context from Flask for all relevant information,
+and later use it to recreate the context in the task&nbsp;code.</p>
+<p>But before we get to that, let&#8217;s just create the <code>Task</code> subclass and move the above execution logic to it.
+This way, users won&#8217;t have to use a completely new <code>@task</code> decorator which would needlessly couple them to a specific
+<code>Celery</code> app&nbsp;instance:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">celery</span> <span class="kn">import</span> <span class="n">Task</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for tasks that run inside a Flask request context.&quot;&quot;&quot;</span>
+    <span class="n">abstract</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Instead, they can either set this class as <code>base=</code> for a specific&nbsp;task:</p>
+<div class="highlight"><pre><span class="nd">@celery.task</span><span class="p">(</span><span class="n">base</span><span class="o">=</span><span class="n">RequestContextTask</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sync_user_data</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or make it into new default for all their&nbsp;tasks:</p>
+<div class="highlight"><pre><span class="n">celery</span> <span class="o">=</span> <span class="n">Celery</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="n">celery</span><span class="o">.</span><span class="n">Task</span> <span class="o">=</span> <span class="n">RequestContextTask</span>
+</pre></div>
+
+
+<h4>Invocation&nbsp;patterns</h4>
+<p>When the frontend asks for a task to be executed, it most often uses the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.delay"><code>Task.delay</code> method</a>.
+It will package a payload contaning task arguments, and send it off through a <em>broker</em> &#8212;
+usually an <a href="https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol"><span class="caps">AMQP</span></a>-based queue,
+such as <a href="https://www.rabbitmq.com/">RabbitMQ</a> &#8212; so that a Celery worker can pick it up and actually&nbsp;execute.</p>
+<p>But there are other means of task invocation. We can even run it
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.apply">&#8220;in place&#8221;</a>,
+locally and synchronously, which is especially useful for various testing scenarios. Lastly, a task can also be
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.retry">retried</a> from within
+its own code, terminating its current run and scheduling another attempt for some future&nbsp;date.</p>
+<p>Obviously, for the <code>RequestContextTask</code> to be useful, it needs to behave correctly in every situation.
+Therefore we need to cover all the entry points I&#8217;ve mentioned &#8212;
+the asynchronous call, a synchronous invocation, and a task&nbsp;retry:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">apply_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply_async</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">retry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Note that <code>Task.apply_async</code> is being called internally by <code>Task.delay</code>,
+so it&#8217;s only that first method that we have to&nbsp;override.</p>
+<h4>Context in a&nbsp;box</h4>
+<p>As you can deduce right away, the Flask-related magic is meant to go in the <code>_include_context</code> method.
+The idea is to prepare arguments for the eventual invocation of <code>Flask.test_request_context</code>,
+and pass them through an extra task parameter.
+Those arguments are relatively uncomplicated: they are just a medley of various pieces of information
+that we can easily obtain from the Flask&#8217;s <code>request</code> object:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">has_request_context</span><span class="p">,</span> <span class="n">request</span>
+
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="n">CONTEXT_ARG_NAME</span> <span class="o">=</span> <span class="s">&#39;_flask_request_context&#39;</span>
+
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">_include_request_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Includes all the information about current HTTP request context</span>
+<span class="sd">        as an additional argument to the task.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;path&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
+            <span class="s">&#39;base_url&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">url_root</span><span class="p">,</span>
+            <span class="s">&#39;method&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
+            <span class="s">&#39;headers&#39;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="s">&#39;?&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="s">&#39;query_string&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">[(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s">&#39;?&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):]</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">]</span> <span class="o">=</span> <span class="n">context</span>
+</pre></div>
+
+
+<p>On the worker side, we simply unpack them and recreate the&nbsp;context:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">make_response</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">call</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">):</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">call</span><span class="p">()</span>
+            <span class="n">app</span><span class="o">.</span><span class="n">process_response</span><span class="p">(</span><span class="n">make_response</span><span class="p">(</span><span class="n">result</span> <span class="ow">or</span> <span class="s">&#39;&#39;</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+
+
+<p>The only tricky part is calling
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.process_response"><code>Flask.process_response</code></a> at the end.
+We need to do that for the <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.after_request"><code>@after_request</code> hooks</a>
+to execute correctly. This is quite crucial, because those hooks are where you&#8217;d normally put important cleanup code,
+like commit/rollback of the database&nbsp;transaction.</p>
+<h4>Complete&nbsp;solution</h4>
+<p>To see how all those code snippets fit together, see <a href="https://gist.github.com/Xion/46d739b980af14a0d3ea">this gist</a>.
+You may also want to have a look at
+<a href="http://flask.pocoo.org/docs/0.10/patterns/celery/">the article on Celery integration</a> in Flask docs for some tips on
+how to integrate it with your own&nbsp;project.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This isn&#8217;t strictly necessary, as Celery supports sending tasks for execution
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery.Celery.send_task">by explicit name</a>.
+For that request to reach the worker, however,
+the <a href="http://docs.celeryproject.org/en/latest/configuration.html#broker-url">task broker configuration</a>
+must be correctly shared between sender and the worker.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></a></h2>
     <p>
       Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1371,133 +1604,6 @@ or privacy considerations. Personally, I wouldn&#8217;t recommend relying on any
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Query string authentication in&nbsp;Requests</a></h2>
-    <p>
-      Posted on Fri 11 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/requests.html">Requests</a>,      <a href="http://xion.io/tag/http.html">HTTP</a>,      <a href="http://xion.io/tag/authentication.html">authentication</a>      &#8226; <a href="http://xion.io/post/code/requests-query-string-auth.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://python-requests.org">Requests</a> is a widely used Python library that provides a nicer <span class="caps">API</span> for writing <span class="caps">HTTP</span> clients
-than the standard <code>urllib2</code> module does. It deals with authentication in an especially concise way: through
-a simple <code>auth=</code> argument, rather than a
-<a href="https://gist.github.com/kennethreitz/973705">separate password manager <span class="amp">&amp;</span> authentication handler</a> or other such&nbsp;nonsense.</p>
-<p>There are <a href="http://docs.python-requests.org/en/latest/user/authentication/">several possible ways</a>
-to authenticate an <span class="caps">HTTP</span> call with Requests, and it&#8217;s pretty easy to
-<a href="http://docs.python-requests.org/en/latest/user/authentication/#new-forms-of-authentication">implement our own approach</a>
-if the server requires it. All the built-in ways, however, as well as
-<a href="http://docs.python-requests.org/en/latest/user/advanced/#custom-authentication">the examples of custom implementations</a>,
-are heavily biased towards using <span class="caps">HTTP</span> headers to transmit the necessary credentials (such as username/password
-or some kind of opaque&nbsp;token).</p>
-<h4>Non-standard&nbsp;auth</h4>
-<p>This is actually quite reasonable: the most popular authentication methods, including OAuth 1.0 <span class="amp">&amp;</span> 2.0, use <span class="caps">HTTP</span> headers
-either primarily or&nbsp;exclusively.</p>
-<p>Not every <span class="caps">HTTP</span> <span class="caps">API</span> follows this convention, though. Sometimes, credentials are put in other parts of the request,
-commonly the <span class="caps">URL</span> itself. It may seem like a bad idea at first but it can also be perfectly acceptable:
-credentials don&#8217;t have to expose secrets of any particular <em>user</em> of the remote&nbsp;system.</p>
-<p><a href="http://steamcommunity.com/dev">Steam <span class="caps">API</span></a> is a good example here. Calling any of
-<a href="https://developer.valvesoftware.com/wiki/Steam_Web_API#Interfaces_and_method">its endpoints</a> requires providing
-an <span class="caps">API</span> key but it grants no special rights to access data of any particular Steam user. All the information
-it returns is already visible on their public profile<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>For those special authentication schemes, Requests necessitate rolling out our own implementation.
-Thankfully, doing so is mostly pretty&nbsp;straightforward.</p>
-<h4>Simple&nbsp;example</h4>
-<p>All Requests&#8217; authenticators are callable objects inheriting from <code>requests.auth.AuthBase</code> class.
-Writing your own is hence a matter of defining a subclass of <code>AuthBase</code> with at least a <code>__call__</code> method:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">SillyAuth</span><span class="p">(</span><span class="n">AuthBase</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;X-ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;im valid so auth is yes&#39;</span>
-        <span class="k">return</span> <span class="n">request</span>
-
-<span class="c"># usage</span>
-<span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;http://example.com&#39;</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">SillyAuth</span><span class="p">())</span>
-</pre></div>
-
-
-<p>The job of an authenticator is to modify the <code>request</code> so that it includes appropriate credentials in whatever form
-necessary to have them accepted by the remote server. Like I&#8217;ve mentioned before, <span class="caps">HTTP</span> headers are the most common option,
-but the request can be modified in other ways as&nbsp;well.</p>
-<h4>Query string&nbsp;parameters</h4>
-<p>One problem with modifying a query string, though, is that it&#8217;s a part of request <span class="caps">URL</span>. By the time it reaches
-authenticators, the Requests library has already merged any additional query params into it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. Including more params
-will thus require modifying the <span class="caps">URL</span>.</p>
-<p>Though it may sound like a risky endeavour involving string manipulations that are fraught with security issues,
-it&#8217;s not really <em>that</em> bad at all. In fact, the Requests library provides an <span class="caps">API</span> to do exactly&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">QueryStringAuth</span><span class="p">(</span><span class="n">AuthBase</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Authenticator that attaches a set of query string parameters</span>
-<span class="sd">    (e.g. an API key) to the request.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span>
-
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
-            <span class="n">request</span><span class="o">.</span><span class="n">prepare_url</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">request</span>
-</pre></div>
-
-
-<p>Albeit <a href="http://docs.python-requests.org/en/latest/api/#requests.PreparedRequest.prepare_url">scantly documented</a>,
-the <code>prepare_url</code> method will take an existing <span class="caps">URL</span> and a dictionary of query string params, and outfit the request
-with a brand new <span class="caps">URL</span> that contains those params neatly&nbsp;encoded.</p>
-<p>Full implementation of <code>QueryStringAuth</code> is a <a href="https://gist.github.com/Xion/9c1bbbc287d4443dbaf5">little more involved</a>
-than the snippet above, because we should like to replicate all the idiosyncracies of how
-<a href="http://docs.python-requests.org/en/latest/user/quickstart/#passing-parameters-in-urls">regular Requests <span class="caps">API</span></a>
-handles query string params. Some of them &#8212; like allowing both strings and lists as param values &#8212; are taken care of
-by <code>prepare_url</code> itself, but the rest should be dealt with on our&nbsp;own.</p>
-<h4>Usage</h4>
-<p>To finish up, let&#8217;s use this authenticator to call Steam <span class="caps">API</span> and return a
-<a href="https://developer.valvesoftware.com/wiki/Steam_Web_API#GetOwnedGames_.28v0001.29">list of games</a>
-that a given user owns but hasn&#8217;t played&nbsp;yet:</p>
-<div class="highlight"><pre><span class="n">STEAM_API_KEY</span> <span class="o">=</span> <span class="s">&#39;a1b2c3d4e5f6g7h8i9j&#39;</span>  <span class="c"># not a real one, of course</span>
-
-
-<span class="k">def</span> <span class="nf">get_steam_backlog</span><span class="p">(</span><span class="n">steam_id</span><span class="p">):</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="s">&#39;http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/&#39;</span>
-    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s">&#39;steamid&#39;</span><span class="p">:</span> <span class="n">steam_id</span><span class="p">,</span>
-        <span class="s">&#39;include_appinfo&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-    <span class="p">}</span>
-
-    <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-        <span class="n">url</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">QueryStringAuth</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">STEAM_API_KEY</span><span class="p">))</span>
-    <span class="n">games</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;response&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;games&#39;</span><span class="p">,</span> <span class="p">())</span>
-
-    <span class="k">for</span> <span class="n">game</span> <span class="ow">in</span> <span class="n">games</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">game</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;playtime_forever&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">):</span>
-            <span class="k">continue</span>
-        <span class="k">yield</span> <span class="n">game</span><span class="p">[</span><span class="s">&#39;name&#39;</span><span class="p">]</span>
-</pre></div>
-
-
-<p>We could&#8217;ve put <code>STEAM_API_KEY</code> directly in <code>params</code>, of course. Singling it out explicitly as an authentication
-detail, however, makes the code clearer and plays nicely with more advanced features of Requests,
-such as <a href="http://docs.python-requests.org/en/latest/user/advanced/#session-objects">sessions</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>It can be said that only in this case we&#8217;re dealing with exclusively <em>authentication</em>, whereas the others
-also perform <em>authorization</em>. I wouldn&#8217;t quibble too much about those details. The fact that both terms are often
-shortened to &#8220;auth&#8221; doesn&#8217;t exactly help with distinguishing them anyway.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>In fact, what <code>AuthBase.__call__</code> receives is a special
-<a href="http://docs.python-requests.org/en/latest/user/advanced/#prepared-requests"><code>PreparedRequest</code> object</a> which contains
-the exact bytes that&#8217;ll be sent to the server. Most of the higher level abstractions offered by the Requests library
-(like form data or <span class="caps">JSON</span> request body) has been compiled to raw octets at this point. This is done to allow
-some authenticators (like OAuth) to analyze the full request payload and sign it cryptographically
-as a part of their flow.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Continue reading</a>
   </div>
 </article>
 

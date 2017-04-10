@@ -63,6 +63,217 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-iter-patterns.html#rust-iter-patterns">Iteration patterns for Result <span class="amp">&amp;</span>&nbsp;Option</a></h2>
+    <p>
+      Posted on Mon 10 April 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/iterators.html">iterators</a>      &#8226; <a href="http://xion.io/post/code/rust-iter-patterns.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Towards the end of <a href="http://xion.io/post/code/rust-for-loop.html">my previous post about <code>for</code> loops in Rust</a>,
+I mentioned how those loops can often be expressed in a more declarative way.
+This alternative approach involves chaining methods of
+<a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html">the <code>Iterator</code> trait</a>
+to create specialized transformation&nbsp;pipelines:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">odds_squared</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mf">1.</span><span class="p">.</span><span class="mi">100</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p><small><a href="https://is.gd/q4lXew">Playground link</a></small></p>
+<p>Code like this isn&#8217;t unique to Rust, of course.
+Similar patterns are prevalent in functional languages such as
+<a href="https://msdn.microsoft.com/en-us/visualfsharpdocs/conceptual/operators.%5b-h%5d-%5d%5b't1%2c'u%5d-function-%5bfsharp%5d">F#</a>,
+and can also be found in
+Java (<a href="https://dzone.com/articles/understanding-java-8-streams-1">Streams</a>),
+imperative .<span class="caps">NET</span> (<a href="https://msdn.microsoft.com/en-us/library/bb308959.aspx#linqoverview_topic3"><span class="caps">LINQ</span></a>),
+JavaScript (<a href="https://lodash.com/docs/4.17.4#chain">LoDash</a>)
+and&nbsp;elsewhere.</p>
+<p>This saying, Rust also has its fair share of unique iteration idioms.
+In this post, we&#8217;re going to explore those arising on the intersection of iterators
+and the most common Rust enums: <code>Result</code> and <code>Option</code>.</p>
+<h4>filter_map()</h4>
+<p>When working with iterators,
+we&#8217;re almost always interested in selecting elements that match some criterion
+or passing them through a transformation function.
+It&#8217;s not even uncommon to want <em>both</em> of those things,
+as demonstrated by the initial example in this&nbsp;post.</p>
+<p>You can, of course, accomplish those two tasks independently:
+Rust&#8217;s <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"><code>filter</code></a>
+and <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"><code>map</code></a> methods
+work just fine for this purpose.
+But there exists an alternative, and in some cases it fits the problem <em>amazingly</em>&nbsp;well.</p>
+<p>Meet <code>filter_map</code>.
+Here&#8217;s what <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter_map">the official docs</a>
+have to say about&nbsp;it:</p>
+<blockquote>
+<p>Creates an iterator that both filters and&nbsp;maps.</p>
+</blockquote>
+<p>Well, <em>duh</em>.</p>
+<p>On a more serious note, the common pattern that <code>filter_map</code> simplifies
+is unwrapping a series of <code>Option</code>s.
+If you have a sequence of maybe-values,
+and you want to retain only those that are actually there,
+<code>filter_map</code> can do it in a single&nbsp;step:</p>
+<div class="highlight"><pre><span class="c1">// Get the sequence of all files matching a glob pattern via the glob crate.</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">some_files</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">glob</span><span class="o">::</span><span class="n">glob</span><span class="p">(</span><span class="s">&quot;foo.*&quot;</span><span class="p">).</span><span class="n">unwrap</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="p">.</span><span class="n">unwrap</span><span class="p">());</span><span class="w"></span>
+<span class="c1">// Retain only their extensions, e.g. &quot;.txt&quot; or &quot;.md&quot;.</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">file_extensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_files</span><span class="p">.</span><span class="n">filter_map</span><span class="p">(</span><span class="o">|</span><span class="n">p</span><span class="o">|</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">extension</span><span class="p">());</span><span class="w"></span>
+</pre></div>
+
+
+<p>The equivalent that doesn&#8217;t use <code>filter_map</code>
+would have to split the checking <span class="amp">&amp;</span> unwrapping of <code>Option</code>s into separate&nbsp;steps:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">file_extensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_files</span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">p</span><span class="o">|</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">extension</span><span class="p">())</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">is_some</span><span class="p">()).</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">unwrap</span><span class="p">());</span><span class="w"></span>
+</pre></div>
+
+
+<p>Because of this check <span class="amp">&amp;</span> unwrap logic,
+<code>filter_map</code> can be useful even with a no-op predicate (<code>.filter_map(|x| x)</code>)
+if we already have the <code>Option</code> objects handy.
+Otherwise, it&#8217;s often very easy to obtain them,
+which is exactly the case for the <code>Result</code> type:</p>
+<div class="highlight"><pre><span class="c1">// Read all text lines from a file:</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">lines</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">BufReader</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="n">fs</span><span class="o">::</span><span class="n">File</span><span class="o">::</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;file.ext&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">lines</span><span class="p">().</span><span class="n">filter_map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">ok</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>With a simple <code>.filter_map(Result::ok)</code>, like above,
+we can pass through a sequence of <code>Result</code>s and yield only the &#8220;successful&#8221; values.
+I find this particular idiom to be extremely useful in practice,
+as long as you remember that <code>Err</code>ors will be discarded by it<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>As a final note on <code>filter_map</code>,
+you need to keep in mind that regardless of how great it often is,
+not all combinations of <code>filter</code> and <code>map</code> should be replaced by it.
+When deciding whether it&#8217;s appropriate in your case,
+it is helpful to consider the equivalence of these two&nbsp;expressions:</p>
+<div class="highlight"><pre><span class="n">iter</span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="n">f</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="n">m</span><span class="p">)</span><span class="w"></span>
+<span class="n">iter</span><span class="p">.</span><span class="n">filter_map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">m</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">None</span><span class="w"> </span><span class="p">})</span><span class="w"></span>
+</pre></div>
+
+
+<p>Simply put, if you find yourself writing conditions like this inside <code>filter_map</code>,
+you&#8217;re probably better off with two separate processing&nbsp;steps.</p>
+<h4>collect()</h4>
+<p>Let&#8217;s go back to the last example with a sequence of <code>Result</code>s.
+Since the final sequence won&#8217;t include any <code>Err</code>oneous values,
+you may be wondering if there is a way to preserve&nbsp;them.</p>
+<p>In more formal terms, the question is about turning a vector of results
+(<code>Vec&lt;Result&lt;T, E&gt;&gt;</code>) into a result with a vector (<code>Result&lt;Vec&lt;T&gt;, E&gt;</code>).
+We&#8217;d like for this aggregated result to only be <code>Ok</code>
+if <em>all</em> original results were <code>Ok</code>.
+Otherwise, we should just get the first <code>Err</code>or.</p>
+<p>Believe it or not, but this is probably <em>the</em> most common Rust problem!<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup></p>
+<p>Of course, that doesn&#8217;t necessarily mean the problem is particularly hard.
+Possible solutions exist in both an iterator&nbsp;version:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">fold</span><span class="p">(</span><span class="nb">Ok</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[]),</span><span class="w"> </span><span class="o">|</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">as_mut</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">v</span><span class="o">|</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">x</span><span class="p">));</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">),</span><span class="w"></span>
+<span class="p">});</span><span class="w"></span>
+</pre></div>
+
+
+<p>and in a loop&nbsp;form:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[]);</span><span class="w"></span>
+<span class="k">for</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">results</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">result</span><span class="p">.</span><span class="n">as_mut</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">v</span><span class="o">|</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">x</span><span class="p">)),</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">);</span><span class="w"> </span><span class="k">break</span><span class="p">;</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="w">    </span><span class="p">};</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>but I suspect not many people would call them clear and readable,
+let alone pretty<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Fortunately, you don&#8217;t need to pollute your codebase with any of those workarounds.
+Rust offers an out-of-the-box solution which solves this particular problem,
+and its only flaw is one that I hope to address through this very&nbsp;post.</p>
+<p>So, here it&nbsp;goes:</p>
+<div class="highlight"><pre><span class="nt">let</span> <span class="nt">result</span><span class="o">:</span> <span class="nt">Result</span><span class="o">&lt;</span><span class="nt">Vec</span><span class="o">&lt;</span><span class="nt">_</span><span class="o">&gt;&gt;</span> <span class="o">=</span> <span class="nt">results</span><span class="nc">.collect</span><span class="o">();</span>
+</pre></div>
+
+
+<p>Yep, that&#8217;s all of&nbsp;it.</p>
+<p>The background story is that <code>Result&lt;Vec&lt;T&gt;, E&gt;</code> simply &#8220;knows&#8221;
+how to construct itself from a sequence of <code>Result</code>s.
+Unfortunately, this <span class="caps">API</span> is hidden behind Rust&#8217;s iterator abstraction,
+and specifically the fact that
+<code>Result</code> implements <a href="https://doc.rust-lang.org/1.2.0/std/iter/trait.FromIterator.html"><code>FromIterator</code></a>
+in this particular manner.
+The way
+<a href="https://doc.rust-lang.org/std/result/enum.Result.html">the documentation page for <code>Result</code></a>
+is structured, however &#8212; with trait implementations at the very end &#8212;
+ensures this useful fact remains virtually&nbsp;undiscoverable.</p>
+<p>Because let&#8217;s be honest: no one scrolls that&nbsp;far.</p>
+<p>Incidentally, <code>Option</code> offers analogous functionally:
+a sequence of <code>Option&lt;T&gt;</code> can be <code>collect</code>ed into <code>Option&lt;Vec&lt;T&gt;&gt;</code>,
+which will be <code>None</code> if any of the input elements were.
+As you may suspect, this fact is equally hard to find in the relevant&nbsp;docs.</p>
+<p>But the good news is: you know about all this now! :)
+And perhaps thanks to this post,
+those handy tricks become a little better in a wider Rust&nbsp;community.</p>
+<h4>partition()</h4>
+<p>The last technique I wanted to present here follows naturally
+from the other idioms that apply to <code>Result</code>s.
+Instead of extracting just the <code>Ok</code> values with <code>flat_map</code>,
+or keeping only the first error through <code>collect</code>,
+we will now learn how to retain all the errors <em>and</em> all the values,
+both neatly&nbsp;separated.</p>
+<p>The <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.partition"><code>partition</code> method</a>,
+as this is what the section is about,
+is essentially a more powerful variant of <code>filter</code>.
+While the latter only returns items that <em>do</em> match a predicate,
+<code>partition</code> will also give us the ones which <em>don&#8217;t</em>.</p>
+<p>Using it to slice an iterable of <code>Result</code>s is&nbsp;straightforward:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">oks</span><span class="p">,</span><span class="w"> </span><span class="n">fails</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">partition</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">is_ok</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>The only thing that remains cumbersome is
+the fact that both parts of the resulting tuple still contain just <code>Result</code>s.
+Ideally, we would like them to be already unwrapped into values and errors,
+but unfortunately we need to do this&nbsp;ourselves:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">values</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oks</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">unwrap</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">errors</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fails</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">unwrap_err</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>As an alternative,
+<a href="https://docs.rs/itertools/0.6.0/itertools/trait.Itertools.html#method.partition_map">the <code>partition_map</code> method</a>
+from the <a href="https://crates.io/crates/itertools"><code>itertools</code> crate</a>
+can accomplish the same thing in a single step,
+albeit a more verbose&nbsp;one.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A symmetrical technique is using <code>.filter_map(Result::err)</code> to get just
+the <code>Err</code>or objects, but that&#8217;s probably much less useful
+as it drops all the successful values.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Based on my completely unsystematic and anecdotal observations,
+someone asks about this on the #rust-beginners <span class="caps">IRC</span> approximately <em>every other day</em>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>The <code>fold</code> variant is also rife with type inference traps,
+often requiring explicit type annotations, a &#8220;no-op&#8221; <code>Err</code> arm in <code>match</code>,
+or both.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-iter-patterns.html#rust-iter-patterns">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">for loops in&nbsp;Rust</a></h2>
     <p>
       Posted on Tue 26 July 2016 in <a href="http://xion.io/category/code.html">Code</a>

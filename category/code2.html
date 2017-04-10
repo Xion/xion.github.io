@@ -63,6 +63,173 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
+    <p>
+      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
+<p>For a long time, I resisted the appeal of various incremental improvements
+that early 3.x releases offered.
+And the world agreed with me:
+a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
+<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
+<p>As if to compensate for years of &#8220;good enough&#8221;,
+Python 3 development team has given in to a steadily accelerating feature creep.
+Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
+(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
+but it nevertheless causes an increasingly wide functional gap
+between the 2.x and 3.x&nbsp;series.</p>
+<p>Starting from around Python 3.5, this gap becomes really noticeable,
+even when partially bridged with many excellent backports.
+The ecosystem support is also mostly there,
+at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
+<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
+<p>Given all those portents,
+even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
+For better or for worse, 3.x is how Python will look like in the coming years and decades.
+Might as well prepare for&nbsp;it.</p>
+<p>In this post, I will discuss some important issues
+one should be aware of before trying to switch from Python 2 to 3.
+I won&#8217;t be talking about all the minute changes and additions,
+but cover the more significant, broader concepts
+that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
+<p>The two concepts I&#8217;ll be mentioning here are
+<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
+<h4>Unicode&nbsp;handling</h4>
+<p>You have probably heard it before.
+Python 3 was going to solve your Unicode problems once and for all.
+You haven&#8217;t believed it, of course,
+like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
+<p>Still, it may be rather surprising to learn
+that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
+<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
+<p>In any case, either version of Python gets the most important thing about Unicode right.
+They both distinguish, at the type level,
+between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
+The type that holds the latter is called <code>bytes</code> in both versions,
+while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
+<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
+where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
+<p>But where Python 2 does poorly is in the choice of defaults.
+You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
+That <code>str</code> is a fully functional string type,
+even though it can only contain <span class="caps">ASCII</span> characters.
+Moreover, it is also the <em>default</em>:
+quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
+<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
+<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
+If you already deal with Unicode correctly in your programs
+&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
+your main benefit will be not having to write that <code>u""</code> quotes anymore.
+Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
+rather than letting you write &#8220;working&#8221; programs
+that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
+<h4>Laziness by&nbsp;default</h4>
+<p>The second major change that Python 3 brings is of similar nature.
+It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
+<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
+are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
+Included in these are functions like <code>map</code> or <code>filter</code>,
+as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
+<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
+<ul>
+<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
+<li><code>xrange</code> is now just <code>range</code></li>
+<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
+</ul>
+<p>and so&nbsp;on.</p>
+<p>In some cases, this is exactly what happens.
+For example, there is virtually no downside to the new implementation of <code>range</code>,
+especially considering the way it is used most&nbsp;often.</p>
+<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
+Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
+their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
+i.e. the most simplistic and limited flavor of Python iterables.
+Working with them is trickier and more error-prone than with lists,
+which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
+that generators expose us&nbsp;to.</p>
+<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
+by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
+and using its functions in place of the built-ins.
+What you could gain in return was increased performance, and a lesser memory footprint.
+All those benefits came from making the computations <em>lazy</em>
+and refraining from storage of the intermediate&nbsp;results.</p>
+<p>In Python 3, however, laziness is <em>preordained</em>.
+Even if we don&#8217;t need or care about the aforementioned perks,
+we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
+<p>One option is to embrace lazy evaluation fully,
+and adapt to handling unspecified iterables throughout our code bases.<br>
+The risk is an increased frequency of bugs stemming from generator misuse &#8212;
+including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
+deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
+<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
+wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
+in order to &#8220;sanitize&#8221; them for later (re)use.<br>
+Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
+</pre></div>
+
+
+<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
+    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
+    <span class="c"># ...the rest of a long function...</span>
+</pre></div>
+
+
+<p>Even if you choose the first path, and somehow use lazy generators everywhere,
+conversions are still required at the serialization&nbsp;boundaries:</p>
+<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
+</pre></div>
+
+
+<p>At least in this case, the lazy iterable will vocally fail with an exception,
+rather than silently doing nothing (in case of repeated iteration)
+or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
+<h4>from __future__ import&nbsp;doubts</h4>
+<p>So, here they are: the highlights of Python 3.
+If you are disappointed they all turned out to be mixed blessings,
+don&#8217;t worry: you are
+<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
+<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
+<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
+<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
+<p>The truth is that Python 3 is more finnicky, less forgiving,
+and much less beginner-friendly than its predecessor.
+Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
+by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
+<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
+Perhaps it&#8217;s not a coincidence
+that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
+has passed between the first public version of Python (0.9)
+and the release of Python 3.0.
+By no conceivable means it is a toy language anymore,
+and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
+<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
+<p>It&#8217;s becoming harder to claim the language favors simplicity
+over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
+It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
+is the <em>obvious</em> way to do it.<br>
+It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
+and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
+<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
+The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
+But who knows? Maybe after two decades,
+a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
+<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
+are about to get&nbsp;in!</p>
+      <a class="btn" href="http://xion.io/post/code/python3-primer.html#python3-primer">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">for loops in&nbsp;Rust</a></h2>
     <p>
       Posted on Tue 26 July 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1246,167 +1413,6 @@ for <code>xargs</code> in those cases, .e.g: <code>xargs -I^ find ^ -name '__mai
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Tricks with ownership in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Mon 07 March 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/reference-counting.html">reference counting</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-borrowchk-tricks.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><em>&#8230;or how I learned to stop worrying and love the borrow&nbsp;checker.</em></p>
-<p>Having no equivalents in other languages, the <a href="https://doc.rust-lang.org/book/ownership.html">borrow checker</a>
-is arguably the most difficult thing to come to terms with when learning Rust. It&#8217;s easy to understand why it&#8217;s immensely
-useful, especially if you recall
-<a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html">the various vulnerabities</a>
-stemming from memory mismanagement. But that knowledge doesn&#8217;t exactly help when the compiler is whining about what
-seems like a perfectly correct&nbsp;code.</p>
-<p>Let&#8217;s face it: it will take some time to become productive writing efficient and safe code. It&#8217;s not entirely unlike
-adjusting to a different paradigm such as functional programming when you&#8217;ve been writing mostly imperative code.
-Before that happens, though, you can use some tricks to make the transition a little&nbsp;easier.</p>
-<h4>Just <code>clone</code> it</h4>
-<p>Ideally, we&#8217;d want our code to be both correct <em>and</em> fast. But if we cannot quite get to the &#8220;correctness&#8221; part yet &#8212;
-because our program doesn&#8217;t, you know, <em>compile</em> &#8212; then how about paying for it with a small (and refundable)
-performance&nbsp;hit?</p>
-<p>This is where the <code>clone</code> method comes in handy. Many problems with the borrow checker stem from trying to spread
-object ownership too thin. It is a precious resource and it&#8217;s not very cheap to &#8220;produce&#8221;, which is why good Rust code
-often deals with just immutable or mutable&nbsp;references.</p>
-<p>But if that proves difficult, then &#8220;making more objects&#8221; is a great intermediate solution. Incidentally, this is what
-higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
-those languages, we can start off by replicating their&nbsp;behavior.</p>
-<p>As an example, consider a function that tries to convert some value to <code>String</code>:</p>
-<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">maybe_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="c1">// omitted</span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>If we attempt to build upon it and create a <code>Vec</code>tor&nbsp;version:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_all_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">results</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="n">maybe_to_string</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">find</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">is_err</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>then we&#8217;ll be unpleasantly surprised by a borrow checker&nbsp;error:</p>
-<div class="highlight"><pre>error: cannot move out of borrowed content [E0507]
-    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
-                              ^
-</pre></div>
-
-
-<p>Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
-However, a simple stepping stone in the shape of additional <code>clone()</code> call can help move things forward just
-a little&nbsp;quicker:</p>
-<div class="highlight"><pre><span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
-
-<span class="c1">// ...</span>
-<span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">clone</span><span class="p">().</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-</pre></div>
-
-
-<p>The performance tradeoff is explicit, and easy to find later on with a simple <code>grep clone\(\)</code> or similar.
-When you learn to do things the Rusty way, it won&#8217;t be hard to go back to your &#8220;hack&#8221; and fix it&nbsp;properly.</p>
-<h4>Refcounting to the&nbsp;rescue</h4>
-<p>Adding <code>clone()</code> willy-nilly to make the code compile is a valid workaround when we&#8217;re just learning. Sometimes, however,
-even some gratuitous cloning doesn&#8217;t <em>quite</em> solve the problem, because the <code>clone()</code> itself can become an&nbsp;issue.</p>
-<p>For one, it requires our objects to implement the <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"><code>Clone</code> trait</a>.
-This was apparent even in our previous example, since we had to add a <code>#[derive(Clone)]</code> attribute to the <code>struct Error</code>
-in order to make it <code>clone</code>-able.</p>
-<p>Fortunately, in the vast majority of cases this will be all that&#8217;s necessary, as most built-in types in Rust implement
-<code>Clone</code> already. One notable exception are <em>function traits</em> (<code>FnOnce</code>, <code>Fn</code>, and <code>FnMut</code>) which are used to store
-and refer to <em>closures</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Structures and other custom types that contain them (or those which <em>may</em> contain them)
-cannot therefore implement <code>Clone</code> through a simple <code>#[derive]</code> annotation:</p>
-<div class="highlight"><pre><span class="c-Doc">/// A value that&#39;s either there already</span>
-<span class="c-Doc">/// or can be obtained by calling a function.</span>
-<span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&gt; T + &#39;static` [E0277]
-    #[derive(Clone)]
-             ^~~~~
-</pre></div>
-
-
-<p>What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
-and this one will likely sound familiar if you&#8217;ve ever worked with a higher level language before. Instead of actually
-cloning an object, you can merely increment its <em>reference counter</em>. As the most rudimentary kind of garbage collection,
-this allows to safely share the object between multiple &#8220;owners&#8221;, where each can behave as if it had
-its own copy of&nbsp;it.</p>
-<p>Rust&#8217;s pointer type that provides reference counting capabilities is called <code>std::rc::Rc</code>. Conceptually, it is analogous
-to <code>std::shared_ptr</code> from C++, and it similarly keeps the refcount updated when the pointer is &#8220;acquired&#8221; (<code>clone</code>-ed)
-and &#8220;released&#8221; (<code>drop</code>-ed). Because no data is moved around during either of those two operations, <code>Rc</code> can refer even
-to types whose size isn&#8217;t known at compilation time, like abstract&nbsp;closures:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">rc</span><span class="o">::</span><span class="n">Rc</span><span class="p">;</span><span class="w"></span>
-
-<span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Rc</span><span class="o">&lt;</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">),</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>Wrapping them in <code>Rc</code> therefore makes them &#8220;cloneable&#8221;. They aren&#8217;t actually cloned, of course, but because of
-the inherent immutability of Rust types they will appear so to any outside observer<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
-<h4>Move&nbsp;it!</h4>
-<p>Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
-There is <em>ownership</em>, which is passed around by moving the values; and there is <em>borrowing</em>, which means operating
-on them through&nbsp;references.</p>
-<p>When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
-has to be copiously sprinkled with <code>&amp;</code> and <code>&amp;mut</code>, and may sometimes require explicit lifetime annotations. All these
-have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
-of the program&#8217;s&nbsp;logic.</p>
-<p>Therefore it is generally preferable, if at all possible, to deal with data directly
-and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
-stages of our algorithms. It turns out it&#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
-of producing a moved&nbsp;value.</p>
-<p>Take our first example. The intuitively named <code>Vec::iter</code> method produces an iterator that we can <code>map</code> over, but does
-it really go over the actual <em>items</em> in the vector? Nope! It gives us a <em>reference</em> to each one &#8212; a borrow, if you will
-&#8212; which is exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
-<p>Instead, why not just get the elements themselves, by moving them out of the vector? <code>Vec::into_iter</code> allows to do exactly&nbsp;this:</p>
-<div class="highlight"><pre><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-</pre></div>
-
-
-<p>and enables us to remove the <code>clone()</code> call. The family of similar <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
-on at least in the standard library. They are also part of a more-or-less official
-<a href="https://aturon.github.io/style/naming.html#conversions">naming convention</a> that you should also follow in your own&nbsp;code.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Note how this is different from function <em>types</em>, i.e. <code>fn(A, B, C, ...) -&gt; Ret</code>. It is because plain functions
-do not carry their closure environments along with them. This makes them little more than just pointers to some code,
-and those can be freely <code>Clone</code>-d (or even <code>Copy</code>-ed).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>If you want both shared ownership (&#8220;fake cloneability&#8221;) <em>and</em> the ability to mutate the shared value,
-take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code> type</a> and how it can be
-<a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition">wrapped in <code>Rc</code></a> to achieve both.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Continue reading</a>
   </div>
 </article>
 

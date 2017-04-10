@@ -63,6 +63,217 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-iter-patterns.html#rust-iter-patterns">Iteration patterns for Result <span class="amp">&amp;</span>&nbsp;Option</a></h2>
+    <p>
+      Posted on Mon 10 April 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/iterators.html">iterators</a>      &#8226; <a href="http://xion.io/post/code/rust-iter-patterns.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Towards the end of <a href="http://xion.io/post/code/rust-for-loop.html">my previous post about <code>for</code> loops in Rust</a>,
+I mentioned how those loops can often be expressed in a more declarative way.
+This alternative approach involves chaining methods of
+<a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html">the <code>Iterator</code> trait</a>
+to create specialized transformation&nbsp;pipelines:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">odds_squared</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mf">1.</span><span class="p">.</span><span class="mi">100</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p><small><a href="https://is.gd/q4lXew">Playground link</a></small></p>
+<p>Code like this isn&#8217;t unique to Rust, of course.
+Similar patterns are prevalent in functional languages such as
+<a href="https://msdn.microsoft.com/en-us/visualfsharpdocs/conceptual/operators.%5b-h%5d-%5d%5b't1%2c'u%5d-function-%5bfsharp%5d">F#</a>,
+and can also be found in
+Java (<a href="https://dzone.com/articles/understanding-java-8-streams-1">Streams</a>),
+imperative .<span class="caps">NET</span> (<a href="https://msdn.microsoft.com/en-us/library/bb308959.aspx#linqoverview_topic3"><span class="caps">LINQ</span></a>),
+JavaScript (<a href="https://lodash.com/docs/4.17.4#chain">LoDash</a>)
+and&nbsp;elsewhere.</p>
+<p>This saying, Rust also has its fair share of unique iteration idioms.
+In this post, we&#8217;re going to explore those arising on the intersection of iterators
+and the most common Rust enums: <code>Result</code> and <code>Option</code>.</p>
+<h4>filter_map()</h4>
+<p>When working with iterators,
+we&#8217;re almost always interested in selecting elements that match some criterion
+or passing them through a transformation function.
+It&#8217;s not even uncommon to want <em>both</em> of those things,
+as demonstrated by the initial example in this&nbsp;post.</p>
+<p>You can, of course, accomplish those two tasks independently:
+Rust&#8217;s <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"><code>filter</code></a>
+and <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"><code>map</code></a> methods
+work just fine for this purpose.
+But there exists an alternative, and in some cases it fits the problem <em>amazingly</em>&nbsp;well.</p>
+<p>Meet <code>filter_map</code>.
+Here&#8217;s what <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter_map">the official docs</a>
+have to say about&nbsp;it:</p>
+<blockquote>
+<p>Creates an iterator that both filters and&nbsp;maps.</p>
+</blockquote>
+<p>Well, <em>duh</em>.</p>
+<p>On a more serious note, the common pattern that <code>filter_map</code> simplifies
+is unwrapping a series of <code>Option</code>s.
+If you have a sequence of maybe-values,
+and you want to retain only those that are actually there,
+<code>filter_map</code> can do it in a single&nbsp;step:</p>
+<div class="highlight"><pre><span class="c1">// Get the sequence of all files matching a glob pattern via the glob crate.</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">some_files</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">glob</span><span class="o">::</span><span class="n">glob</span><span class="p">(</span><span class="s">&quot;foo.*&quot;</span><span class="p">).</span><span class="n">unwrap</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="p">.</span><span class="n">unwrap</span><span class="p">());</span><span class="w"></span>
+<span class="c1">// Retain only their extensions, e.g. &quot;.txt&quot; or &quot;.md&quot;.</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">file_extensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_files</span><span class="p">.</span><span class="n">filter_map</span><span class="p">(</span><span class="o">|</span><span class="n">p</span><span class="o">|</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">extension</span><span class="p">());</span><span class="w"></span>
+</pre></div>
+
+
+<p>The equivalent that doesn&#8217;t use <code>filter_map</code>
+would have to split the checking <span class="amp">&amp;</span> unwrapping of <code>Option</code>s into separate&nbsp;steps:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">file_extensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_files</span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">p</span><span class="o">|</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">extension</span><span class="p">())</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">is_some</span><span class="p">()).</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">unwrap</span><span class="p">());</span><span class="w"></span>
+</pre></div>
+
+
+<p>Because of this check <span class="amp">&amp;</span> unwrap logic,
+<code>filter_map</code> can be useful even with a no-op predicate (<code>.filter_map(|x| x)</code>)
+if we already have the <code>Option</code> objects handy.
+Otherwise, it&#8217;s often very easy to obtain them,
+which is exactly the case for the <code>Result</code> type:</p>
+<div class="highlight"><pre><span class="c1">// Read all text lines from a file:</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">lines</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">BufReader</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="n">fs</span><span class="o">::</span><span class="n">File</span><span class="o">::</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;file.ext&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">lines</span><span class="p">().</span><span class="n">filter_map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">ok</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>With a simple <code>.filter_map(Result::ok)</code>, like above,
+we can pass through a sequence of <code>Result</code>s and yield only the &#8220;successful&#8221; values.
+I find this particular idiom to be extremely useful in practice,
+as long as you remember that <code>Err</code>ors will be discarded by it<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>As a final note on <code>filter_map</code>,
+you need to keep in mind that regardless of how great it often is,
+not all combinations of <code>filter</code> and <code>map</code> should be replaced by it.
+When deciding whether it&#8217;s appropriate in your case,
+it is helpful to consider the equivalence of these two&nbsp;expressions:</p>
+<div class="highlight"><pre><span class="n">iter</span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="n">f</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="n">m</span><span class="p">)</span><span class="w"></span>
+<span class="n">iter</span><span class="p">.</span><span class="n">filter_map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">m</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">None</span><span class="w"> </span><span class="p">})</span><span class="w"></span>
+</pre></div>
+
+
+<p>Simply put, if you find yourself writing conditions like this inside <code>filter_map</code>,
+you&#8217;re probably better off with two separate processing&nbsp;steps.</p>
+<h4>collect()</h4>
+<p>Let&#8217;s go back to the last example with a sequence of <code>Result</code>s.
+Since the final sequence won&#8217;t include any <code>Err</code>oneous values,
+you may be wondering if there is a way to preserve&nbsp;them.</p>
+<p>In more formal terms, the question is about turning a vector of results
+(<code>Vec&lt;Result&lt;T, E&gt;&gt;</code>) into a result with a vector (<code>Result&lt;Vec&lt;T&gt;, E&gt;</code>).
+We&#8217;d like for this aggregated result to only be <code>Ok</code>
+if <em>all</em> original results were <code>Ok</code>.
+Otherwise, we should just get the first <code>Err</code>or.</p>
+<p>Believe it or not, but this is probably <em>the</em> most common Rust problem!<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup></p>
+<p>Of course, that doesn&#8217;t necessarily mean the problem is particularly hard.
+Possible solutions exist in both an iterator&nbsp;version:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">fold</span><span class="p">(</span><span class="nb">Ok</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[]),</span><span class="w"> </span><span class="o">|</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">as_mut</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">v</span><span class="o">|</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">x</span><span class="p">));</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">),</span><span class="w"></span>
+<span class="p">});</span><span class="w"></span>
+</pre></div>
+
+
+<p>and in a loop&nbsp;form:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[]);</span><span class="w"></span>
+<span class="k">for</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">results</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">result</span><span class="p">.</span><span class="n">as_mut</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">v</span><span class="o">|</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">x</span><span class="p">)),</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">);</span><span class="w"> </span><span class="k">break</span><span class="p">;</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
+<span class="w">    </span><span class="p">};</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>but I suspect not many people would call them clear and readable,
+let alone pretty<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Fortunately, you don&#8217;t need to pollute your codebase with any of those workarounds.
+Rust offers an out-of-the-box solution which solves this particular problem,
+and its only flaw is one that I hope to address through this very&nbsp;post.</p>
+<p>So, here it&nbsp;goes:</p>
+<div class="highlight"><pre><span class="nt">let</span> <span class="nt">result</span><span class="o">:</span> <span class="nt">Result</span><span class="o">&lt;</span><span class="nt">Vec</span><span class="o">&lt;</span><span class="nt">_</span><span class="o">&gt;&gt;</span> <span class="o">=</span> <span class="nt">results</span><span class="nc">.collect</span><span class="o">();</span>
+</pre></div>
+
+
+<p>Yep, that&#8217;s all of&nbsp;it.</p>
+<p>The background story is that <code>Result&lt;Vec&lt;T&gt;, E&gt;</code> simply &#8220;knows&#8221;
+how to construct itself from a sequence of <code>Result</code>s.
+Unfortunately, this <span class="caps">API</span> is hidden behind Rust&#8217;s iterator abstraction,
+and specifically the fact that
+<code>Result</code> implements <a href="https://doc.rust-lang.org/1.2.0/std/iter/trait.FromIterator.html"><code>FromIterator</code></a>
+in this particular manner.
+The way
+<a href="https://doc.rust-lang.org/std/result/enum.Result.html">the documentation page for <code>Result</code></a>
+is structured, however &#8212; with trait implementations at the very end &#8212;
+ensures this useful fact remains virtually&nbsp;undiscoverable.</p>
+<p>Because let&#8217;s be honest: no one scrolls that&nbsp;far.</p>
+<p>Incidentally, <code>Option</code> offers analogous functionally:
+a sequence of <code>Option&lt;T&gt;</code> can be <code>collect</code>ed into <code>Option&lt;Vec&lt;T&gt;&gt;</code>,
+which will be <code>None</code> if any of the input elements were.
+As you may suspect, this fact is equally hard to find in the relevant&nbsp;docs.</p>
+<p>But the good news is: you know about all this now! :)
+And perhaps thanks to this post,
+those handy tricks become a little better in a wider Rust&nbsp;community.</p>
+<h4>partition()</h4>
+<p>The last technique I wanted to present here follows naturally
+from the other idioms that apply to <code>Result</code>s.
+Instead of extracting just the <code>Ok</code> values with <code>flat_map</code>,
+or keeping only the first error through <code>collect</code>,
+we will now learn how to retain all the errors <em>and</em> all the values,
+both neatly&nbsp;separated.</p>
+<p>The <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.partition"><code>partition</code> method</a>,
+as this is what the section is about,
+is essentially a more powerful variant of <code>filter</code>.
+While the latter only returns items that <em>do</em> match a predicate,
+<code>partition</code> will also give us the ones which <em>don&#8217;t</em>.</p>
+<p>Using it to slice an iterable of <code>Result</code>s is&nbsp;straightforward:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">oks</span><span class="p">,</span><span class="w"> </span><span class="n">fails</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">partition</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">is_ok</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>The only thing that remains cumbersome is
+the fact that both parts of the resulting tuple still contain just <code>Result</code>s.
+Ideally, we would like them to be already unwrapped into values and errors,
+but unfortunately we need to do this&nbsp;ourselves:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">values</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oks</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">unwrap</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">errors</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fails</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">unwrap_err</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>As an alternative,
+<a href="https://docs.rs/itertools/0.6.0/itertools/trait.Itertools.html#method.partition_map">the <code>partition_map</code> method</a>
+from the <a href="https://crates.io/crates/itertools"><code>itertools</code> crate</a>
+can accomplish the same thing in a single step,
+albeit a more verbose&nbsp;one.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A symmetrical technique is using <code>.filter_map(Result::err)</code> to get just
+the <code>Err</code>or objects, but that&#8217;s probably much less useful
+as it drops all the successful values.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Based on my completely unsystematic and anecdotal observations,
+someone asks about this on the #rust-beginners <span class="caps">IRC</span> approximately <em>every other day</em>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>The <code>fold</code> variant is also rife with type inference traps,
+often requiring explicit type annotations, a &#8220;no-op&#8221; <code>Err</code> arm in <code>match</code>,
+or both.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-iter-patterns.html#rust-iter-patterns">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-let-unit.html#rust-let-unit">The &#8220;let&#8221; type trick in&nbsp;Rust</a></h2>
     <p>
       Posted on Wed 01 February 2017 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1516,543 +1727,12 @@ a <a href="https://doc.rust-lang.org/book/deref-coercions.html"><em><code>Deref<
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-patterns-ref.html#rust-patterns-ref">Continue reading</a>
   </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Tricks with ownership in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Mon 07 March 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/reference-counting.html">reference counting</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-borrowchk-tricks.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><em>&#8230;or how I learned to stop worrying and love the borrow&nbsp;checker.</em></p>
-<p>Having no equivalents in other languages, the <a href="https://doc.rust-lang.org/book/ownership.html">borrow checker</a>
-is arguably the most difficult thing to come to terms with when learning Rust. It&#8217;s easy to understand why it&#8217;s immensely
-useful, especially if you recall
-<a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html">the various vulnerabities</a>
-stemming from memory mismanagement. But that knowledge doesn&#8217;t exactly help when the compiler is whining about what
-seems like a perfectly correct&nbsp;code.</p>
-<p>Let&#8217;s face it: it will take some time to become productive writing efficient and safe code. It&#8217;s not entirely unlike
-adjusting to a different paradigm such as functional programming when you&#8217;ve been writing mostly imperative code.
-Before that happens, though, you can use some tricks to make the transition a little&nbsp;easier.</p>
-<h4>Just <code>clone</code> it</h4>
-<p>Ideally, we&#8217;d want our code to be both correct <em>and</em> fast. But if we cannot quite get to the &#8220;correctness&#8221; part yet &#8212;
-because our program doesn&#8217;t, you know, <em>compile</em> &#8212; then how about paying for it with a small (and refundable)
-performance&nbsp;hit?</p>
-<p>This is where the <code>clone</code> method comes in handy. Many problems with the borrow checker stem from trying to spread
-object ownership too thin. It is a precious resource and it&#8217;s not very cheap to &#8220;produce&#8221;, which is why good Rust code
-often deals with just immutable or mutable&nbsp;references.</p>
-<p>But if that proves difficult, then &#8220;making more objects&#8221; is a great intermediate solution. Incidentally, this is what
-higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
-those languages, we can start off by replicating their&nbsp;behavior.</p>
-<p>As an example, consider a function that tries to convert some value to <code>String</code>:</p>
-<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">maybe_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="c1">// omitted</span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>If we attempt to build upon it and create a <code>Vec</code>tor&nbsp;version:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_all_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">results</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="n">maybe_to_string</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">find</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">is_err</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>then we&#8217;ll be unpleasantly surprised by a borrow checker&nbsp;error:</p>
-<div class="highlight"><pre>error: cannot move out of borrowed content [E0507]
-    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
-                              ^
-</pre></div>
-
-
-<p>Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
-However, a simple stepping stone in the shape of additional <code>clone()</code> call can help move things forward just
-a little&nbsp;quicker:</p>
-<div class="highlight"><pre><span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
-
-<span class="c1">// ...</span>
-<span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">clone</span><span class="p">().</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-</pre></div>
-
-
-<p>The performance tradeoff is explicit, and easy to find later on with a simple <code>grep clone\(\)</code> or similar.
-When you learn to do things the Rusty way, it won&#8217;t be hard to go back to your &#8220;hack&#8221; and fix it&nbsp;properly.</p>
-<h4>Refcounting to the&nbsp;rescue</h4>
-<p>Adding <code>clone()</code> willy-nilly to make the code compile is a valid workaround when we&#8217;re just learning. Sometimes, however,
-even some gratuitous cloning doesn&#8217;t <em>quite</em> solve the problem, because the <code>clone()</code> itself can become an&nbsp;issue.</p>
-<p>For one, it requires our objects to implement the <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"><code>Clone</code> trait</a>.
-This was apparent even in our previous example, since we had to add a <code>#[derive(Clone)]</code> attribute to the <code>struct Error</code>
-in order to make it <code>clone</code>-able.</p>
-<p>Fortunately, in the vast majority of cases this will be all that&#8217;s necessary, as most built-in types in Rust implement
-<code>Clone</code> already. One notable exception are <em>function traits</em> (<code>FnOnce</code>, <code>Fn</code>, and <code>FnMut</code>) which are used to store
-and refer to <em>closures</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Structures and other custom types that contain them (or those which <em>may</em> contain them)
-cannot therefore implement <code>Clone</code> through a simple <code>#[derive]</code> annotation:</p>
-<div class="highlight"><pre><span class="c-Doc">/// A value that&#39;s either there already</span>
-<span class="c-Doc">/// or can be obtained by calling a function.</span>
-<span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&gt; T + &#39;static` [E0277]
-    #[derive(Clone)]
-             ^~~~~
-</pre></div>
-
-
-<p>What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
-and this one will likely sound familiar if you&#8217;ve ever worked with a higher level language before. Instead of actually
-cloning an object, you can merely increment its <em>reference counter</em>. As the most rudimentary kind of garbage collection,
-this allows to safely share the object between multiple &#8220;owners&#8221;, where each can behave as if it had
-its own copy of&nbsp;it.</p>
-<p>Rust&#8217;s pointer type that provides reference counting capabilities is called <code>std::rc::Rc</code>. Conceptually, it is analogous
-to <code>std::shared_ptr</code> from C++, and it similarly keeps the refcount updated when the pointer is &#8220;acquired&#8221; (<code>clone</code>-ed)
-and &#8220;released&#8221; (<code>drop</code>-ed). Because no data is moved around during either of those two operations, <code>Rc</code> can refer even
-to types whose size isn&#8217;t known at compilation time, like abstract&nbsp;closures:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">rc</span><span class="o">::</span><span class="n">Rc</span><span class="p">;</span><span class="w"></span>
-
-<span class="cp">#[derive(Clone)]</span><span class="w"></span>
-<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
-<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Rc</span><span class="o">&lt;</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">),</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>Wrapping them in <code>Rc</code> therefore makes them &#8220;cloneable&#8221;. They aren&#8217;t actually cloned, of course, but because of
-the inherent immutability of Rust types they will appear so to any outside observer<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
-<h4>Move&nbsp;it!</h4>
-<p>Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
-There is <em>ownership</em>, which is passed around by moving the values; and there is <em>borrowing</em>, which means operating
-on them through&nbsp;references.</p>
-<p>When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
-has to be copiously sprinkled with <code>&amp;</code> and <code>&amp;mut</code>, and may sometimes require explicit lifetime annotations. All these
-have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
-of the program&#8217;s&nbsp;logic.</p>
-<p>Therefore it is generally preferable, if at all possible, to deal with data directly
-and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
-stages of our algorithms. It turns out it&#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
-of producing a moved&nbsp;value.</p>
-<p>Take our first example. The intuitively named <code>Vec::iter</code> method produces an iterator that we can <code>map</code> over, but does
-it really go over the actual <em>items</em> in the vector? Nope! It gives us a <em>reference</em> to each one &#8212; a borrow, if you will
-&#8212; which is exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
-<p>Instead, why not just get the elements themselves, by moving them out of the vector? <code>Vec::into_iter</code> allows to do exactly&nbsp;this:</p>
-<div class="highlight"><pre><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
-</pre></div>
-
-
-<p>and enables us to remove the <code>clone()</code> call. The family of similar <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
-on at least in the standard library. They are also part of a more-or-less official
-<a href="https://aturon.github.io/style/naming.html#conversions">naming convention</a> that you should also follow in your own&nbsp;code.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Note how this is different from function <em>types</em>, i.e. <code>fn(A, B, C, ...) -&gt; Ret</code>. It is because plain functions
-do not carry their closure environments along with them. This makes them little more than just pointers to some code,
-and those can be freely <code>Clone</code>-d (or even <code>Copy</code>-ed).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>If you want both shared ownership (&#8220;fake cloneability&#8221;) <em>and</em> the ability to mutate the shared value,
-take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code> type</a> and how it can be
-<a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition">wrapped in <code>Rc</code></a> to achieve both.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Moving out of a container in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Fri 05 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/vector.html">vector</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/references.html">references</a>      &#8226; <a href="http://xion.io/post/code/rust-move-out-of-container.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>To prevent the kind of memory errors that plagues many C programs,
-the <a href="https://doc.rust-lang.org/book/ownership.html"><em>borrow checker</em> in Rust</a> tracks how data is moved between variables,
-or accessed via references. This is all done at compile time, with zero runtime overhead, and is a sizeable part
-of Rust&#8217;s value&nbsp;offering.</p>
-<p>Like all rigid and automated systems, however, it is necessarily constrained and cannot handle all situations perfectly.
-One of its limitations is treating all objects as <em>atomic</em>. It&#8217;s impossible for a variable to own a part of some bigger
-structure, neither is it possible to maintain mutable references to two or more elements of a&nbsp;collection.</p>
-<p>If we nonetheless <a href="http://is.gd/yWCYmJ">try</a>:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="o">&amp;</span><span class="n">b</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>we&#8217;ll be served with a classic borrow checker&nbsp;error:</p>
-<div class="highlight"><pre>&lt;anon&gt;:3:25: 3:33 error: cannot move out of indexed content [E0507]
-&lt;anon&gt;:3     let fullname = join(names[0], names[1]);
-                                 ^~~~~~~~
-</pre></div>
-
-
-<p>Behind its rather cryptic verbiage, it informs us that we tried to move a <em>part</em> of the <code>names</code> vector &#8212; its first
-element &#8212; to a new variable (here, a function parameter). This isn&#8217;t allowed, because in principle it would
-render the vector invalid from the standpoint of strict memory safety. Rust would no longer guarantee <code>names[0]</code> to be
-a legal <code>String</code>: its internal pointer could&#8217;ve been invalidated by the code which the element moved to
-(the <code>join</code> function)<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
-there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
-it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
-the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
-by the borrow&nbsp;checker.</p>
-<h4>Pointers to the&nbsp;rescue?</h4>
-<p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
-As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
-(structs, hashmaps, etc.), it&#8217;s been recognized and countermeasures are&nbsp;available.</p>
-<p>However, the <a href="http://is.gd/o3GRnw">idiomatic practice</a> is to actually leave the elements be and access them
-solely through&nbsp;references:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
-pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
-the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
-In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
-the call stacks and abstraction&nbsp;layers.</p>
-<h4>Vector&nbsp;solution</h4>
-<p>If we still insist on moving the elements out, at least in case of vector we aren&#8217;t <em>completely</em> out of luck.
-The <code>Vec</code> type offers several specialized methods that can slice, dice, and splice the collection in various ways.
-Those&nbsp;include:</p>
-<ul>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_first"><code>split_first</code></a> (and <code>split_first_mut</code>)
-for cutting right after the first&nbsp;element</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_last"><code>split_last</code></a> (and <code>split_last_mut</code>)
-for a similar cut right before the last&nbsp;element</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_at"><code>split_at</code></a> (and <code>split_at_mut</code>),
-generalized versions of the above&nbsp;methods</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_off"><code>split_off</code></a>, a partially-in-place version
-of <code>split_at_mut</code></li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain"><code>drain</code></a> for moving all elements from a specified&nbsp;range</li>
-</ul>
-<p>Other types may offer different methods, depending on their particular data layout, though <code>drain</code> should be available
-on any data structure that can be iterated&nbsp;over.</p>
-<h4>Structural&nbsp;advantage</h4>
-<p>What about user-defined types, such as <code>struct</code>s?</p>
-<p>Fortunately, these are covered by the compiler itself. Since accessing <code>struct</code> fields is a fully compile-time
-operation, it is possible to track the ownership of each individual object that makes up the structure.
-Thus there are no obstacles to simply <a href="http://is.gd/ZUI2Mn">moving all the fields</a>:</p>
-<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="p">{</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"></span>
-<span class="w">                   </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()};</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first_name</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">last_name</span><span class="p">)</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<h4>If all else&nbsp;fails&#8230;</h4>
-<p>This leaves us with some rare cases when the container&#8217;s interface doesn&#8217;t <em>quite</em> support the exact subset of elements
-we want to move out. If we don&#8217;t want to <code>drain</code> them all and inspect every item for potential preservation,
-it may be time to skirt around the more dangerous areas of the&nbsp;language.</p>
-<p>But I don&#8217;t necessarily mean going all out with <code>unsafe</code> blocks, pointers, and (let&#8217;s be honest) segfaults.
-Instead, we can look at the gray zone between them and the regular, borrow-checked Rust&nbsp;code.</p>
-<p>Some of the functions inside the <a href="https://doc.rust-lang.org/std/mem/index.html"><code>std::mem</code> module</a> can be said
-to fall into this category. Most notably, <a href="https://doc.rust-lang.org/std/mem/fn.swap.html"><code>mem::swap</code></a> and
-<a href="https://doc.rust-lang.org/std/mem/fn.replace.html"><code>mem::replace</code></a> allow us to operate directly on the memory blocks
-that back every Rust object, albeit without the dangerous ability to freely modify&nbsp;them.</p>
-<p>What those functions enable is a small sleight of hand &#8212; a quick exchange of two variables or objects
-while the borrow checker &#8220;isn&#8217;t looking&#8221;. Possessing such an ability, we can smuggle any item out of a container
-as long as we&#8217;re able to provide a suitable&nbsp;replacement:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="p">;</span><span class="w"></span>
-
-<span class="c-Doc">/// Pick only the items under indices that are powers of two.</span>
-<span class="k">fn</span><span class="w"> </span><span class="n">pick_powers_of_2</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Default</span><span class="o">&gt;</span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Vec</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">elem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mem</span><span class="o">::</span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">T</span><span class="o">::</span><span class="n">default</span><span class="p">());</span><span class="w"></span>
-<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">elem</span><span class="p">);</span><span class="w"></span>
-<span class="w">        </span><span class="n">i</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="n">result</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p style="text-align: center">
-    <img src="http://xion.io/images/indyswap.jpg" alt="Swap!"></br>
-    <small>Pictured: implementation of <code>mem::replace</code>.</small>
-</p>
-
-<p><a href="https://doc.rust-lang.org/std/default/trait.Default.html#tymethod.default">The <code>Default</code> value</a>,
-if available, is usually a great choice here. Alternately, a <code>Copy</code> or <code>Clone</code> of some other element can also work
-if it&#8217;s cheap to&nbsp;obtain.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
-on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the language itself,
-it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
-is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
-instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-first-impressions.html#rust-first-impressions">Rust: first&nbsp;impressions</a></h2>
-    <p>
-      Posted on Thu 10 December 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/pointers.html">pointers</a>,      <a href="http://xion.io/tag/types.html">types</a>,      <a href="http://xion.io/tag/fp.html">FP</a>,      <a href="http://xion.io/tag/oop.html">OOP</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-first-impressions.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Having recently been writing some C++ code at work, I had once again experienced the kind of exasperation that this
-cumbersome language evokes on regular basis. When I was working in it less sporadically, I was shrugging it off
-and telling myself it&#8217;s all because of the low level it operates on. Superior performance was the other side of the deal,
-and it was supposed to make all the trade-offs&nbsp;worthwhile.</p>
-<p>Now, however, I realized that running close to the metal by no means excuses the sort of clunkiness that C++ permits.
-For example, there really is no reason why the archaically asinine separation of header <span class="amp">&amp;</span> source files &#8212;
-with its inevitable redundancy of declarations and definitions, worked around with Java-esque contraptions such as
-<a href="http://c2.com/cgi/wiki?PimplIdiom">pimpl</a> &#8212; is still the bread and butter of C++ programs.<br/>
-Same goes for the lack of sane dependency management, or a universal, portable build system. None of those would be
-at odds with native compilation to machine code, or runtime speeds that are adequate for real-time&nbsp;programs.</p>
-<p>Rather than dwelling on those gripes, I thought it&#8217;d be more productive to look around and see what&#8217;s
-the modern offerring in the domain of lower level, <em>really</em> fast languages. The search wasn&#8217;t long at all, because
-right now it seems there is just one viable contender: Rust<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<h4>Rusty&nbsp;systems</h4>
-<p><a href="https://www.rust-lang.org">Rust</a> introduces itself as a
-<a href="https://en.wikipedia.org/wiki/System_programming_language">&#8220;systems programming language&#8221;</a>, which is quite a bold claim.
-What followed the last time this phrase has been applied to an emerging language &#8212; Go &#8212; was a kind of
-<a href="https://www.quora.com/Of-the-emerging-systems-languages-Rust-D-Go-and-Nim-which-is-the-strongest-language-and-why">word twisting</a>
-that&#8217;s more indicative of politics, not computer&nbsp;science.</p>
-<p>But Rust&#8217;s pretense to the system level is well justified. It clearly provides the requisite toolkit for working
-directly with the hardware, be it <a href="https://github.com/miselin/rustic">embedded controllers</a> or
-<a href="http://www.redox-os.org/">fully featured computers</a>. It offers compilation to native machine code;
-direct memory access; running time guarantees thanks to the lack of <span class="caps">GC</span>-incuded stops;
-and great interoperability through static and dynamic&nbsp;linkage.</p>
-<p>In short, with Rust you can wreak havoc against the <span class="caps">RAM</span> and twiddle bits to your heart&#8217;s&nbsp;content.</p>
-<h4>Safe and&nbsp;sound</h4>
-<p>To be fair, though, the &#8220;havoc&#8221; part is not entirely accurate. Despite its focus on the low level, efficient computing,
-Rust aims to be a very safe language. Unlike C, it actively tries to prevent the programmer from shooting themselves
-in the foot &#8212; though it will hand you the gun if you but ask for&nbsp;it.</p>
-<p>The safety guarantees provided by Rust apply to resource management, with the specific emphasis on memory
-and pointers to it. The way that most contemporary languages deal with memory is by introducing a <em>garbage collector</em>
-which mostly (though not wholly) relieves the programmer from thinking about allocations and deallocations.
-However, the kind of global, stop-the-world garbage collections
-(e.g. <a href="https://en.wikipedia.org/wiki/Tracing_garbage_collection#Na.C3.AFve_mark-and-sweep">mark-and-sweep</a>)
-is costly and unpredictable, ruling it out as a mechanism for real-time&nbsp;systems.</p>
-<p>For this reason, Rust doesn&#8217;t mandate a <span class="caps">GC</span> of this kind<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. And although it offers mechanisms that are similar to
-smart pointers from C++ (e.g. <code>std::shared_ptr</code>), it is actually preferable and <em>safer</em> to use regular, &#8220;naked&#8221; pointers:
-<code>&amp;Foo</code> versus <code>Cell&lt;Foo&gt;</code> or <code>RefCell&lt;Foo&gt;</code> (which are some of the Rust&#8217;s &#8220;smart pointer&#8221;&nbsp;types).</p>
-<p>The trick is in the clever compiler. As long as we use regular pointers, it is capable of detecting potential memory
-bugs at <em>compilation time</em>. They are referred to as &#8220;data races&#8221; in Rust&#8217;s terminology, and include
-<a href="https://doc.rust-lang.org/stable/book/references-and-borrowing.html#issues-borrowing-prevents">perennial problems</a>
-that will segfault any C code which wasn&#8217;t written with utmost&nbsp;care.</p>
-<p>Part of those safety guarantees is also the <em>default immutability</em> of references (pointers). The simplest reference
-of type <code>&amp;Foo</code> in Rust translates to something like <code>const Foo * const</code> in C<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. You have to explicitly request
-mutability with the <code>mut</code> keyword, and Rust ensures there is always at most one mutable reference to any value,
-thus preventing problems caused by <a href="https://en.wikipedia.org/wiki/Pointer_aliasing">pointer aliasing</a>.</p>
-<p>But what if you really must sling raw pointers, and access arbitrary memory locations? Maybe you are programming
-a microcontroller where I/O is done through a special memory region. For those occasions, Rust has got you covered
-with the <code>unsafe</code> keyword:</p>
-<div class="highlight"><pre><span class="c1">// Read the state of a diode in some imaginary uC.</span>
-<span class="k">fn</span><span class="w"> </span><span class="n">get_led_state</span><span class="p">(</span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="n">isize</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">bool</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">assert</span><span class="o">!</span><span class="p">(</span><span class="n">i</span><span class="w"> </span><span class="o">&gt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;There are FOUR lights!&quot;</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="o">:</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x1234</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="o">*</span><span class="kr">const</span><span class="w"> </span><span class="kt">u8</span><span class="p">;</span><span class="w">  </span><span class="c1">// known memory location</span>
-<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="n">p</span><span class="w"> </span><span class="p">.</span><span class="n">offset</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>Its usage, like in the above example, can be <em>very</em> localized, limited only to those places where it&#8217;s truly necessary
-and guarded by the appropriate checks. As a result, the interface exposed by the above function
-can be considered safe. The unrestricted memory access can be contained to where it&#8217;s really&nbsp;inevitable.</p>
-<h4>Typing&nbsp;counts</h4>
-<p>Ensuring memory safety is not the only way in which Rust differentiates itself from C.
-What separates those two languages is also a few decades of practice and research into programming semantics.
-It&#8217;s only natural to expect Rust to take advantage of this&nbsp;progress.</p>
-<p>And advantage it takes. Although Rust&#8217;s type system isn&#8217;t nearly as advanced and complex like &#8212; say &#8212; Scala&#8217;s,
-it exhibits several interesting properties that are indicative of its relatively modern&nbsp;origin.</p>
-<p>First, it mixes the two most popular programming paradigms &#8212; functional and object-oriented &#8212; in roughly equal
-concentrations, as opposed to being biased towards the latter. Rust doesn&#8217;t have interfaces or classes: it has <em>traits</em>
-and their <em>implementations</em>. Even though they often fulfill similar purposes of abstraction and encapsulation,
-these constructs are closer to the concepts of <a href="https://en.wikipedia.org/wiki/Type_class">type classes</a>
-and their instances, which are found for example in&nbsp;Haskell.</p>
-<p>Still, the more familiar notions of <span class="caps">OOP</span> aren&#8217;t too far off. Most of the key functionality of classes, for example,
-can be simulated by implementing &#8220;default&#8221; traits for user-defined&nbsp;types:</p>
-<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">impl</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">new</span><span class="p">(</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">first_name</span><span class="p">.</span><span class="n">to_string</span><span class="p">(),</span><span class="w"></span>
-<span class="w">            </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">last_name</span><span class="p">.</span><span class="n">to_string</span><span class="p">(),</span><span class="w"></span>
-<span class="w">        </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-
-<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">greet</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">first_name</span><span class="p">);</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="c1">// usage</span>
-<span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="s">&quot;John&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Doe&quot;</span><span class="p">);</span><span class="w"></span>
-<span class="n">p</span><span class="p">.</span><span class="n">greet</span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>The second aspect of Rust&#8217;s type system that we would come to expect from a new language is its expressive power.
-<em>Type inference</em> is nowadays a staple, and above we can observe the simplest form of it. But it extends further,
-to generic parameters, closure arguments, and closure return&nbsp;values.</p>
-<p>Generics, by the way, are quite nice as well. Besides their applicability to structs, type aliases, functions,
-traits, trait implementations, etc., they allow for constraining their arguments with traits. This is similar to
-the abandoned-and-not-quite-revived-yet idea of <a href="https://en.wikipedia.org/wiki/Concepts_%28C%2B%2B%29">concepts in C++</a>,
-or to an analogous mechanism from&nbsp;C#.</p>
-<p>The third common trend in contemporary language design is the use of type system to solve common tasks.
-Rust doesn&#8217;t go full Haskell and opt for monads for everything, but its <code>Option</code> and <code>Result</code> types are evidently
-the functional approach to error handling<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>. To facilitate their use, a powerful
-<a href="https://doc.rust-lang.org/stable/book/patterns.html"><em>pattern matching</em> facility</a> is also present in&nbsp;Rust.</p>
-<h4>Unexpectedly&nbsp;pythonic</h4>
-<p>If your general go-to language is Python, you will find Rust a very nice complement and possibly a valuable instrument
-in your coding arsenal. Interoperability between Python and Rust is
-<a href="https://doc.rust-lang.org/stable/book/rust-inside-other-languages.html#python">stupidly easy</a>,
-thanks to both the <a href="https://docs.python.org/3.5/library/ctypes.html"><code>ctypes</code> module</a> and the extreme simplicity
-of creating portable,
-<a href="https://doc.rust-lang.org/stable/book/rust-inside-other-languages.html#a-rust-library">shared libraries</a> in Rust.
-Offloading some expensive, <a href="https://wiki.python.org/moin/GlobalInterpreterLock"><span class="caps">GIL</span></a>-bypassing computation to a fast,
-native code written in Rust can thus be a relatively painless way of speeding up crucial parts of a Python&nbsp;program.</p>
-<p>But somewhat more surprisingly, Rust has quite a few bits that seem to be directly inspired by Python semantics.
-Granted, those two languages are conceptually pretty far apart in general, but the analogies are&nbsp;there:</p>
-<ul>
-<li>
-<p>The concept of <a href="https://doc.rust-lang.org/stable/book/iterators.html">iterators</a> in Rust is very similar to
-<a href="https://docs.python.org/2/glossary.html#term-iterable">iterables</a> in Python. Even the <code>for</code> loop is basically identical:
-rather than manually increment a counter, both in <a href="https://doc.rust-lang.org/stable/book/loops.html#for">Rust</a>
-and <a href="https://wiki.python.org/moin/ForLoop">Python</a> you iterate over a <em>range of numbers</em>.<br/>
-Oh, and both languages have an <code>enumerate</code> <a href="https://doc.rust-lang.org/stable/book/loops.html#enumerate">method</a>/
-<a href="https://docs.python.org/2/library/functions.html#enumerate">function</a> that yields pairs of <code>(index, element)</code>.</p>
-</li>
-<li>
-<p>Syntax for <a href="https://doc.rust-lang.org/stable/book/method-syntax.html#method-calls">method definition</a>
-in Rust uses the <code>self</code> keyword as first argument to distinguish between instance methods and &#8220;class&#8221;/&#8221;static&#8221; methods
-(or <em>associated functions</em> in Rust&#8217;s parlance).
-This is even more pythonic than in actual Python, where <code>self</code> is technically just a convention,
-albeit an extremely strong&nbsp;one.</p>
-</li>
-<li>
-<p>In either language, overloading operators doesn&#8217;t use any new keywords or special syntax,
-like it does in C++, C#, and others. Python accomplishes it through <code>__magic__</code> methods, whereas Rust
-has very similarly named <a href="https://doc.rust-lang.org/stable/book/operators-and-overloading.html">operator traits</a>.</p>
-</li>
-<li>
-<p>Rust basically <a href="https://doc.rust-lang.org/stable/book/documentation.html#documentation-as-tests">has <code>doctest</code></a>.
-If you don&#8217;t know, the <a href="https://docs.python.org/2/library/doctest.html"><code>doctest</code> module</a> is a standard Python testing
-utility that can run usage examples found in documentation comments and verify their correctness. Rust version (<code>rustdoc</code>)
-is even more powerful and flexible, allowing for example to mark additional boilerplate lines that should be run
-when testing examples, but <em>not</em> included in the generated&nbsp;documentation.</p>
-</li>
-</ul>
-<p>I&#8217;m sure the list doesn&#8217;t end here and will grow over time. As of this writing, for example, nightly builds of Rust
-already offer <a href="https://doc.rust-lang.org/stable/book/slice-patterns.html">advanced slice pattern matching</a> which are
-very similar to the <a href="https://www.python.org/dev/peps/pep-3132/">extended iterable unpacking</a> from Python&nbsp;3.</p>
-<h4>Is it worth&nbsp;it?</h4>
-<p>Depending on your background and the programming domain you are working in, you may be wondering if Rust
-is a language that&#8217;s worth looking into now, or in the near&nbsp;future.</p>
-<p>Firstly, let me emphasize that it&#8217;s still in its early stages. Although the stable version 1.0 has been released
-<a href="http://blog.rust-lang.org/2015/05/15/Rust-1.0.html">a good couple of months ago</a>, the ecosystem isn&#8217;t nearly as diverse
-and abundant as in some of the other new&nbsp;languages.</p>
-<p>If you are specifically looking to deploying Rust-written <span class="caps">API</span> servers, backends, and other &#8212; shall I use the word
-&#8212; microservices, then right now you&#8217;ll probably be better served by more established solutions,
-like Java with <a href="http://docs.paralleluniverse.co/quasar/">fibers</a>, asynchronous Python on PyPy, Erlang,
-Go, node.js, or similar.
-I predict Rust catching up here in the coming months, though, because the prospect of writing native speed <span class="caps">JSON</span> slingers
-with relative ease is just too compelling to&nbsp;pass.</p>
-<p>The other interesting area for Rust is <em>game programming</em>, because it&#8217;s one of the few languages capable of supporting
-even the most demanding <span class="caps">AAA</span>+ productions. The good news is that portable, open source
-<a href="http://www.piston.rs/">game engines</a> are already here. The bad news is that most of the existing knowledge
-about designing and coding high performance games is geared towards writing (stripped down) C++. The community
-is also rather <del>stubborn</del> reluctant to adopt anything that may carry even a <em>hint</em> of potentially unknown
-performance implications. Although some inroads have been made (here&#8217;s, for example,
-an <a href="https://github.com/HeroesGrave/ecs-rs">entity component system</a> written in Rust), and I wouldn&#8217;t be surprised
-to see indie games written in Rust, it probably won&#8217;t take over the industry anytime&nbsp;soon.</p>
-<p>When it comes to hardware, though, Rust may already have the upper hand. It is obviously much easier language to program in
-than pure C. Along with its toolchain&#8217;s ability to produce
-<a href="https://doc.rust-lang.org/stable/book/no-stdlib.html">minimal executables</a>, it makes for a compelling language for
-programming microcontrollers and other embedded&nbsp;devices.</p>
-<p>So in short, Rust is pretty nice. And if you have read that far, I think you should just go ahead
-and <a href="https://www.rust-lang.org/">have a look</a> for yourself&nbsp;:)</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Because as much as we&#8217;d like for <a href="http://dlang.org/">D</a> to finally get <em>somewhere</em>, at this point
-we may have better luck waiting for the Year of Linux on Desktop to dawn&#8230;&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Of course, nobody has stopped the community from <a href="https://github.com/Manishearth/rust-gc">implementing it</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>Strictly speaking, it&#8217;s the binding such as <code>let x = &amp;foo;</code> that translates to it. Unadorned C pointer type
-<code>Foo*</code> would correspond to mutable binding to a mutable reference in Rust, i.e. <code>let mut x = &amp;mut foo;</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-<li id="fn:4">
-<p>Their Haskell equivalents are <code>Maybe</code> and <code>Either</code> type classes, respectively.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-first-impressions.html#rust-first-impressions">Continue reading</a>
-  </div>
 </article>
 
   <div class="pagination">
+    <a class="btn" href="http://xion.io/tag/rust2.html">
+      <i class="fa fa-angle-left"></i> Older Posts
+    </a>
   </div>
 
     <footer>

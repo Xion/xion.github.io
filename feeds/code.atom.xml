@@ -1,5 +1,201 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-04-02T22:10:00+00:00</updated><entry><title>Arguments to Python generator functions</title><link href="http://xion.io/post/code/python-generator-args.html" rel="alternate"></link><updated>2017-04-02T22:10:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-03-14:post/code/python-generator-args.html</id><summary type="html">&lt;p&gt;In Python, a &lt;em&gt;generator function&lt;/em&gt; is one that
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-04-10T23:37:00+01:00</updated><entry><title>Iteration patterns for Result &amp; Option</title><link href="http://xion.io/post/code/rust-iter-patterns.html" rel="alternate"></link><updated>2017-04-10T23:37:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-10:post/code/rust-iter-patterns.html</id><summary type="html">&lt;p&gt;Towards the end of &lt;a href="http://xion.io/post/code/rust-for-loop.html"&gt;my previous post about &lt;code&gt;for&lt;/code&gt; loops in Rust&lt;/a&gt;,
+I mentioned how those loops can often be expressed in a more declarative way.
+This alternative approach involves chaining methods of
+&lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"&gt;the &lt;code&gt;Iterator&lt;/code&gt; trait&lt;/a&gt;
+to create specialized transformation&amp;nbsp;pipelines:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;odds_squared&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mf"&gt;1.&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;%&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;!=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;small&gt;&lt;a href="https://is.gd/q4lXew"&gt;Playground link&lt;/a&gt;&lt;/small&gt;&lt;/p&gt;
+&lt;p&gt;Code like this isn&amp;#8217;t unique to Rust, of course.
+Similar patterns are prevalent in functional languages such as
+&lt;a href="https://msdn.microsoft.com/en-us/visualfsharpdocs/conceptual/operators.%5b-h%5d-%5d%5b't1%2c'u%5d-function-%5bfsharp%5d"&gt;F#&lt;/a&gt;,
+and can also be found in
+Java (&lt;a href="https://dzone.com/articles/understanding-java-8-streams-1"&gt;Streams&lt;/a&gt;),
+imperative .&lt;span class="caps"&gt;NET&lt;/span&gt; (&lt;a href="https://msdn.microsoft.com/en-us/library/bb308959.aspx#linqoverview_topic3"&gt;&lt;span class="caps"&gt;LINQ&lt;/span&gt;&lt;/a&gt;),
+JavaScript (&lt;a href="https://lodash.com/docs/4.17.4#chain"&gt;LoDash&lt;/a&gt;)
+and&amp;nbsp;elsewhere.&lt;/p&gt;
+&lt;p&gt;This saying, Rust also has its fair share of unique iteration idioms.
+In this post, we&amp;#8217;re going to explore those arising on the intersection of iterators
+and the most common Rust enums: &lt;code&gt;Result&lt;/code&gt; and &lt;code&gt;Option&lt;/code&gt;.&lt;/p&gt;
+&lt;h4&gt;filter_map()&lt;/h4&gt;
+&lt;p&gt;When working with iterators,
+we&amp;#8217;re almost always interested in selecting elements that match some criterion
+or passing them through a transformation function.
+It&amp;#8217;s not even uncommon to want &lt;em&gt;both&lt;/em&gt; of those things,
+as demonstrated by the initial example in this&amp;nbsp;post.&lt;/p&gt;
+&lt;p&gt;You can, of course, accomplish those two tasks independently:
+Rust&amp;#8217;s &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"&gt;&lt;code&gt;filter&lt;/code&gt;&lt;/a&gt;
+and &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"&gt;&lt;code&gt;map&lt;/code&gt;&lt;/a&gt; methods
+work just fine for this purpose.
+But there exists an alternative, and in some cases it fits the problem &lt;em&gt;amazingly&lt;/em&gt;&amp;nbsp;well.&lt;/p&gt;
+&lt;p&gt;Meet &lt;code&gt;filter_map&lt;/code&gt;.
+Here&amp;#8217;s what &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter_map"&gt;the official docs&lt;/a&gt;
+have to say about&amp;nbsp;it:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Creates an iterator that both filters and&amp;nbsp;maps.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Well, &lt;em&gt;duh&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;On a more serious note, the common pattern that &lt;code&gt;filter_map&lt;/code&gt; simplifies
+is unwrapping a series of &lt;code&gt;Option&lt;/code&gt;s.
+If you have a sequence of maybe-values,
+and you want to retain only those that are actually there,
+&lt;code&gt;filter_map&lt;/code&gt; can do it in a single&amp;nbsp;step:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Get the sequence of all files matching a glob pattern via the glob crate.&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;glob&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;glob&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;foo.*&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="c1"&gt;// Retain only their extensions, e.g. &amp;quot;.txt&amp;quot; or &amp;quot;.md&amp;quot;.&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file_extensions&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;extension&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The equivalent that doesn&amp;#8217;t use &lt;code&gt;filter_map&lt;/code&gt;
+would have to split the checking &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; unwrapping of &lt;code&gt;Option&lt;/code&gt;s into separate&amp;nbsp;steps:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file_extensions&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;extension&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_some&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Because of this check &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; unwrap logic,
+&lt;code&gt;filter_map&lt;/code&gt; can be useful even with a no-op predicate (&lt;code&gt;.filter_map(|x| x)&lt;/code&gt;)
+if we already have the &lt;code&gt;Option&lt;/code&gt; objects handy.
+Otherwise, it&amp;#8217;s often very easy to obtain them,
+which is exactly the case for the &lt;code&gt;Result&lt;/code&gt; type:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Read all text lines from a file:&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BufReader&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fs&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;File&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;file.ext&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;?&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;With a simple &lt;code&gt;.filter_map(Result::ok)&lt;/code&gt;, like above,
+we can pass through a sequence of &lt;code&gt;Result&lt;/code&gt;s and yield only the &amp;#8220;successful&amp;#8221; values.
+I find this particular idiom to be extremely useful in practice,
+as long as you remember that &lt;code&gt;Err&lt;/code&gt;ors will be discarded by it&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;As a final note on &lt;code&gt;filter_map&lt;/code&gt;,
+you need to keep in mind that regardless of how great it often is,
+not all combinations of &lt;code&gt;filter&lt;/code&gt; and &lt;code&gt;map&lt;/code&gt; should be replaced by it.
+When deciding whether it&amp;#8217;s appropriate in your case,
+it is helpful to consider the equivalence of these two&amp;nbsp;expressions:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;m&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;m&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Simply put, if you find yourself writing conditions like this inside &lt;code&gt;filter_map&lt;/code&gt;,
+you&amp;#8217;re probably better off with two separate processing&amp;nbsp;steps.&lt;/p&gt;
+&lt;h4&gt;collect()&lt;/h4&gt;
+&lt;p&gt;Let&amp;#8217;s go back to the last example with a sequence of &lt;code&gt;Result&lt;/code&gt;s.
+Since the final sequence won&amp;#8217;t include any &lt;code&gt;Err&lt;/code&gt;oneous values,
+you may be wondering if there is a way to preserve&amp;nbsp;them.&lt;/p&gt;
+&lt;p&gt;In more formal terms, the question is about turning a vector of results
+(&lt;code&gt;Vec&amp;lt;Result&amp;lt;T, E&amp;gt;&amp;gt;&lt;/code&gt;) into a result with a vector (&lt;code&gt;Result&amp;lt;Vec&amp;lt;T&amp;gt;, E&amp;gt;&lt;/code&gt;).
+We&amp;#8217;d like for this aggregated result to only be &lt;code&gt;Ok&lt;/code&gt;
+if &lt;em&gt;all&lt;/em&gt; original results were &lt;code&gt;Ok&lt;/code&gt;.
+Otherwise, we should just get the first &lt;code&gt;Err&lt;/code&gt;or.&lt;/p&gt;
+&lt;p&gt;Believe it or not, but this is probably &lt;em&gt;the&lt;/em&gt; most common Rust problem!&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Of course, that doesn&amp;#8217;t necessarily mean the problem is particularly hard.
+Possible solutions exist in both an iterator&amp;nbsp;version:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;fold&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[]),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_mut&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;});&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and in a loop&amp;nbsp;form:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[]);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_mut&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;break&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;but I suspect not many people would call them clear and readable,
+let alone pretty&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Fortunately, you don&amp;#8217;t need to pollute your codebase with any of those workarounds.
+Rust offers an out-of-the-box solution which solves this particular problem,
+and its only flaw is one that I hope to address through this very&amp;nbsp;post.&lt;/p&gt;
+&lt;p&gt;So, here it&amp;nbsp;goes:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nt"&gt;let&lt;/span&gt; &lt;span class="nt"&gt;result&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt; &lt;span class="nt"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nt"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nt"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nt"&gt;results&lt;/span&gt;&lt;span class="nc"&gt;.collect&lt;/span&gt;&lt;span class="o"&gt;();&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Yep, that&amp;#8217;s all of&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;The background story is that &lt;code&gt;Result&amp;lt;Vec&amp;lt;T&amp;gt;, E&amp;gt;&lt;/code&gt; simply &amp;#8220;knows&amp;#8221;
+how to construct itself from a sequence of &lt;code&gt;Result&lt;/code&gt;s.
+Unfortunately, this &lt;span class="caps"&gt;API&lt;/span&gt; is hidden behind Rust&amp;#8217;s iterator abstraction,
+and specifically the fact that
+&lt;code&gt;Result&lt;/code&gt; implements &lt;a href="https://doc.rust-lang.org/1.2.0/std/iter/trait.FromIterator.html"&gt;&lt;code&gt;FromIterator&lt;/code&gt;&lt;/a&gt;
+in this particular manner.
+The way
+&lt;a href="https://doc.rust-lang.org/std/result/enum.Result.html"&gt;the documentation page for &lt;code&gt;Result&lt;/code&gt;&lt;/a&gt;
+is structured, however &amp;#8212; with trait implementations at the very end &amp;#8212;
+ensures this useful fact remains virtually&amp;nbsp;undiscoverable.&lt;/p&gt;
+&lt;p&gt;Because let&amp;#8217;s be honest: no one scrolls that&amp;nbsp;far.&lt;/p&gt;
+&lt;p&gt;Incidentally, &lt;code&gt;Option&lt;/code&gt; offers analogous functionally:
+a sequence of &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt; can be &lt;code&gt;collect&lt;/code&gt;ed into &lt;code&gt;Option&amp;lt;Vec&amp;lt;T&amp;gt;&amp;gt;&lt;/code&gt;,
+which will be &lt;code&gt;None&lt;/code&gt; if any of the input elements were.
+As you may suspect, this fact is equally hard to find in the relevant&amp;nbsp;docs.&lt;/p&gt;
+&lt;p&gt;But the good news is: you know about all this now! :)
+And perhaps thanks to this post,
+those handy tricks become a little better in a wider Rust&amp;nbsp;community.&lt;/p&gt;
+&lt;h4&gt;partition()&lt;/h4&gt;
+&lt;p&gt;The last technique I wanted to present here follows naturally
+from the other idioms that apply to &lt;code&gt;Result&lt;/code&gt;s.
+Instead of extracting just the &lt;code&gt;Ok&lt;/code&gt; values with &lt;code&gt;flat_map&lt;/code&gt;,
+or keeping only the first error through &lt;code&gt;collect&lt;/code&gt;,
+we will now learn how to retain all the errors &lt;em&gt;and&lt;/em&gt; all the values,
+both neatly&amp;nbsp;separated.&lt;/p&gt;
+&lt;p&gt;The &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.partition"&gt;&lt;code&gt;partition&lt;/code&gt; method&lt;/a&gt;,
+as this is what the section is about,
+is essentially a more powerful variant of &lt;code&gt;filter&lt;/code&gt;.
+While the latter only returns items that &lt;em&gt;do&lt;/em&gt; match a predicate,
+&lt;code&gt;partition&lt;/code&gt; will also give us the ones which &lt;em&gt;don&amp;#8217;t&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Using it to slice an iterable of &lt;code&gt;Result&lt;/code&gt;s is&amp;nbsp;straightforward:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;oks&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fails&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;is_ok&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The only thing that remains cumbersome is
+the fact that both parts of the resulting tuple still contain just &lt;code&gt;Result&lt;/code&gt;s.
+Ideally, we would like them to be already unwrapped into values and errors,
+but unfortunately we need to do this&amp;nbsp;ourselves:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;values&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;oks&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;errors&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fails&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unwrap_err&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As an alternative,
+&lt;a href="https://docs.rs/itertools/0.6.0/itertools/trait.Itertools.html#method.partition_map"&gt;the &lt;code&gt;partition_map&lt;/code&gt; method&lt;/a&gt;
+from the &lt;a href="https://crates.io/crates/itertools"&gt;&lt;code&gt;itertools&lt;/code&gt; crate&lt;/a&gt;
+can accomplish the same thing in a single step,
+albeit a more verbose&amp;nbsp;one.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;A symmetrical technique is using &lt;code&gt;.filter_map(Result::err)&lt;/code&gt; to get just
+the &lt;code&gt;Err&lt;/code&gt;or objects, but that&amp;#8217;s probably much less useful
+as it drops all the successful values.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Based on my completely unsystematic and anecdotal observations,
+someone asks about this on the #rust-beginners &lt;span class="caps"&gt;IRC&lt;/span&gt; approximately &lt;em&gt;every other day&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;The &lt;code&gt;fold&lt;/code&gt; variant is also rife with type inference traps,
+often requiring explicit type annotations, a &amp;#8220;no-op&amp;#8221; &lt;code&gt;Err&lt;/code&gt; arm in &lt;code&gt;match&lt;/code&gt;,
+or both.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="iterators"></category></entry><entry><title>Arguments to Python generator functions</title><link href="http://xion.io/post/code/python-generator-args.html" rel="alternate"></link><updated>2017-04-02T22:10:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-03-14:post/code/python-generator-args.html</id><summary type="html">&lt;p&gt;In Python, a &lt;em&gt;generator function&lt;/em&gt; is one that
 contains a &lt;code&gt;yield&lt;/code&gt; statement inside the function body.
 Although this language construct has many fascinating use cases
 (&lt;a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"&gt;&lt;span class="caps"&gt;PDF&lt;/span&gt;&lt;/a&gt;),
@@ -1097,307 +1293,4 @@ this technique can make it much more pleasant to use the external &lt;span class
 for them, the old syntax will continue to work exactly like before.
 Also note that the Rust compiler is smart about eliding the no-op conversion calls like the &lt;code&gt;Into::into&lt;/code&gt; above,
 so you shouldn&amp;#8217;t observe any changes in the performance department&amp;nbsp;either.&lt;/p&gt;
-&lt;p&gt;And who knows, maybe at some point Rust makes the final leap, and allows skipping the &lt;code&gt;None&lt;/code&gt;s?&amp;#8230;&lt;/p&gt;</summary><category term="Rust"></category><category term="arguments"></category><category term="parameters"></category><category term="functions"></category></entry><entry><title>Flappy Bird in 1234 bytes of Bash</title><link href="http://xion.io/post/code/bash-flappy-bird.html" rel="alternate"></link><updated>2016-08-25T22:07:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-08-25:post/code/bash-flappy-bird.html</id><summary type="html">&lt;p&gt;Contrary to an infamous opinion from a bygone era,
-&lt;span class="caps"&gt;640KB&lt;/span&gt; is not really sufficient for anyone anymore.
-A typical website exceeds that easily,
-and executable programs are usually measured in&amp;nbsp;megabytes.&lt;/p&gt;
-&lt;p&gt;But what if you only had 1234 &lt;em&gt;bytes&lt;/em&gt; to work&amp;nbsp;with?&amp;#8230;&lt;/p&gt;
-&lt;p&gt;A friend of mine, &lt;a href="http://gynvael.coldwind.pl/?blog=1&amp;amp;lang=en"&gt;Gynvael Coldwind&lt;/a&gt;,
-organized a game programming compo&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt; that had precisely this limitation.
-Unlike most demoscene ones, however, the size limit here
-applies to either the final binary &lt;em&gt;or&lt;/em&gt; its source code.
-This can be chosen at the participant&amp;#8217;s&amp;nbsp;discretion.&lt;/p&gt;
-&lt;p&gt;Since my currently favorite compiled language produces
-&lt;a href="https://lifthrasiir.github.io/rustlog/why-is-a-rust-executable-large.html"&gt;the exact opposite of small binaries&lt;/a&gt;,
-I was quite intrigued by the source code option.
-But as the rules say, the final game must run
-on a &lt;em&gt;clean&lt;/em&gt; installation (only standard packages) of either Windows or Ubuntu Linux.
-The choice of viable languages and technologies was therefore rather&amp;nbsp;limited.&lt;/p&gt;
-&lt;p&gt;It was time to get &lt;em&gt;a little&lt;/em&gt;&amp;nbsp;creative.&lt;/p&gt;
-&lt;h4&gt;Game&amp;nbsp;theory&lt;/h4&gt;
-&lt;p&gt;What must an environment provide to be a suitable platform for game development?
-Not much, really. We only need to be able&amp;nbsp;to:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;put stuff on the&amp;nbsp;screen&lt;/li&gt;
-&lt;li&gt;react to user&amp;nbsp;input&lt;/li&gt;
-&lt;li&gt;execute time-dependent&amp;nbsp;logic&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;You could arguably get away without the last one,
-but the kind of games you would end up with
-had gone out of fashion about &lt;a href="https://en.wikipedia.org/wiki/Zork"&gt;half a century ago&lt;/a&gt;.
-For the &amp;#8220;real&amp;#8221; arcade games, we really ought to run our code at least a dozen times per&amp;nbsp;second.&lt;/p&gt;
-&lt;p&gt;There&amp;#8217;s only a handful of standard technologies that allow all of this out of the&amp;nbsp;box.&lt;/p&gt;
-&lt;p&gt;I&amp;#8217;m a wee bit out of touch with Windows these days
-but on Linux, there&amp;#8217;s one thing that I really wanted to take for a serious spin.
-And luckily for me, it also has one extremely terse language to go hand in hand&amp;nbsp;with.&lt;/p&gt;
-&lt;p&gt;I&amp;#8217;m talking, of course, about the &lt;strong&gt;&lt;span class="caps"&gt;ANSI&lt;/span&gt; terminal&lt;/strong&gt; that can be scripted in Bash.
-If there ever was anything that worked anywhere by default,
-then this got to be it&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h4&gt;&amp;#8230;put into&amp;nbsp;practice&lt;/h4&gt;
-&lt;p&gt;Note that I&amp;#8217;ve stressed the &amp;#8220;terminal&amp;#8221; part.
-The shell itself is a neat instrument,
-but (perhaps surprisingly) it doesn&amp;#8217;t actually concern itself
-with displaying anything on the&amp;nbsp;screen.&lt;/p&gt;
-&lt;p&gt;This has traditionally been the job of a &lt;em&gt;terminal emulator&lt;/em&gt;.
-To this end, it has a couple of &lt;a href="http://wiki.bash-hackers.org/scripting/terminalcodes"&gt;special codes&lt;/a&gt;
-that are undoubtedly useful for an aspiring indie shell game developer.
-They are what allows us to display things in a specific position on the screen,
-complete with chosen color, background color, and (text)&amp;nbsp;style.&lt;/p&gt;
-&lt;p&gt;So this nails down our first requisite&amp;nbsp;feature.&lt;/p&gt;
-&lt;p&gt;As for the second one, the vanilla &lt;a href="http://tldp.org/LDP/Bash-Beginners-Guide/html/sect_08_02.html"&gt;&lt;code&gt;read&lt;/code&gt; command&lt;/a&gt;
-supports everything we may need for handling user input.
-The only real &amp;#8220;trick&amp;#8221; is passing the &lt;code&gt;-n&lt;/code&gt; flag
-which makes it wait for a specific number of characters (e.g. one)
-rather than a whole line ending with &lt;em&gt;Enter&lt;/em&gt;.
-Add a few more flags &amp;#8212; like the one that prevents text from being echoed back to the console &amp;#8212;
-and you can make a rudimentary input&amp;nbsp;loop:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nv"&gt;KEY&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;\0&amp;#39;&lt;/span&gt;
-&lt;span class="k"&gt;while&lt;/span&gt; :&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
-    &lt;span class="nb"&gt;read&lt;/span&gt; -rsn &lt;span class="m"&gt;1&lt;/span&gt; KEY
-&lt;span class="k"&gt;done&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;I can imagine, however, that you&amp;#8217;d want to do other things besides just waiting for input.
-Stuff like &amp;#8220;updating the game state&amp;#8221; and &amp;#8220;drawing the next frame&amp;#8221;
-is generally considered pretty important in&amp;nbsp;games.&lt;/p&gt;
-&lt;p&gt;Normally, we would deal with those things in between checking for input events,
-leading to a particular structure of the so-called &lt;a href="http://gameprogrammingpatterns.com/game-loop.html"&gt;real-time loop&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;But the shell doesn&amp;#8217;t really handle input via &amp;#8220;events&amp;#8221;.
-Instead, you just ask for some text and wait until you get it.
-There is no &amp;#8220;peek mode&amp;#8221; that&amp;#8217;d allow to squeeze in some rendering logic before the next key&amp;nbsp;press.&lt;/p&gt;
-&lt;p&gt;What do we do, then, with a tight loop that leaves us no wiggle&amp;nbsp;room?&amp;#8230;&lt;/p&gt;
-&lt;p&gt;Why, we take a crowbar and pry it&amp;nbsp;open!&lt;/p&gt;
-&lt;h5&gt;(Don&amp;#8217;t) be&amp;nbsp;alarmed&lt;/h5&gt;
-&lt;p&gt;Let&amp;#8217;s start by noticing that to run some code whenever there is nothing else to do
-has a rough equivalent of running it &lt;em&gt;periodically&lt;/em&gt;.
-This isn&amp;#8217;t an exactly new observation:
-the &lt;a href="https://developer.mozilla.org/en-US/docs/Web/API/WindowTimers/setTimeout"&gt;&lt;code&gt;setTimeout&lt;/code&gt; function&lt;/a&gt; in JavaScript
-has been the basis of &amp;#8220;real-time&amp;#8221; animation
-since the 90s era of falling snowflakes, and up to the contemporary browser games&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;Neither does the shell nor the hosting terminal support anything like &lt;code&gt;setTimeout&lt;/code&gt;, though.
-But fortunately, they don&amp;#8217;t need to: Linux itself does.
-And it accomplishes it quite effortlessly, due to the sole fact of &lt;em&gt;being an operating system&lt;/em&gt;.
-All we have to do is access some of its capabilities directly from the shell&amp;nbsp;script:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nv"&gt;KEY&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s1"&gt;&amp;#39;\0&amp;#39;&lt;/span&gt;
-&lt;span class="nv"&gt;DT&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;0.05  &lt;span class="c"&gt;# timeout value in seconds&lt;/span&gt;
-
-tick&lt;span class="o"&gt;()&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt;
-    &lt;span class="c"&gt;# .. do stuff ...&lt;/span&gt;
-    &lt;span class="o"&gt;(&lt;/span&gt; sleep &lt;span class="nv"&gt;$DT&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nb"&gt;kill &lt;/span&gt;ALRM &lt;span class="nv"&gt;$$&lt;/span&gt; &lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="p"&gt;&amp;amp;&lt;/span&gt;
-&lt;span class="o"&gt;}&lt;/span&gt;
-
-&lt;span class="nb"&gt;trap &lt;/span&gt;tick ALRM
-tick
-&lt;span class="k"&gt;while&lt;/span&gt; :&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="k"&gt;do&lt;/span&gt;
-    &lt;span class="nb"&gt;read&lt;/span&gt; -rsn &lt;span class="m"&gt;1&lt;/span&gt; KEY
-&lt;span class="k"&gt;done&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;What we&amp;#8217;re doing here is set up the &lt;code&gt;tick&lt;/code&gt; function to be
-a &lt;em&gt;&lt;a href="https://en.wikipedia.org/wiki/Unix_signal"&gt;signal&lt;/a&gt; handler&lt;/em&gt;.
-A callback, if you&amp;nbsp;will.&lt;/p&gt;
-&lt;p&gt;Inside of this callback, we can do all the state updates and drawing we need,
-as long as we follow it with &amp;#8220;scheduling&amp;#8221; of the next &lt;code&gt;tick&lt;/code&gt; call.
-As a direct equivalent of a &lt;code&gt;setTimeout&lt;/code&gt; invocation, this can be done&amp;nbsp;by:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;starting a subshell to run in the background (with &lt;code&gt;&amp;amp;&lt;/code&gt;)&lt;/li&gt;
-&lt;li&gt;letting it sleep for however long we want to delay the next&amp;nbsp;update&lt;/li&gt;
-&lt;li&gt;sending a signal to the main script (&lt;code&gt;kill $$&lt;/code&gt;)&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;The signal we chose is of course &lt;code&gt;SIGALRM&lt;/code&gt;&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.
-Technically, however, it can be anything,
-as long as we can set up a &lt;code&gt;trap&lt;/code&gt; to actually handle&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;In any case, success! Bash is officially a game programming&amp;nbsp;platform!&lt;/p&gt;
-&lt;h4&gt;Integration in&amp;nbsp;parts&lt;/h4&gt;
-&lt;p&gt;And so having figured out the technicalities,
-I was faced with the crucial dilemma: &lt;em&gt;what&lt;/em&gt; game could I actually&amp;nbsp;write?&lt;/p&gt;
-&lt;p&gt;Nothing too complicated, that&amp;#8217;s for sure.
-After the initial scaffolding has used up about 1/4 of the harsh size limit,
-I knew that radical simplicity was the order of the&amp;nbsp;day.&lt;/p&gt;
-&lt;p&gt;And so I went for possibly &lt;a href="https://en.wikipedia.org/wiki/Flappy_Bird"&gt;the most trivial game ever&lt;/a&gt;.&lt;/p&gt;
-&lt;p style="text-align: center"&gt;
-    &lt;img src="https://upload.wikimedia.org/wikipedia/en/5/52/Flappy_Bird_gameplay.png" alt="flap flap"&gt;&lt;/br&gt;
-    &lt;small&gt;Sorry, Pong!&lt;/small&gt;
-&lt;/p&gt;
-
-&lt;p&gt;Then, after hours of (&lt;em&gt;ahem&lt;/em&gt;) &lt;a href="https://www.flappybird.com/"&gt;meticulous research&lt;/a&gt;,
-I managed to reverse-engineer the core&amp;nbsp;mechanic:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;let the bird fall down with a constant&amp;nbsp;acceleration&lt;/li&gt;
-&lt;li&gt;to jump, give it some upwards-facing&amp;nbsp;velocity&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;Actually &lt;a href="https://github.com/Xion/flappybash/blob/0372ef9173c921ff79c64553974cea0b02c2bb3f/flappybash.sh"&gt;coding this&lt;/a&gt;
-in Bash was mostly a matter of finding out how to perform floating-point calculations.
-Rather unsurprisingly, this is done through
-&lt;a href="https://en.wikipedia.org/wiki/Bc_(programming_language)#Using_bc_in_shell_scripts"&gt;an external program&lt;/a&gt;,
-while truncating of the fractional part involves &amp;#8212; wait for it &amp;#8212;
-&lt;a href="http://unix.stackexchange.com/a/167059"&gt;&lt;em&gt;string formatting&lt;/em&gt;&lt;/a&gt;.&lt;/p&gt;
-&lt;h4&gt;Pipe&amp;nbsp;dream&lt;/h4&gt;
-&lt;p&gt;Based on the above nuggets of Stack Overflow wisdom,
-you&amp;#8217;ve probably figured out that Bash isn&amp;#8217;t exactly what you would call &lt;em&gt;a programming language&lt;/em&gt;.
-With a little bit of perseverance, however, we can make it do our bidding&amp;#8230;
-&lt;em&gt;some&lt;/em&gt; fraction of the&amp;nbsp;time.&lt;/p&gt;
-&lt;p&gt;So far, I had the player character &amp;#8212; a beautiful red rectangle &amp;#8212;
-fall down under the constant force of gravity, and maybe ascend if the Space key has been pressed.
-But a heroic protagonist necessitates the presence of formidable adversaries,
-so my next step was to figure out how to implement this crucial gameplay&amp;nbsp;mechanic.&lt;/p&gt;
-&lt;p&gt;Which one?&amp;#8230; Pipes, of&amp;nbsp;course.&lt;/p&gt;
-&lt;p&gt;Pipes in &lt;em&gt;Bash&lt;/em&gt;.&lt;/p&gt;
-&lt;p style="text-align: center"&gt;
-    &lt;img src="http://xion.io/images/irony-sign.jpg" alt="...ahem"&gt;
-&lt;/p&gt;
-
-&lt;p&gt;It was pretty evident I&amp;#8217;m gonna need to represent them somehow,
-and Bash isn&amp;#8217;t exactly known for its strong repertoire of data structures.
-Starting from version 4.0, it does however have &lt;a href="http://tldp.org/LDP/abs/html/arrays.html"&gt;arrays&lt;/a&gt;,
-so there is at least something we can work&amp;nbsp;with.&lt;/p&gt;
-&lt;p&gt;Let&amp;#8217;s not get &lt;em&gt;too&lt;/em&gt; carried away, though.
-The somewhat obvious idea of mirroring the entire game field in a (pseudo) 2D array
-of pipe/not-pipe turned out to be completely unworkable.
-The fill rate of most (all?) terminal emulators is nowhere near sufficient
-to permit redrawing of the whole screen &lt;em&gt;and&lt;/em&gt; maintaining &lt;span class="caps"&gt;FPS&lt;/span&gt; value above the slideshow&amp;nbsp;threshold.&lt;/p&gt;
-&lt;p&gt;&lt;a href="https://github.com/Xion/flappybash/commit/467fe6429fa8dcc7005f5324278804243204ec9a"&gt;What I went with instead&lt;/a&gt;
-was a 1D array for the pipe itself, and a separate variable to denote its horizontal position.
-Working from there, it wasn&amp;#8217;t too hard to
-&lt;a href="https://github.com/Xion/flappybash/commit/5e3281e408767eab2ade2fa2f9299fee60681bdc"&gt;make it move&lt;/a&gt;,
-and eventually to check for its collision with the player&amp;nbsp;object.&lt;/p&gt;
-&lt;h4&gt;Fitting&amp;nbsp;in&lt;/h4&gt;
-&lt;p&gt;That, of course,
-was &lt;a href="https://github.com/Xion/flappybash/commit/ff3260e1dd5fa61695310578091ff922acf06e71"&gt;the most important milestone&lt;/a&gt;.
-&lt;br/&gt;
-I added &lt;em&gt;an objective&lt;/em&gt;.&lt;/br&gt;
-It was &lt;em&gt;an actual game&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;And I still had about 100 bytes&amp;nbsp;left!&lt;/p&gt;
-&lt;p&gt;Speaking of size, this is probably a good moment
-to talk about making the most of those meager 1234 bytes.
-It&amp;#8217;s not exactly surprising that it was possible mostly thanks to &lt;em&gt;minification&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;While it&amp;#8217;s extremely popular for JavaScript,
-the same abundance of minification utilities cannot be expected when it comes of shell scripts.
-Still, &amp;#8220;bash minification&amp;#8221; does return some useful search results,
-and &lt;a href="http://bash-minifier.appspot.com/"&gt;one of them&lt;/a&gt; is what I used to shrink the final&amp;nbsp;script.&lt;/p&gt;
-&lt;p&gt;Obviously, it didn&amp;#8217;t go without some trouble.
-Since the minifier does little more than to swap newlines for semicolons,
-it got a few bugs that had to be ironed out.
-No big deal, really:
-a small batch of
-&lt;a href="https://github.com/Xion/flappybash/commit/a9556bbef8245bd1ce849e1bffd175412934ef9d"&gt;handcrafted, artisanal Python&lt;/a&gt;
-was enough to paper over the&amp;nbsp;issues.&lt;/p&gt;
-&lt;p&gt;The other technique you can use to slim down is &lt;em&gt;obfuscation&lt;/em&gt;, i.e.
-&lt;a href="https://github.com/Xion/flappybash/commit/f2683785a8049fc385e5c6705f66dbb835ad84bc"&gt;shortening of the identifiers&lt;/a&gt;.
-As the minifier didn&amp;#8217;t offer this feature natively, I had to take care of it&amp;nbsp;myself.&lt;/p&gt;
-&lt;p&gt;This lead to adding such interesting assignments as this &lt;code&gt;p&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nv"&gt;p&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nb"&gt;printf&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;which absolutely shouldn&amp;#8217;t be confused with &lt;em&gt;this&lt;/em&gt; &lt;code&gt;p&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c"&gt;# put text at given position: p $x $y $text&lt;/span&gt;
-p&lt;span class="o"&gt;()&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt; &lt;span class="nb"&gt;echo&lt;/span&gt; -en &lt;span class="s2"&gt;&amp;quot;\e[&lt;/span&gt;&lt;span class="nv"&gt;$2&lt;/span&gt;&lt;span class="s2"&gt;;&lt;/span&gt;&lt;span class="si"&gt;${&lt;/span&gt;&lt;span class="nv"&gt;1&lt;/span&gt;&lt;span class="si"&gt;}&lt;/span&gt;&lt;span class="s2"&gt;f&lt;/span&gt;&lt;span class="nv"&gt;$3&lt;/span&gt;&lt;span class="s2"&gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="o"&gt;}&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The reason it works is that in &lt;span class="caps"&gt;POSIX&lt;/span&gt; shells,
-variables and functions effectively form two separate namespaces.
-Their members are thus referred to in two different&amp;nbsp;ways:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;p &lt;span class="nv"&gt;$X&lt;/span&gt; &lt;span class="nv"&gt;$Y&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;\e[1;37;41mB&amp;quot;&lt;/span&gt;  &lt;span class="c"&gt;# call the p() function&lt;/span&gt;
-&lt;span class="nv"&gt;$p&lt;/span&gt; &lt;span class="s2"&gt;&amp;quot;\e[?25l&amp;quot;&lt;/span&gt;  &lt;span class="c"&gt;# expand the p variable (i.e. call `printf`)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Notice how functions have longer definitions but shorter usage,
-while the opposite is true for variables.
-Who can now say that Bash doesn&amp;#8217;t find balance in all&amp;nbsp;things?&lt;/p&gt;
-&lt;h4&gt;Auditory&amp;nbsp;sensations&lt;/h4&gt;
-&lt;p&gt;Like I mentioned before, thanks to those and similar tricks
-I had managed to carve out about a hundred or so bytes of free&amp;nbsp;space.&lt;/p&gt;
-&lt;p&gt;Now, what could you possibly do with such a staggering&amp;nbsp;amount?&lt;/p&gt;
-&lt;p style="text-align: center"&gt;
-    &lt;img src="http://xion.io/images/lawrence-office-space.jpg" alt="Two tweets at the same time!"&gt;&lt;/br&gt;
-    &lt;small&gt;&amp;#8230;no, that won&amp;#8217;t even be &lt;em&gt;one&lt;/em&gt; tweet.&lt;/small&gt;
-&lt;/p&gt;
-
-&lt;p&gt;Well, let&amp;#8217;s add some &lt;em&gt;sound effects&lt;/em&gt;, shall&amp;nbsp;we?&lt;/p&gt;
-&lt;p&gt;Before you think that&amp;#8217;s preposterous, remember the &lt;a href="https://en.wikipedia.org/wiki/Bell_character"&gt;terminal bell&lt;/a&gt;.
-Sounding the bell is as simple as printing the &lt;code&gt;"\a"&lt;/code&gt; character (&lt;span class="caps"&gt;ASCII&lt;/span&gt; 7),
-which for this reason is also known as &lt;code&gt;BEL&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nb"&gt;echo&lt;/span&gt; -e &lt;span class="s2"&gt;&amp;quot;\a&amp;quot;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Unfortunately, most terminal emulators silence the actual sound,
-and replace it with a visual indicator &amp;#8212; typically a bell &lt;em&gt;icon&lt;/em&gt;.
-If we want to make speakers reliably emit audible phenomena,
-we sadly have to look&amp;nbsp;elsewhere.&lt;/p&gt;
-&lt;p&gt;Fortunately, modern Linux systems handle the sound card somewhat better
-than you may have remembered from a few years ago.
-This is usually thanks to &lt;a href="https://en.wikipedia.org/wiki/Advanced_Linux_Sound_Architecture"&gt;&lt;span class="caps"&gt;ALSA&lt;/span&gt;&lt;/a&gt;,
-a dedicated subsystem in the Linux kernel, and its numerous userspace&amp;nbsp;complements.&lt;/p&gt;
-&lt;p&gt;One of them is the inconspicuous &lt;code&gt;speaker-test&lt;/code&gt; binary
-which, well, does exactly what it says on the&amp;nbsp;can:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;speaker-test  &lt;span class="c"&gt;# play some noise through the speakers&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;You can make it play a &lt;span class="caps"&gt;WAV&lt;/span&gt; file, too,
-but the most interesting option is to synthesize a &lt;em&gt;sine wave&lt;/em&gt;.
-By adjusting its frequency, it&amp;#8217;s easy to play higher and lower tones,
-forming the building blocks for more complex&amp;nbsp;sounds.&lt;/p&gt;
-&lt;p&gt;What you cannot control is the tone&amp;#8217;s duration.
-That&amp;#8217;s not a big problem, though, since we can run &lt;code&gt;speaker-test&lt;/code&gt; in a separate process
-and then just &lt;em&gt;&lt;code&gt;kill&lt;/code&gt; it dead&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c"&gt;# play a sine wave (requires ALSA): s $frequency $duration&lt;/span&gt;
-s&lt;span class="o"&gt;()&lt;/span&gt; &lt;span class="o"&gt;{&lt;/span&gt; &lt;span class="o"&gt;(&lt;/span&gt; speaker-test &amp;gt;&lt;span class="nv"&gt;$n&lt;/span&gt; -t sine -f &lt;span class="nv"&gt;$1&lt;/span&gt; &lt;span class="o"&gt;)&lt;/span&gt;&lt;span class="p"&gt;&amp;amp;&lt;/span&gt; &lt;span class="nv"&gt;_p&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="nv"&gt;$!&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; sleep &lt;span class="nv"&gt;$2&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="nb"&gt;kill&lt;/span&gt; -9 &lt;span class="nv"&gt;$_p&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt; &lt;span class="o"&gt;}&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;&lt;a href="https://github.com/Xion/flappybash/commit/3f259418f3d6167492b7d849c659dfcee0c6aa3d"&gt;I&amp;#8217;ve used this approach&lt;/a&gt;
-to play a simple, two-tone sound
-whenever the player successfully overcomes a pipe obstacle.
-And I would&amp;#8217;ve probably taken it further if &amp;#8220;&lt;code&gt;speaker_test&lt;/code&gt;&amp;#8221; wasn&amp;#8217;t such a damn &lt;em&gt;long&lt;/em&gt; string.
-Unfortunately, it was one identifier I couldn&amp;#8217;t afford to shorten,
-and this had put a stop to my ambitious plan of improvising &lt;a href="https://www.sadtrombone.com/"&gt;a sad trombone&lt;/a&gt;
-upon player&amp;#8217;s failure&amp;nbsp;:(&lt;/p&gt;
-&lt;h4&gt;;&amp;nbsp;done&lt;/h4&gt;
-&lt;p&gt;It wouldn&amp;#8217;t be right to say I wasn&amp;#8217;t very happy with &lt;a href="https://github.com/Xion/flappybash"&gt;the results&lt;/a&gt;, though.
-All in all, it was &lt;a href="https://github.com/Xion/flappybash/commits/master"&gt;the most fun&lt;/a&gt;
-I had with coding in quite some time,
-and definitely the most amusing Bash script I&amp;#8217;ve ever&amp;nbsp;written.&lt;/p&gt;
-&lt;p style="text-align: center"&gt;
-    &lt;img src="http://xion.io/images/flappybash.jpg" alt="FLAPPY BASH"&gt;
-&lt;/p&gt;
-
-&lt;p&gt;It also got me curious what other games people have implemented purely as shell scripts.
-To my disappointment, there hadn&amp;#8217;t been all that many.
-Of those I could find, this &lt;a href="http://bruxy.regnet.cz/web/linux/EN/housenka-bash-game/"&gt;Snake clone&lt;/a&gt;
-in about &lt;span class="caps"&gt;7KB&lt;/span&gt; of (unobfuscated) Bash
-is probably the most polished&amp;nbsp;one.&lt;/p&gt;
-&lt;p&gt;As you can see then, this is clearly an under-appreciated platform
-that evidently displays a lot of potential!
-If you want to create games that are both very portable
-and &lt;em&gt;extremely&lt;/em&gt; space-efficient,
-Bash is definitely a technology you should have a closer look at&amp;nbsp;;-)&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Here&amp;#8217;s the original announcement post &lt;a href="http://gynvael.coldwind.pl/?lang=pl&amp;amp;id=624"&gt;in Polish&lt;/a&gt;
-and its somewhat understandable
-&lt;a href="https://translate.google.com/translate?sl=auto&amp;amp;tl=en&amp;amp;js=y&amp;amp;prev=_t&amp;amp;hl=en&amp;amp;ie=UTF-8&amp;amp;u=http%3A%2F%2Fgynvael.coldwind.pl%2F%3Flang%3Dpl%26id%3D624&amp;amp;edit-text=&amp;amp;act=url"&gt;Google-translated version&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Yes, I&amp;#8217;m ignoring the elephant in the room which is the web browser.
-It&amp;#8217;s probably because a pile of minified JavaScript doesn&amp;#8217;t strike me as very interesting anymore :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;Nowadays, though,
-the &lt;a href="https://developer.mozilla.org/en-US/docs/Web/API/window/requestAnimationFrame"&gt;&lt;code&gt;requestAnimationFrame&lt;/code&gt; function&lt;/a&gt;
-is closer to the actual continuous processing in the background.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:4"&gt;
-&lt;p&gt;Regular programs could simply call &lt;a href="http://man7.org/linux/man-pages/man2/alarm.2.html"&gt;the &lt;code&gt;alarm&lt;/code&gt; function&lt;/a&gt;
-instead of forking a subprocess. But then again, regular programs could just run a normal game loop.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Bash"></category><category term="shell scripting"></category><category term="game programming"></category><category term="Flappy Bird"></category></entry></feed>
+&lt;p&gt;And who knows, maybe at some point Rust makes the final leap, and allows skipping the &lt;code&gt;None&lt;/code&gt;s?&amp;#8230;&lt;/p&gt;</summary><category term="Rust"></category><category term="arguments"></category><category term="parameters"></category><category term="functions"></category></entry></feed>

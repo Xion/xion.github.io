@@ -1,5 +1,201 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-04-02T22:10:00+00:00</updated><entry><title>Arguments to Python generator functions</title><link href="http://xion.io/post/code/python-generator-args.html" rel="alternate"></link><updated>2017-04-02T22:10:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-03-14:post/code/python-generator-args.html</id><summary type="html">&lt;p&gt;In Python, a &lt;em&gt;generator function&lt;/em&gt; is one that
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-04-10T23:37:00+01:00</updated><entry><title>Iteration patterns for Result &amp; Option</title><link href="http://xion.io/post/code/rust-iter-patterns.html" rel="alternate"></link><updated>2017-04-10T23:37:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-10:post/code/rust-iter-patterns.html</id><summary type="html">&lt;p&gt;Towards the end of &lt;a href="http://xion.io/post/code/rust-for-loop.html"&gt;my previous post about &lt;code&gt;for&lt;/code&gt; loops in Rust&lt;/a&gt;,
+I mentioned how those loops can often be expressed in a more declarative way.
+This alternative approach involves chaining methods of
+&lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"&gt;the &lt;code&gt;Iterator&lt;/code&gt; trait&lt;/a&gt;
+to create specialized transformation&amp;nbsp;pipelines:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;odds_squared&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mf"&gt;1.&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;%&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;!=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;small&gt;&lt;a href="https://is.gd/q4lXew"&gt;Playground link&lt;/a&gt;&lt;/small&gt;&lt;/p&gt;
+&lt;p&gt;Code like this isn&amp;#8217;t unique to Rust, of course.
+Similar patterns are prevalent in functional languages such as
+&lt;a href="https://msdn.microsoft.com/en-us/visualfsharpdocs/conceptual/operators.%5b-h%5d-%5d%5b't1%2c'u%5d-function-%5bfsharp%5d"&gt;F#&lt;/a&gt;,
+and can also be found in
+Java (&lt;a href="https://dzone.com/articles/understanding-java-8-streams-1"&gt;Streams&lt;/a&gt;),
+imperative .&lt;span class="caps"&gt;NET&lt;/span&gt; (&lt;a href="https://msdn.microsoft.com/en-us/library/bb308959.aspx#linqoverview_topic3"&gt;&lt;span class="caps"&gt;LINQ&lt;/span&gt;&lt;/a&gt;),
+JavaScript (&lt;a href="https://lodash.com/docs/4.17.4#chain"&gt;LoDash&lt;/a&gt;)
+and&amp;nbsp;elsewhere.&lt;/p&gt;
+&lt;p&gt;This saying, Rust also has its fair share of unique iteration idioms.
+In this post, we&amp;#8217;re going to explore those arising on the intersection of iterators
+and the most common Rust enums: &lt;code&gt;Result&lt;/code&gt; and &lt;code&gt;Option&lt;/code&gt;.&lt;/p&gt;
+&lt;h4&gt;filter_map()&lt;/h4&gt;
+&lt;p&gt;When working with iterators,
+we&amp;#8217;re almost always interested in selecting elements that match some criterion
+or passing them through a transformation function.
+It&amp;#8217;s not even uncommon to want &lt;em&gt;both&lt;/em&gt; of those things,
+as demonstrated by the initial example in this&amp;nbsp;post.&lt;/p&gt;
+&lt;p&gt;You can, of course, accomplish those two tasks independently:
+Rust&amp;#8217;s &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"&gt;&lt;code&gt;filter&lt;/code&gt;&lt;/a&gt;
+and &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"&gt;&lt;code&gt;map&lt;/code&gt;&lt;/a&gt; methods
+work just fine for this purpose.
+But there exists an alternative, and in some cases it fits the problem &lt;em&gt;amazingly&lt;/em&gt;&amp;nbsp;well.&lt;/p&gt;
+&lt;p&gt;Meet &lt;code&gt;filter_map&lt;/code&gt;.
+Here&amp;#8217;s what &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter_map"&gt;the official docs&lt;/a&gt;
+have to say about&amp;nbsp;it:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Creates an iterator that both filters and&amp;nbsp;maps.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Well, &lt;em&gt;duh&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;On a more serious note, the common pattern that &lt;code&gt;filter_map&lt;/code&gt; simplifies
+is unwrapping a series of &lt;code&gt;Option&lt;/code&gt;s.
+If you have a sequence of maybe-values,
+and you want to retain only those that are actually there,
+&lt;code&gt;filter_map&lt;/code&gt; can do it in a single&amp;nbsp;step:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Get the sequence of all files matching a glob pattern via the glob crate.&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;glob&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;glob&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;foo.*&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="c1"&gt;// Retain only their extensions, e.g. &amp;quot;.txt&amp;quot; or &amp;quot;.md&amp;quot;.&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file_extensions&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;extension&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The equivalent that doesn&amp;#8217;t use &lt;code&gt;filter_map&lt;/code&gt;
+would have to split the checking &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; unwrapping of &lt;code&gt;Option&lt;/code&gt;s into separate&amp;nbsp;steps:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file_extensions&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;extension&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_some&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Because of this check &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; unwrap logic,
+&lt;code&gt;filter_map&lt;/code&gt; can be useful even with a no-op predicate (&lt;code&gt;.filter_map(|x| x)&lt;/code&gt;)
+if we already have the &lt;code&gt;Option&lt;/code&gt; objects handy.
+Otherwise, it&amp;#8217;s often very easy to obtain them,
+which is exactly the case for the &lt;code&gt;Result&lt;/code&gt; type:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Read all text lines from a file:&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BufReader&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fs&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;File&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;file.ext&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;?&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;With a simple &lt;code&gt;.filter_map(Result::ok)&lt;/code&gt;, like above,
+we can pass through a sequence of &lt;code&gt;Result&lt;/code&gt;s and yield only the &amp;#8220;successful&amp;#8221; values.
+I find this particular idiom to be extremely useful in practice,
+as long as you remember that &lt;code&gt;Err&lt;/code&gt;ors will be discarded by it&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;As a final note on &lt;code&gt;filter_map&lt;/code&gt;,
+you need to keep in mind that regardless of how great it often is,
+not all combinations of &lt;code&gt;filter&lt;/code&gt; and &lt;code&gt;map&lt;/code&gt; should be replaced by it.
+When deciding whether it&amp;#8217;s appropriate in your case,
+it is helpful to consider the equivalence of these two&amp;nbsp;expressions:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;m&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;m&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Simply put, if you find yourself writing conditions like this inside &lt;code&gt;filter_map&lt;/code&gt;,
+you&amp;#8217;re probably better off with two separate processing&amp;nbsp;steps.&lt;/p&gt;
+&lt;h4&gt;collect()&lt;/h4&gt;
+&lt;p&gt;Let&amp;#8217;s go back to the last example with a sequence of &lt;code&gt;Result&lt;/code&gt;s.
+Since the final sequence won&amp;#8217;t include any &lt;code&gt;Err&lt;/code&gt;oneous values,
+you may be wondering if there is a way to preserve&amp;nbsp;them.&lt;/p&gt;
+&lt;p&gt;In more formal terms, the question is about turning a vector of results
+(&lt;code&gt;Vec&amp;lt;Result&amp;lt;T, E&amp;gt;&amp;gt;&lt;/code&gt;) into a result with a vector (&lt;code&gt;Result&amp;lt;Vec&amp;lt;T&amp;gt;, E&amp;gt;&lt;/code&gt;).
+We&amp;#8217;d like for this aggregated result to only be &lt;code&gt;Ok&lt;/code&gt;
+if &lt;em&gt;all&lt;/em&gt; original results were &lt;code&gt;Ok&lt;/code&gt;.
+Otherwise, we should just get the first &lt;code&gt;Err&lt;/code&gt;or.&lt;/p&gt;
+&lt;p&gt;Believe it or not, but this is probably &lt;em&gt;the&lt;/em&gt; most common Rust problem!&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;p&gt;Of course, that doesn&amp;#8217;t necessarily mean the problem is particularly hard.
+Possible solutions exist in both an iterator&amp;nbsp;version:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;fold&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[]),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_mut&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;});&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and in a loop&amp;nbsp;form:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[]);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_mut&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;break&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;but I suspect not many people would call them clear and readable,
+let alone pretty&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Fortunately, you don&amp;#8217;t need to pollute your codebase with any of those workarounds.
+Rust offers an out-of-the-box solution which solves this particular problem,
+and its only flaw is one that I hope to address through this very&amp;nbsp;post.&lt;/p&gt;
+&lt;p&gt;So, here it&amp;nbsp;goes:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nt"&gt;let&lt;/span&gt; &lt;span class="nt"&gt;result&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt; &lt;span class="nt"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nt"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nt"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nt"&gt;results&lt;/span&gt;&lt;span class="nc"&gt;.collect&lt;/span&gt;&lt;span class="o"&gt;();&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Yep, that&amp;#8217;s all of&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;The background story is that &lt;code&gt;Result&amp;lt;Vec&amp;lt;T&amp;gt;, E&amp;gt;&lt;/code&gt; simply &amp;#8220;knows&amp;#8221;
+how to construct itself from a sequence of &lt;code&gt;Result&lt;/code&gt;s.
+Unfortunately, this &lt;span class="caps"&gt;API&lt;/span&gt; is hidden behind Rust&amp;#8217;s iterator abstraction,
+and specifically the fact that
+&lt;code&gt;Result&lt;/code&gt; implements &lt;a href="https://doc.rust-lang.org/1.2.0/std/iter/trait.FromIterator.html"&gt;&lt;code&gt;FromIterator&lt;/code&gt;&lt;/a&gt;
+in this particular manner.
+The way
+&lt;a href="https://doc.rust-lang.org/std/result/enum.Result.html"&gt;the documentation page for &lt;code&gt;Result&lt;/code&gt;&lt;/a&gt;
+is structured, however &amp;#8212; with trait implementations at the very end &amp;#8212;
+ensures this useful fact remains virtually&amp;nbsp;undiscoverable.&lt;/p&gt;
+&lt;p&gt;Because let&amp;#8217;s be honest: no one scrolls that&amp;nbsp;far.&lt;/p&gt;
+&lt;p&gt;Incidentally, &lt;code&gt;Option&lt;/code&gt; offers analogous functionally:
+a sequence of &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt; can be &lt;code&gt;collect&lt;/code&gt;ed into &lt;code&gt;Option&amp;lt;Vec&amp;lt;T&amp;gt;&amp;gt;&lt;/code&gt;,
+which will be &lt;code&gt;None&lt;/code&gt; if any of the input elements were.
+As you may suspect, this fact is equally hard to find in the relevant&amp;nbsp;docs.&lt;/p&gt;
+&lt;p&gt;But the good news is: you know about all this now! :)
+And perhaps thanks to this post,
+those handy tricks become a little better in a wider Rust&amp;nbsp;community.&lt;/p&gt;
+&lt;h4&gt;partition()&lt;/h4&gt;
+&lt;p&gt;The last technique I wanted to present here follows naturally
+from the other idioms that apply to &lt;code&gt;Result&lt;/code&gt;s.
+Instead of extracting just the &lt;code&gt;Ok&lt;/code&gt; values with &lt;code&gt;flat_map&lt;/code&gt;,
+or keeping only the first error through &lt;code&gt;collect&lt;/code&gt;,
+we will now learn how to retain all the errors &lt;em&gt;and&lt;/em&gt; all the values,
+both neatly&amp;nbsp;separated.&lt;/p&gt;
+&lt;p&gt;The &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.partition"&gt;&lt;code&gt;partition&lt;/code&gt; method&lt;/a&gt;,
+as this is what the section is about,
+is essentially a more powerful variant of &lt;code&gt;filter&lt;/code&gt;.
+While the latter only returns items that &lt;em&gt;do&lt;/em&gt; match a predicate,
+&lt;code&gt;partition&lt;/code&gt; will also give us the ones which &lt;em&gt;don&amp;#8217;t&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Using it to slice an iterable of &lt;code&gt;Result&lt;/code&gt;s is&amp;nbsp;straightforward:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;oks&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fails&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;is_ok&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The only thing that remains cumbersome is
+the fact that both parts of the resulting tuple still contain just &lt;code&gt;Result&lt;/code&gt;s.
+Ideally, we would like them to be already unwrapped into values and errors,
+but unfortunately we need to do this&amp;nbsp;ourselves:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;values&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;oks&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;errors&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fails&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unwrap_err&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As an alternative,
+&lt;a href="https://docs.rs/itertools/0.6.0/itertools/trait.Itertools.html#method.partition_map"&gt;the &lt;code&gt;partition_map&lt;/code&gt; method&lt;/a&gt;
+from the &lt;a href="https://crates.io/crates/itertools"&gt;&lt;code&gt;itertools&lt;/code&gt; crate&lt;/a&gt;
+can accomplish the same thing in a single step,
+albeit a more verbose&amp;nbsp;one.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;A symmetrical technique is using &lt;code&gt;.filter_map(Result::err)&lt;/code&gt; to get just
+the &lt;code&gt;Err&lt;/code&gt;or objects, but that&amp;#8217;s probably much less useful
+as it drops all the successful values.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Based on my completely unsystematic and anecdotal observations,
+someone asks about this on the #rust-beginners &lt;span class="caps"&gt;IRC&lt;/span&gt; approximately &lt;em&gt;every other day&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;The &lt;code&gt;fold&lt;/code&gt; variant is also rife with type inference traps,
+often requiring explicit type annotations, a &amp;#8220;no-op&amp;#8221; &lt;code&gt;Err&lt;/code&gt; arm in &lt;code&gt;match&lt;/code&gt;,
+or both.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="iterators"></category></entry><entry><title>Arguments to Python generator functions</title><link href="http://xion.io/post/code/python-generator-args.html" rel="alternate"></link><updated>2017-04-02T22:10:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-03-14:post/code/python-generator-args.html</id><summary type="html">&lt;p&gt;In Python, a &lt;em&gt;generator function&lt;/em&gt; is one that
 contains a &lt;code&gt;yield&lt;/code&gt; statement inside the function body.
 Although this language construct has many fascinating use cases
 (&lt;a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"&gt;&lt;span class="caps"&gt;PDF&lt;/span&gt;&lt;/a&gt;),
@@ -1153,89 +1349,4 @@ Seems like in this case, we need to be a little more helpful and label it&amp;nb
 at least without any macro-based hacks.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="IIFE"></category><category term="error handling"></category><category term="exceptions"></category><category term="closures"></category><category term="lambdas"></category></entry><entry><title>Optional arguments in Rust 1.12</title><link href="http://xion.io/post/code/rust-optional-args.html" rel="alternate"></link><updated>2016-09-29T19:51:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-09-29:post/code/rust-optional-args.html</id><summary type="html">&lt;p&gt;Today&amp;#8217;s &lt;a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html"&gt;announcement of Rust 1.12&lt;/a&gt; contains,
-among other things, this innocous little&amp;nbsp;tidbit:&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;&lt;code&gt;Option&lt;/code&gt; implements &lt;code&gt;From&lt;/code&gt; for its contained&amp;nbsp;type&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;p&gt;If you&amp;#8217;re not very familiar with it,
-&lt;code&gt;From&lt;/code&gt; is a basic &lt;a href="https://doc.rust-lang.org/std/convert/trait.From.html"&gt;converstion trait&lt;/a&gt;
-which any Rust type can implement.
-By doing so, it defines how to create its values &lt;em&gt;from&lt;/em&gt; some other type &amp;#8212; hence its&amp;nbsp;name.&lt;/p&gt;
-&lt;p&gt;Perhaps the most widespread application of this trait (and its &lt;code&gt;from&lt;/code&gt; method)
-is allocating owned &lt;code&gt;String&lt;/code&gt; objects from literal &lt;code&gt;str&lt;/code&gt; values:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello, world!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;What the change above means is that we can do similar thing with the &lt;code&gt;Option&lt;/code&gt; type:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_int&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;At a first glance, this doesn&amp;#8217;t look like a big deal at all.
-For one, this syntax is much more wordy than the traditional &lt;code&gt;Some(42)&lt;/code&gt;,
-so it&amp;#8217;s not very clear what benefits it&amp;nbsp;offers.&lt;/p&gt;
-&lt;p&gt;But this first impression is rather deceptive.
-In many cases, this change can actually &lt;em&gt;reduce&lt;/em&gt; the number of times we have to type &lt;code&gt;Some(x)&lt;/code&gt;,
-allowing us to replace it with just &lt;code&gt;x&lt;/code&gt;.
-That&amp;#8217;s because this new &lt;code&gt;impl&lt;/code&gt; brings Rust quite a bit closer to having &lt;em&gt;optional function arguments&lt;/em&gt;
-as a first class feature in the&amp;nbsp;language.&lt;/p&gt;
-&lt;p&gt;Until now, a function defined like&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;was the closest Rust had to default argument values.
-While this works perfectly &amp;#8212; and is bolstered by compile-time checks! &amp;#8212;
-callers are unfortunately required to build the &lt;code&gt;Option&lt;/code&gt; objects&amp;nbsp;manually:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;// OK&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="c1"&gt;// OK&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="c1"&gt;// error!&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;After &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt; implements &lt;code&gt;From&amp;lt;T&amp;gt;&lt;/code&gt;, however, this can change for the better.
-&lt;em&gt;Much&lt;/em&gt; better, in fact, for the last line above can be made valid.
-All that is necessary is to take advantage of this new &lt;code&gt;impl&lt;/code&gt; in the function&amp;nbsp;definition:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;where&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;From&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Unfortunately, this results in quite a bit of complexity,
-up to and including the &lt;code&gt;where&lt;/code&gt; clause: a telltale sign of convoluted, generic code.
-Still, this trade-off may be well worth it,
-as a function defined once can be called many times throughout the code base,
-and possibly across multiple crates if it&amp;#8217;s a part of the public &lt;span class="caps"&gt;API&lt;/span&gt;.&lt;/p&gt;
-&lt;p&gt;But we can do better than this.
-Indeed, using the &lt;code&gt;From&lt;/code&gt; trait to constrain argument types is just complicating things for no good reason.
-What we should so instead is use the symmetrical trait, &lt;a href="https://doc.rust-lang.org/std/convert/trait.Into.html"&gt;&lt;code&gt;Into&lt;/code&gt;&lt;/a&gt;,
-and take advantage of its standard &lt;code&gt;impl&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Into&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;where&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;U&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;From&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Once we translate it to the &lt;code&gt;Option&lt;/code&gt; case (now that &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt; implements &lt;code&gt;From&amp;lt;T&amp;gt;&lt;/code&gt;),
-we can switch the trait bounds around and get rid of the &lt;code&gt;where&lt;/code&gt; clause&amp;nbsp;completely:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;maybe_plus_5&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Into&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;As a small bonus, the function body has also gotten a little&amp;nbsp;simpler.&lt;/p&gt;
-&lt;hr /&gt;
-&lt;p&gt;So, should you go wild and change all your functions taking &lt;code&gt;Option&lt;/code&gt;als to look like this?&amp;#8230;
-Well, technically you can, although the benefits may not outweigh the downsides
-for small, private functions that are called&amp;nbsp;infrequently.&lt;/p&gt;
-&lt;p&gt;On the other hand, if you can afford to only support Rust 1.12 and up,
-this technique can make it much more pleasant to use the external &lt;span class="caps"&gt;API&lt;/span&gt; of your&amp;nbsp;crates.&lt;/p&gt;
-&lt;p&gt;What&amp;#8217;s best is the &lt;em&gt;full backward compatibility&lt;/em&gt; with any callers that still pass &lt;code&gt;Some(x)&lt;/code&gt;:
-for them, the old syntax will continue to work exactly like before.
-Also note that the Rust compiler is smart about eliding the no-op conversion calls like the &lt;code&gt;Into::into&lt;/code&gt; above,
-so you shouldn&amp;#8217;t observe any changes in the performance department&amp;nbsp;either.&lt;/p&gt;
-&lt;p&gt;And who knows, maybe at some point Rust makes the final leap, and allows skipping the &lt;code&gt;None&lt;/code&gt;s?&amp;#8230;&lt;/p&gt;</summary><category term="Rust"></category><category term="arguments"></category><category term="parameters"></category><category term="functions"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="IIFE"></category><category term="error handling"></category><category term="exceptions"></category><category term="closures"></category><category term="lambdas"></category></entry></feed>
