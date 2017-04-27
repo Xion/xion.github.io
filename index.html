@@ -195,7 +195,7 @@ let alone pretty<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="foot
 Rust offers an out-of-the-box solution which solves this particular problem,
 and its only flaw is one that I hope to address through this very&nbsp;post.</p>
 <p>So, here it&nbsp;goes:</p>
-<div class="highlight"><pre><span class="nt">let</span> <span class="nt">result</span><span class="o">:</span> <span class="nt">Result</span><span class="o">&lt;</span><span class="nt">Vec</span><span class="o">&lt;</span><span class="nt">_</span><span class="o">&gt;&gt;</span> <span class="o">=</span> <span class="nt">results</span><span class="nc">.collect</span><span class="o">();</span>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
 </pre></div>
 
 

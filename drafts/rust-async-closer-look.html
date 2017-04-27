@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="…or: Is Rust webscale? In this day and age, no language can really make an impact anymore unless it enables its programmers to harness the power of the Internet. Rust is no different here. Despite posing as a true systems language (as opposed to those only marketed as such), it includes highly scalable servers as a prominent objective in its 2017 agenda. Presumably to satisfy this very objective, the Rust ecosystem has recently seen some major developments in the space of asynchronous I/O. Given the pace of those improvements, it may seem that production quality async services are quite possible already. But is that so? How exactly do you write async Rust servers in the early to mid 2017? To find out, I set to code up a toy application. Said program was a small intermediary/API server (a “microservice”, if you will) that tries to hit many of the typical requirements that arise in such projects. The main objective was to test the limits of asynchronous Rust, and see how easily (or difficult) they can be pushed. This post is a summary of all the lessons I’ve learned from that. It is necessarily quite long, so if you look for some TL;DR, scroll down straight to Conclusions. Asynchro-what? Before we dive in, I gotta clarify what “asynchronous” means in this context. Those familiar with async concepts can freely skip this section. Pulling some threads Asynchronous processing (or async for short) is brought up most often in the context of I/O operations: disk reads, network calls, database queries, and so on. Relatively speaking, all those tasks tend to be slow: they take orders of magnitude longer than just executing code or even accessing RAM. The “traditional” (synchronous) approach to dealing with them is to relegate those tasks to separate threads. When one thread has to wait for a lengthy I/O operation to complete, the operating system (its scheduler, to be precise) can suspend that thread. This lets others execute their code in the mean time and not waste CPU cycles. This is the essence of concurrency1. Schedule yourself But threads are not the only option when dealing with many things (i.e. requests) at once. The alternative approach is one where no threads are automatically suspended or resumed by the OS. Instead, a special version of I/O subroutines allows the program to continue execution immediately after issuing an I/O call. While the operation happens in the background2, the code is given an opaque handle — usually called a promise, a future, or an async result — that will eventually resolve to the actual return value. The program can wait for the handle synchronously, but it would typically hand it over to an event loop, an abstraction provided by a dedicated async framework. Such a framework (among which node.js is probably the best known example) maintains a list of all I/O “descriptors” (fds in Unix) that are associated with pending I/O operations. Then, in the loop, it simply waits on all of them, usually via the epoll system call. Whenever an I/O task completes, the loop would execute a callback associated with its result (or promise, or future). Through this callback, the application is able to process it. In a sense, this turns the event loop into a dedicated scheduler for its program. But why? So, what exactly the benefit of asynchronous I/O? If anything, it definitely sounds more complicated for the programmer. (Spoiler alert: it is). The impetus for the development of async techniques most likely came from the C10K problem. The short version of it is that computers are nowadays very fast and should therefore be able to serve thousands of requests simultaneously. (especially when those requests are mostly I/O, which translate to waiting time for the CPU). And if “serving” queries is indeed almost all waiting, then handling thousands of clients should be very possible. In some cases, however, it was found that when the OS is scheduling the threads, it introduces too much overhead on the frequent pause/resume state changes (context switching). Like I mentioned above, the asynchronous alternative does away with all that, and indeed lets the CPU just wait (on epoll) until something interesting happens. Once it does, the application can deal with it quickly, issue another I/O call, and let the server go back to waiting. With today’s processing power we can theoretically handle a lot of concurrent clients this way: up to hundreds of thousands or even millions. Reality check Well, ain’t that grand? No wonder everyone is writing everything in node.js now! Jokes aside, the actual benefits of asynchronous I/O (especially when weighed against its inconvenience for developers) are a bit harder to quantify. For one, they rely heavily on the assumption of fast code &amp; slow I/O being valid in all situations. But this isn’t really self-evident, and becomes increasingly dubious as time goes on and code complexity grows. It should be obvious, for example, that a Python web frontend talking mostly to in-memory caches in the same datacenter will have radically different performance characteristics than a C++ proxy server calling HTTP APIs over public Internet. Those nuances are often lost in translation between simplistic benchmarks and exaggerated blog posts3. Upon a closer look, however, these details point quite clearly in favor of asynchronous Rust. Being a language that compiles to native code, it should usually run faster than interpreted (Python, Ruby) or even JITed (JVM &amp; .NET) languages, very close to what is typically referred to as “bare metal” speed. For async I/O, it means the event loop won’t be disturbed for a (relatively) long time to do some trivial processing, leading to higher potential throughput of requests. All in all, it would seem that Rust is one of the few languages where async actually makes sense. Rust: the story so far Obviously, this means it’s been built into the language right from the start… right? Well, not really. It was always possible to use native epoll through FFI, of course, but that’s not exactly the level of abstraction we’d like to work with. Still, the upper layers of the async I/O stack have been steadily growing at least since Rust 1.0. The major milestones here include mio, a comparatively basic building block that provides asynchronous versions of some typical I/O channels, like the filesystem or TCP/IP. It also offers idiomatic wrappers over epoll, allowing us to write our own event loop. On the application side, the futures crate abstracts the notion of a potentially incomplete operation into, well, a future. Manipulating those futures is how one can now write asynchronous code in Rust. More recently, Tokio has been emerging as defacto framework for async I/O in Rust. It essentially combines the two previously mentioned crates, and provides additional abstractions specifically for network clients and servers. And finally, the popular HTTP framework Hyper is now also supporting asynchronous request handling via Tokio. What this means is that bread-and-butter of the Internet’s application layer — API servers talking JSON over HTTP — should now be fully supported by the ecosystem of asynchronous Rust. Let’s take it for a spin then, shall we? The Grand Project Earlier on, we have established that the main use case for asynchronous I/O is intermediate microservices. They often sit somewhere between a standard web frontend and a storage server or a database. Because of their typical role within a bigger system, these kinds of projects don’t tend to be particularly exciting on their own. But perhaps we can liven them up a little. In the end, it is all about the Internet that we’re talking here, and everything on the Internet can usually be improved by one simple addition. Image source …Okay, two possible additions — the other one being: If you’re really pedantic, you may call them image macros. But regardless of the name, the important part is putting text on pictures, preferably in a funny way. The microservice I wrote is doing just that. Thought it won’t ensure your memes are sufficiently hilarious, it will try to deliver them exactly to your specifications. You may thus think of it as possible backend for an image site like this one. Flimsy excuses &amp; post-hoc justifications It is, of course, a complete coincidence, lacking any premeditation on my part, that when it comes to evaluating an async platform, a service like this fits the bill very well. And especially when said platform is async Rust. Why, though, is it such a happy, er, accident? It’s a simple, well-defined application. There is basically a single endpoint, accepting simple input (JSON or query string) and producing a straightforward result (an image). No need to persist any state made creating an MVP significantly easier. Caching can be used for meme templates and fonts. Besides being an inherent part of most network services, a cache also represents a point of contention for Rust programs. The language is widely known for its alergy to global mutable state, which is exactly what programmatic caches boil down to. Image captioning is a CPU-intensive operation. While the “async” part of async I/O may sometimes go all the way down, many practical services either evolve some important CPU-bound code, or require it right from the start. For this reason, I wanted to check if &amp; how async Rust can mix with threaded concurrency. Configuration knobs can be added. Unlike trivial experiments in the vein of an echo or “Hello world” server, this kind of service warrants some flags that the user could tweak, like the number of image captioning threads, or the size of the template cache. We can see how easy (or how hard) it is to make them applicable across all future-based requests. All in all, and despite its frivolous subject matter, a meme server is actually hitting quite a few notable spots in the microservice domain. Learnings As you may glean from its GitHub repo, it would seem that the experiment was successful. Sure, you could implement some features in the captioning department (supporting animated GIFs comes to mind), but none of these are pertinent to the async mechanics of the server. And since it’s the async (I/O) in Rust that we’re interested in, let me now present you with an assorted collection of practical experiences with it. &gt;0-cost futures If you read the docs’ preamble to the futures crate, you will see it mentioning the “zero-cost” aspect of the library. Consistent with the philosophy behind Rust, it proclaims to deliver its abstractions without any overhead. Yet, I’m not so sure how this promise can be delivered in practice. Flip through the introductory tutorial to Tokio, for example, and you will already find plenty of compromises. Without the crucial (but nightly-only) impl Trait feature, you are basically required to put all your futures in a Box. They even encourage it themselves, offering a convenient Future::boxed method exactly for this purpose, as well the matching BoxFuture typedef right in the crate. But hey, you can always just use nightly Rust, right? impl Trait will stabilize eventually, so your code should be, ahem, future-proof either way. Unfortunately, this assumes all the futures that you’re building your request handlers from shall never cross any thread boundaries. (BoxFuture, for example, automatically constrains them to be Send). As you’ve likely guessed, this doesn’t jive very well with computationally intensive tasks which are best relegated to a thread pool-based executor, i.e. futures_cpupool. I suspect it’s not so bad if all you need to get from such a task is some primitive value, like an integer or a small structure. Lucky you. I had an entire image to squeeze through: a sizable Vec&lt;u8&gt; of its bytes. Suddenly, the fact that vectors are not Send started to percolate up the call chain, serving me with some juicy error messages. As it is, hindsight often provides better solutions than the one you go with at the time. Grudgingly, I started making all my futures Send in the most straightforward manner: by wrapping them in Arc/Mutex. That in itself wasn’t without its perils, but at least allowed me to move forward. Ironically, this also shows an important, pragmatic property of the futures’ system: sub-par hacks around it are possible — a fact you’ll be glad to know on the proverbial day before a deadline. Templates-worthy error messages Other significant properties of the futures’ abstraction shall include telling the programmer what’s wrong with his code in the simplest, most straightforward, and concise manner possible. Here, let me show you an example: …which you can also behold in its gist form . The reason you will encounter such incomprehensible messages stems from the very building blocks of async code. Right now, each chained operation on a future — map, and_then, or_else, and so on — produces a nested type. Every subsequent application of those methods “contains” (in terms of the type system) all the previous ones. Keep going, and it will eventually balloon into one big onion of Chain&lt;Map&lt;OrElse&lt;Chain&lt;Map&lt;...etc...&gt;&gt;&gt;&gt;&gt;. Futures are like ogres. I haven’t personally hit any compiler limits in this regard, but I’m sure it is plausible for a complicated, real-world program. It also gets worse if you use nightly Rust with impl Trait. In this case, function boundaries no longer “break” type stacking via Boxing the results into trait objects. Indeed, you can very well end up with some truly gigantic constructs as the compiler tries represent the return types of your most complex handlers. But even if rustc is up to snuff and can deal with those fractals just fine, it doesn’t necessarily mean the programmer can. Looking at those error messages, I had vivid flashbacks from hacking on C++ templates with ancient compilers like VS2005. The difference is, of course, that we’re not trying any arcane metaprogramming here; we just want to do some relatively mundane I/O. I have no doubt the messaging will eventually improve, and the mile-long types will at least get pretty-printed. At the moment, however, prepare for some serious squinting and bracket-counting. Where is my (language) support? Sadly, those long, cryptic error messages are not the only way in which the Rust compiler disappoints us. I keep mentioning impl Trait as a generally desirable language feature for writers of asynchronous code. This improvement is still a relatively long way from getting precisely defined, much less stabilized. And it is only a somewhat minor improvement in the async ergonomics. The wishlist is vastly longer and even more inchoate. Saying it bluntly, right now Rust doesn’t really support the async style at all. All the combined API surface of futures/Tokio/Hyper/etc. is a clever, but ultimately contrived design, and it has no intentional backing in the Rust language itself. This is a stark contrast with numerous other languages. They often support asynchronous I/O as something of a first class feature. The list includes at least C#, Python 3.5+, Hack/PHP, ES8 / JavaScript, and basically all the functional languages. They all have dedicated async, await, or equivalent constructs that make the callback-based nature of asynchronous code essentially transparent. The absence of similar support puts Rust in the same bucket as frontend JavaScript in the early 2010, where .then-chaining of promises reigned supreme. This is of course better than the callback hell of early Node but I wouldn’t think that’s a particularly high bar. In this regard, Rust leaves plenty to be desired. There are proposals, obviously, to bring async coroutines into Rust. There is an even broader wish to make the language cross the OOP/FP fence already and commit to the functional way; this would mean adding an equivalent of Haskell’s do notation. Either development could be sufficient. Both, however, require significant amount of design and implementation work. If solved now, this would easily be the most significant addition to the language since its 1.0 release — but the solution is currently in the RFC stages at best. Future&lt;Ecosystem&gt; While the core language support is lacking, the great as usual Rust community has been picking up some of the slack by establishing and cultivating a steadily growing ecosystem. The constellation of async-related crates clusters mostly around the two core libraries: futures crate itself and Tokio. Any functionality you may need while writing asynchronous should likely be found quite easily by searching for one of those two keywords (plus Rust, of course). Another way of finding what you need is to look at the list of Tokio-related crates directly. To be fair, I can’t really say much about the completeness of this ecosystem. The project didn’t really require too many external dependencies — the only relevant ones were: futures_cpupool mentioned before tokio-timer for imposing a timeout on caption requests tokio-signal which handles SIGINT/Ctrl+C and allows for a graceful shutdown Normally, you’d also want to research the async database drivers for your storage system of choice. I would not expect anything resembling the Diesel ORM crate, though, nor a web framework comparable to Iron, Pencil, or Rocket. Conclusions Alright, so what can we get from this overall analysis? Given the rapid development of async Rust ecosystem so far, it is clear the technology is very promising. If the community maintains its usual enthusiasm and keeps funneling it into Tokio et al., it won’t be long before it matures into something remarkable. Right now, however, it exposes way too many rough edges to fully bet on it. Still, there may be some applications where you could get away with an async Rust backend even in production. But personally, I wouldn’t recommend it outside of non-essential services, or tools internal to your organization. If you do use async Rust for microservices, I’d also advise to take steps to ensure they remain “micro”. Like I’ve elaborated in the earlier sections, there are several issues that make future-based Rust code scale poorly with respect to maintainability. Keeping it simple is therefore essential. To sum up, async Rust is currently an option only for the adventurous and/or small. Others should stick to a tried &amp; tested solution: something like Java (with Quasar), .NET, Go, or perhaps node.js at the very least. It is also the crux of parallelism, but that’s different and is not the focus here. ↩ “Background” here refer to the low level, innate concurrency of the OS kernel (mediated with hardware interrupts), not the epoll-based event loops on the application side. ↩ There is a great parallel to be drawn between a trivial echo/Hello world server, and 3D graphics engine that only redraws empty screen. Both may start at some very high performance numbers (requests/frames per second) but once you start adding practical stuff, they all must drop hyperbolically. ↩" />
+<meta name="keywords" content="Rust, async, Tokio, futures, HTTP">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Asynchronous Rust for fun &amp; profit"/>
+<meta property="og:description" content="…or: Is Rust webscale? In this day and age, no language can really make an impact anymore unless it enables its programmers to harness the power of the Internet. Rust is no different here. Despite posing as a true systems language (as opposed to those only marketed as such), it includes highly scalable servers as a prominent objective in its 2017 agenda. Presumably to satisfy this very objective, the Rust ecosystem has recently seen some major developments in the space of asynchronous I/O. Given the pace of those improvements, it may seem that production quality async services are quite possible already. But is that so? How exactly do you write async Rust servers in the early to mid 2017? To find out, I set to code up a toy application. Said program was a small intermediary/API server (a “microservice”, if you will) that tries to hit many of the typical requirements that arise in such projects. The main objective was to test the limits of asynchronous Rust, and see how easily (or difficult) they can be pushed. This post is a summary of all the lessons I’ve learned from that. It is necessarily quite long, so if you look for some TL;DR, scroll down straight to Conclusions. Asynchro-what? Before we dive in, I gotta clarify what “asynchronous” means in this context. Those familiar with async concepts can freely skip this section. Pulling some threads Asynchronous processing (or async for short) is brought up most often in the context of I/O operations: disk reads, network calls, database queries, and so on. Relatively speaking, all those tasks tend to be slow: they take orders of magnitude longer than just executing code or even accessing RAM. The “traditional” (synchronous) approach to dealing with them is to relegate those tasks to separate threads. When one thread has to wait for a lengthy I/O operation to complete, the operating system (its scheduler, to be precise) can suspend that thread. This lets others execute their code in the mean time and not waste CPU cycles. This is the essence of concurrency1. Schedule yourself But threads are not the only option when dealing with many things (i.e. requests) at once. The alternative approach is one where no threads are automatically suspended or resumed by the OS. Instead, a special version of I/O subroutines allows the program to continue execution immediately after issuing an I/O call. While the operation happens in the background2, the code is given an opaque handle — usually called a promise, a future, or an async result — that will eventually resolve to the actual return value. The program can wait for the handle synchronously, but it would typically hand it over to an event loop, an abstraction provided by a dedicated async framework. Such a framework (among which node.js is probably the best known example) maintains a list of all I/O “descriptors” (fds in Unix) that are associated with pending I/O operations. Then, in the loop, it simply waits on all of them, usually via the epoll system call. Whenever an I/O task completes, the loop would execute a callback associated with its result (or promise, or future). Through this callback, the application is able to process it. In a sense, this turns the event loop into a dedicated scheduler for its program. But why? So, what exactly the benefit of asynchronous I/O? If anything, it definitely sounds more complicated for the programmer. (Spoiler alert: it is). The impetus for the development of async techniques most likely came from the C10K problem. The short version of it is that computers are nowadays very fast and should therefore be able to serve thousands of requests simultaneously. (especially when those requests are mostly I/O, which translate to waiting time for the CPU). And if “serving” queries is indeed almost all waiting, then handling thousands of clients should be very possible. In some cases, however, it was found that when the OS is scheduling the threads, it introduces too much overhead on the frequent pause/resume state changes (context switching). Like I mentioned above, the asynchronous alternative does away with all that, and indeed lets the CPU just wait (on epoll) until something interesting happens. Once it does, the application can deal with it quickly, issue another I/O call, and let the server go back to waiting. With today’s processing power we can theoretically handle a lot of concurrent clients this way: up to hundreds of thousands or even millions. Reality check Well, ain’t that grand? No wonder everyone is writing everything in node.js now! Jokes aside, the actual benefits of asynchronous I/O (especially when weighed against its inconvenience for developers) are a bit harder to quantify. For one, they rely heavily on the assumption of fast code &amp; slow I/O being valid in all situations. But this isn’t really self-evident, and becomes increasingly dubious as time goes on and code complexity grows. It should be obvious, for example, that a Python web frontend talking mostly to in-memory caches in the same datacenter will have radically different performance characteristics than a C++ proxy server calling HTTP APIs over public Internet. Those nuances are often lost in translation between simplistic benchmarks and exaggerated blog posts3. Upon a closer look, however, these details point quite clearly in favor of asynchronous Rust. Being a language that compiles to native code, it should usually run faster than interpreted (Python, Ruby) or even JITed (JVM &amp; .NET) languages, very close to what is typically referred to as “bare metal” speed. For async I/O, it means the event loop won’t be disturbed for a (relatively) long time to do some trivial processing, leading to higher potential throughput of requests. All in all, it would seem that Rust is one of the few languages where async actually makes sense. Rust: the story so far Obviously, this means it’s been built into the language right from the start… right? Well, not really. It was always possible to use native epoll through FFI, of course, but that’s not exactly the level of abstraction we’d like to work with. Still, the upper layers of the async I/O stack have been steadily growing at least since Rust 1.0. The major milestones here include mio, a comparatively basic building block that provides asynchronous versions of some typical I/O channels, like the filesystem or TCP/IP. It also offers idiomatic wrappers over epoll, allowing us to write our own event loop. On the application side, the futures crate abstracts the notion of a potentially incomplete operation into, well, a future. Manipulating those futures is how one can now write asynchronous code in Rust. More recently, Tokio has been emerging as defacto framework for async I/O in Rust. It essentially combines the two previously mentioned crates, and provides additional abstractions specifically for network clients and servers. And finally, the popular HTTP framework Hyper is now also supporting asynchronous request handling via Tokio. What this means is that bread-and-butter of the Internet’s application layer — API servers talking JSON over HTTP — should now be fully supported by the ecosystem of asynchronous Rust. Let’s take it for a spin then, shall we? The Grand Project Earlier on, we have established that the main use case for asynchronous I/O is intermediate microservices. They often sit somewhere between a standard web frontend and a storage server or a database. Because of their typical role within a bigger system, these kinds of projects don’t tend to be particularly exciting on their own. But perhaps we can liven them up a little. In the end, it is all about the Internet that we’re talking here, and everything on the Internet can usually be improved by one simple addition. Image source …Okay, two possible additions — the other one being: If you’re really pedantic, you may call them image macros. But regardless of the name, the important part is putting text on pictures, preferably in a funny way. The microservice I wrote is doing just that. Thought it won’t ensure your memes are sufficiently hilarious, it will try to deliver them exactly to your specifications. You may thus think of it as possible backend for an image site like this one. Flimsy excuses &amp; post-hoc justifications It is, of course, a complete coincidence, lacking any premeditation on my part, that when it comes to evaluating an async platform, a service like this fits the bill very well. And especially when said platform is async Rust. Why, though, is it such a happy, er, accident? It’s a simple, well-defined application. There is basically a single endpoint, accepting simple input (JSON or query string) and producing a straightforward result (an image). No need to persist any state made creating an MVP significantly easier. Caching can be used for meme templates and fonts. Besides being an inherent part of most network services, a cache also represents a point of contention for Rust programs. The language is widely known for its alergy to global mutable state, which is exactly what programmatic caches boil down to. Image captioning is a CPU-intensive operation. While the “async” part of async I/O may sometimes go all the way down, many practical services either evolve some important CPU-bound code, or require it right from the start. For this reason, I wanted to check if &amp; how async Rust can mix with threaded concurrency. Configuration knobs can be added. Unlike trivial experiments in the vein of an echo or “Hello world” server, this kind of service warrants some flags that the user could tweak, like the number of image captioning threads, or the size of the template cache. We can see how easy (or how hard) it is to make them applicable across all future-based requests. All in all, and despite its frivolous subject matter, a meme server is actually hitting quite a few notable spots in the microservice domain. Learnings As you may glean from its GitHub repo, it would seem that the experiment was successful. Sure, you could implement some features in the captioning department (supporting animated GIFs comes to mind), but none of these are pertinent to the async mechanics of the server. And since it’s the async (I/O) in Rust that we’re interested in, let me now present you with an assorted collection of practical experiences with it. &gt;0-cost futures If you read the docs’ preamble to the futures crate, you will see it mentioning the “zero-cost” aspect of the library. Consistent with the philosophy behind Rust, it proclaims to deliver its abstractions without any overhead. Yet, I’m not so sure how this promise can be delivered in practice. Flip through the introductory tutorial to Tokio, for example, and you will already find plenty of compromises. Without the crucial (but nightly-only) impl Trait feature, you are basically required to put all your futures in a Box. They even encourage it themselves, offering a convenient Future::boxed method exactly for this purpose, as well the matching BoxFuture typedef right in the crate. But hey, you can always just use nightly Rust, right? impl Trait will stabilize eventually, so your code should be, ahem, future-proof either way. Unfortunately, this assumes all the futures that you’re building your request handlers from shall never cross any thread boundaries. (BoxFuture, for example, automatically constrains them to be Send). As you’ve likely guessed, this doesn’t jive very well with computationally intensive tasks which are best relegated to a thread pool-based executor, i.e. futures_cpupool. I suspect it’s not so bad if all you need to get from such a task is some primitive value, like an integer or a small structure. Lucky you. I had an entire image to squeeze through: a sizable Vec&lt;u8&gt; of its bytes. Suddenly, the fact that vectors are not Send started to percolate up the call chain, serving me with some juicy error messages. As it is, hindsight often provides better solutions than the one you go with at the time. Grudgingly, I started making all my futures Send in the most straightforward manner: by wrapping them in Arc/Mutex. That in itself wasn’t without its perils, but at least allowed me to move forward. Ironically, this also shows an important, pragmatic property of the futures’ system: sub-par hacks around it are possible — a fact you’ll be glad to know on the proverbial day before a deadline. Templates-worthy error messages Other significant properties of the futures’ abstraction shall include telling the programmer what’s wrong with his code in the simplest, most straightforward, and concise manner possible. Here, let me show you an example: …which you can also behold in its gist form . The reason you will encounter such incomprehensible messages stems from the very building blocks of async code. Right now, each chained operation on a future — map, and_then, or_else, and so on — produces a nested type. Every subsequent application of those methods “contains” (in terms of the type system) all the previous ones. Keep going, and it will eventually balloon into one big onion of Chain&lt;Map&lt;OrElse&lt;Chain&lt;Map&lt;...etc...&gt;&gt;&gt;&gt;&gt;. Futures are like ogres. I haven’t personally hit any compiler limits in this regard, but I’m sure it is plausible for a complicated, real-world program. It also gets worse if you use nightly Rust with impl Trait. In this case, function boundaries no longer “break” type stacking via Boxing the results into trait objects. Indeed, you can very well end up with some truly gigantic constructs as the compiler tries represent the return types of your most complex handlers. But even if rustc is up to snuff and can deal with those fractals just fine, it doesn’t necessarily mean the programmer can. Looking at those error messages, I had vivid flashbacks from hacking on C++ templates with ancient compilers like VS2005. The difference is, of course, that we’re not trying any arcane metaprogramming here; we just want to do some relatively mundane I/O. I have no doubt the messaging will eventually improve, and the mile-long types will at least get pretty-printed. At the moment, however, prepare for some serious squinting and bracket-counting. Where is my (language) support? Sadly, those long, cryptic error messages are not the only way in which the Rust compiler disappoints us. I keep mentioning impl Trait as a generally desirable language feature for writers of asynchronous code. This improvement is still a relatively long way from getting precisely defined, much less stabilized. And it is only a somewhat minor improvement in the async ergonomics. The wishlist is vastly longer and even more inchoate. Saying it bluntly, right now Rust doesn’t really support the async style at all. All the combined API surface of futures/Tokio/Hyper/etc. is a clever, but ultimately contrived design, and it has no intentional backing in the Rust language itself. This is a stark contrast with numerous other languages. They often support asynchronous I/O as something of a first class feature. The list includes at least C#, Python 3.5+, Hack/PHP, ES8 / JavaScript, and basically all the functional languages. They all have dedicated async, await, or equivalent constructs that make the callback-based nature of asynchronous code essentially transparent. The absence of similar support puts Rust in the same bucket as frontend JavaScript in the early 2010, where .then-chaining of promises reigned supreme. This is of course better than the callback hell of early Node but I wouldn’t think that’s a particularly high bar. In this regard, Rust leaves plenty to be desired. There are proposals, obviously, to bring async coroutines into Rust. There is an even broader wish to make the language cross the OOP/FP fence already and commit to the functional way; this would mean adding an equivalent of Haskell’s do notation. Either development could be sufficient. Both, however, require significant amount of design and implementation work. If solved now, this would easily be the most significant addition to the language since its 1.0 release — but the solution is currently in the RFC stages at best. Future&lt;Ecosystem&gt; While the core language support is lacking, the great as usual Rust community has been picking up some of the slack by establishing and cultivating a steadily growing ecosystem. The constellation of async-related crates clusters mostly around the two core libraries: futures crate itself and Tokio. Any functionality you may need while writing asynchronous should likely be found quite easily by searching for one of those two keywords (plus Rust, of course). Another way of finding what you need is to look at the list of Tokio-related crates directly. To be fair, I can’t really say much about the completeness of this ecosystem. The project didn’t really require too many external dependencies — the only relevant ones were: futures_cpupool mentioned before tokio-timer for imposing a timeout on caption requests tokio-signal which handles SIGINT/Ctrl+C and allows for a graceful shutdown Normally, you’d also want to research the async database drivers for your storage system of choice. I would not expect anything resembling the Diesel ORM crate, though, nor a web framework comparable to Iron, Pencil, or Rocket. Conclusions Alright, so what can we get from this overall analysis? Given the rapid development of async Rust ecosystem so far, it is clear the technology is very promising. If the community maintains its usual enthusiasm and keeps funneling it into Tokio et al., it won’t be long before it matures into something remarkable. Right now, however, it exposes way too many rough edges to fully bet on it. Still, there may be some applications where you could get away with an async Rust backend even in production. But personally, I wouldn’t recommend it outside of non-essential services, or tools internal to your organization. If you do use async Rust for microservices, I’d also advise to take steps to ensure they remain “micro”. Like I’ve elaborated in the earlier sections, there are several issues that make future-based Rust code scale poorly with respect to maintainability. Keeping it simple is therefore essential. To sum up, async Rust is currently an option only for the adventurous and/or small. Others should stick to a tried &amp; tested solution: something like Java (with Quasar), .NET, Go, or perhaps node.js at the very least. It is also the crux of parallelism, but that’s different and is not the focus here. ↩ “Background” here refer to the low level, innate concurrency of the OS kernel (mediated with hardware interrupts), not the epoll-based event loops on the application side. ↩ There is a great parallel to be drawn between a trivial echo/Hello world server, and 3D graphics engine that only redraws empty screen. Both may start at some very high performance numbers (requests/frames per second) but once you start adding practical stuff, they all must drop hyperbolically. ↩"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/drafts/rust-async-closer-look.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2017-04-27 03:33:00+00:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Rust"/>
+<meta property="article:tag" content="async"/>
+<meta property="article:tag" content="Tokio"/>
+<meta property="article:tag" content="futures"/>
+<meta property="article:tag" content="HTTP"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Asynchronous Rust for fun & profit</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="rust-async-closer-look">Asynchronous Rust for fun <span class="amp">&amp;</span>&nbsp;profit</h1>
+    <p>Posted on Thu 27 April 2017 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p><em>&#8230;or: Is Rust&nbsp;webscale?</em></p>
+<p>In this day and age, no language can really make an impact anymore
+unless it enables its programmers to harness the power of the Internet.
+<a href="https://www.rust-lang.org/en-US/">Rust</a> is no different here.
+Despite posing as a true systems language
+(as opposed to those <a href="http://golang.org/">only marketed as such</a>),
+it includes <a href="https://github.com/aturon/rfcs/blob/roadmap-2017/text/0000-roadmap-2017.md#rust-should-be-well-equipped-for-writing-robust-high-scale-servers">highly scalable servers</a>
+as a prominent objective in its 2017&nbsp;agenda.</p>
+<p>Presumably to satisfy this very objective,
+the Rust ecosystem has recently seen some major developments
+in the space of <em>asynchronous I/O</em>.
+Given the pace of those improvements,
+it may seem that production quality async services are quite possible&nbsp;already.</p>
+<p>But is that so?
+How exactly do you write async Rust servers in the early to mid&nbsp;2017?</p>
+<p>To find out, I set to code up a toy application.
+Said program was a small intermediary/<span class="caps">API</span> server (a &#8220;microservice&#8221;, if you will)
+that tries to hit many of the typical requirements that arise in such projects.
+The main objective was to test the limits of asynchronous Rust,
+and see how easily (or difficult) they can be&nbsp;pushed.</p>
+<p>This post is a summary of all the lessons I&#8217;ve learned from&nbsp;that.</p>
+<p>It is necessarily quite long,
+so if you look for some <span class="caps">TL</span>;<span class="caps">DR</span>, scroll down straight to <em>Conclusions</em>.</p>
+<p align="center"><img src="http://xion.io/images/jump-to-conclusions-mat.jpeg"></p>
+
+<h4>Asynchro-what?</h4>
+<p>Before we dive in, I gotta clarify what &#8220;asynchronous&#8221; means in this context.
+Those familiar with async concepts can freely skip this&nbsp;section.</p>
+<h5>Pulling some&nbsp;threads</h5>
+<p>Asynchronous processing (or <em>async</em> for short) is brought up most often
+in the context of I/O operations: disk reads, network calls, database queries,
+and so&nbsp;on.</p>
+<p>Relatively speaking, all those tasks tend to be <em>slow</em>:
+they take orders of magnitude longer than just executing code or even accessing <span class="caps">RAM</span>.
+The &#8220;traditional&#8221; (synchronous) approach to dealing with them
+is to relegate those tasks to separate <em>threads</em>.</p>
+<p>When one thread has to wait for a lengthy I/O operation to complete,
+the operating system (its <em>scheduler</em>, to be precise) can suspend that thread.
+This lets others execute their code in the mean time and not waste <span class="caps">CPU</span>&nbsp;cycles.</p>
+<p>This is the essence of <em>concurrency</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h5>Schedule&nbsp;yourself</h5>
+<p>But threads are not the only option when dealing with many things (i.e. requests) at&nbsp;once.</p>
+<p>The alternative approach is one where no threads are automatically suspended or resumed
+by the <span class="caps">OS</span>. Instead, a special version of I/O subroutines
+allows the program to continue execution immediately after issuing an I/O call.
+While the operation happens in the background<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>,
+the code is given an opaque handle &#8212; usually called a promise, a <em>future</em>,
+or an async result &#8212; that will eventually resolve to the actual return&nbsp;value.</p>
+<p>The program can wait for the handle synchronously,
+but it would typically hand it over to an <em>event loop</em>,
+an abstraction provided by a dedicated async framework.
+Such a framework (among which node.js is probably the best known example)
+maintains a list of all I/O &#8220;descriptors&#8221; (fds in Unix)
+that are associated with pending I/O&nbsp;operations.</p>
+<p>Then, in the loop, it simply waits on <em>all</em> of them,
+usually via the <a href="https://en.wikipedia.org/wiki/Epoll"><code>epoll</code> system call</a>.
+Whenever an I/O task completes, the loop would execute a <em>callback</em> associated
+with its result (or promise, or future).
+Through this callback, the application is able to process&nbsp;it.</p>
+<p>In a sense, this turns the event loop into a dedicated scheduler for its&nbsp;program.</p>
+<h5>But&nbsp;why?</h5>
+<p>So, what exactly the benefit of asynchronous I/O?
+If anything, it definitely sounds more complicated for the programmer. (Spoiler alert: it&nbsp;is).</p>
+<p>The impetus for the development of async techniques most likely came from
+the <a href="http://www.kegel.com/c10k.html"><span class="caps">C10K</span> problem</a>.
+The short version of it is that computers are nowadays very fast
+and should therefore be able to serve thousands of requests simultaneously.
+(especially when those requests are mostly I/O, which translate to waiting time for the <span class="caps">CPU</span>).</p>
+<p>And if &#8220;serving&#8221; queries is indeed almost all waiting,
+then handling thousands of clients should be very&nbsp;possible.</p>
+<p>In some cases, however, it was found that when the <span class="caps">OS</span> is scheduling the threads,
+it introduces too much overhead on the frequent pause/resume state changes (<em>context switching</em>).
+Like I mentioned above, the asynchronous alternative does away with all that,
+and indeed lets the <span class="caps">CPU</span> just wait (on <code>epoll</code>) until something interesting happens.
+Once it does, the application can deal with it quickly,
+issue another I/O call, and let the server go back to&nbsp;waiting.</p>
+<p>With today&#8217;s processing power we can theoretically handle
+<em>a lot</em> of concurrent clients this way: up to hundreds of thousands or even&nbsp;millions.</p>
+<h5>Reality&nbsp;check</h5>
+<p>Well, ain&#8217;t that grand? No wonder everyone is writing everything in node.js&nbsp;now!</p>
+<p>Jokes aside, the <em>actual</em> benefits of asynchronous I/O
+(especially when weighed against its inconvenience for developers)
+are a bit harder to quantify.
+For one, they rely heavily on the assumption of fast code <span class="amp">&amp;</span> slow I/O being valid in all&nbsp;situations.</p>
+<p>But this isn&#8217;t really self-evident, and becomes increasingly dubious as time goes on
+and code complexity grows.
+It should be obvious, for example, that a Python web frontend
+talking mostly to in-memory caches in the same datacenter will have radically different
+performance characteristics than a C++ proxy server calling <span class="caps">HTTP</span> APIs over public Internet.
+Those nuances are often lost in translation between simplistic benchmarks
+and exaggerated blog posts<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Upon a closer look, however, these details point quite clearly in favor of asynchronous Rust.
+Being a language that compiles to native code, it should usually run faster
+than interpreted (Python, Ruby) or even JITed (<span class="caps">JVM</span> <span class="amp">&amp;</span> .<span class="caps">NET</span>) languages,
+very close to what is typically referred to as &#8220;bare metal&#8221; speed.
+For async I/O, it means the event loop won&#8217;t be disturbed for a (relatively) long time
+to do some trivial processing, leading to higher potential throughput of&nbsp;requests.</p>
+<p>All in all, it would seem that Rust is one of the few languages
+where async actually <em>makes sense</em>.</p>
+<h4>Rust: the story so&nbsp;far</h4>
+<p>Obviously, this means it&#8217;s been built into the language right from the start&#8230;&nbsp;right?</p>
+<p>Well, not really.
+It was always possible to use native <code>epoll</code> through <a href="https://doc.rust-lang.org/book/ffi.html"><span class="caps">FFI</span></a>,
+of course, but that&#8217;s not exactly the level of abstraction we&#8217;d like to work with.
+Still, the upper layers of the async I/O stack have been steadily growing at least since Rust&nbsp;1.0.</p>
+<p>The major milestones here include <a href="https://docs.rs/mio"><em>mio</em></a>,
+a comparatively basic building block that provides asynchronous versions of some typical I/O channels,
+like the filesystem or <span class="caps">TCP</span>/<span class="caps">IP</span>.
+It also offers idiomatic wrappers over <code>epoll</code>, allowing us to write our own event&nbsp;loop.</p>
+<p>On the application side, <a href="https://docs.rs/futures">the <em>futures</em> crate</a> abstracts the notion
+of a potentially incomplete operation into, well, a <em>future</em>.
+Manipulating those futures is how one can now write asynchronous code in&nbsp;Rust.</p>
+<p>More recently, <a href="http://tokio.rs">Tokio</a> has been emerging as
+<a href="https://blog.mozilla.org/blog/2017/04/10/mozilla-awards-365000-to-open-source-projects-as-part-of-moss/"><em>defacto</em> framework</a>
+for async I/O in Rust. It essentially combines the two previously mentioned crates,
+and provides additional abstractions specifically for network clients and&nbsp;servers.</p>
+<p>And finally, the popular <span class="caps">HTTP</span> framework <a href="http://hyper.rs">Hyper</a> is now also supporting
+asynchronous request handling via Tokio.
+What this means is that bread-and-butter of the Internet&#8217;s application layer &#8212;
+<span class="caps">API</span> servers talking <span class="caps">JSON</span> over <span class="caps">HTTP</span> &#8212; should now be fully supported by the ecosystem
+of asynchronous&nbsp;Rust.</p>
+<p>Let&#8217;s take it for a spin then, shall&nbsp;we?</p>
+<h4>The Grand&nbsp;Project</h4>
+<p>Earlier on, we have established that the main use case for asynchronous I/O
+is intermediate microservices.
+They often sit somewhere between a standard web frontend and a storage server or a database.
+Because of their typical role within a bigger system,
+these kinds of projects don&#8217;t tend to be particularly exciting on their&nbsp;own.</p>
+<p>But perhaps we can liven them up a&nbsp;little.</p>
+<p>In the end, it is all about the Internet that we&#8217;re talking here,
+and everything on the Internet can usually be improved by one simple&nbsp;addition.</p>
+<p align="center">
+    <img src="http://xion.io/images/smoothie.jpeg">
+    <br/>
+    <small style="text-side: xx-small">
+        <a href="http://www.boredpanda.com/beautiful-fluffy-cat-british-longhair/">
+            Image source
+        </a>
+    </small>
+</p>
+
+<p>&#8230;Okay, <em>two</em> possible additions &#8212; the other one&nbsp;being:</p>
+<p align="center"><img src="http://xion.io/images/oprah-memes.png" alt="Memes!"></p>
+
+<p>If you&#8217;re really pedantic, you may call them <em>image macros</em>.
+But regardless of the name, the important part is putting text on pictures,
+preferably in a funny&nbsp;way.</p>
+<p><a href="https://github.com/Xion/rofld">The microservice I wrote</a> is doing just that.
+Thought it won&#8217;t ensure your memes are sufficiently hilarious,
+it will try to deliver them exactly to
+<a href="https://github.com/Xion/rofld/blob/e25e9d01bdd7e85452e6a5922770dae941d5b61c/src/caption/mod.rs#L32">your specifications</a>.
+You may thus think of it as possible backend for
+<a href="http://www.quickmeme.com/caption">an image site like this one</a>.</p>
+<h5>Flimsy excuses <span class="amp">&amp;</span> post-hoc&nbsp;justifications</h5>
+<p>It is, of course, a <em>complete</em> coincidence,
+lacking <em>any</em> premeditation on my part,
+that when it comes to evaluating an async platform,
+a service like this fits the bill <em>very well</em>.</p>
+<p>And especially when said platform is async <em>Rust</em>.</p>
+<p>Why, though, is it such a happy, er,&nbsp;accident?</p>
+<ul>
+<li>
+<p><strong>It&#8217;s a simple, well-defined application</strong>.
+  There is basically a <a href="https://github.com/Xion/rofld/blob/e25e9d01bdd7e85452e6a5922770dae941d5b61c/src/service.rs#L33">single endpoint</a>,
+  accepting simple input (<span class="caps">JSON</span> or query string) and producing a straightforward result (an image).
+  No need to persist any state made creating
+  <a href="https://github.com/Xion/rofld/blob/8026eab34ea54c4ba1b814c1114b3f5d87020233/src/main.rs">an <span class="caps">MVP</span></a>
+  significantly&nbsp;easier.</p>
+</li>
+<li>
+<p><strong>Caching can be used for meme templates and fonts.</strong>
+  Besides being an inherent part of most network services,
+  a cache also represents a point of contention for Rust programs.
+  The language is widely known for its alergy to global mutable state,
+  which is exactly what programmatic caches boil down&nbsp;to.</p>
+</li>
+<li>
+<p><strong>Image captioning is a <span class="caps">CPU</span>-intensive operation.</strong>
+  While the &#8220;async&#8221; part of async I/O may sometimes go all the way down,
+  many practical services either evolve some important <span class="caps">CPU</span>-bound code,
+  or require it right from the start.
+  For this reason, I wanted to check if <span class="amp">&amp;</span> how async Rust can mix
+  with threaded&nbsp;concurrency.</p>
+</li>
+<li>
+<p><strong>Configuration knobs can be added.</strong>
+  Unlike trivial experiments in the vein of an echo or &#8220;Hello world&#8221; server,
+  this kind of service warrants some flags that the user could tweak,
+  like the number of image captioning threads, or the size of the template cache.
+  We can see how easy (or how hard) it is to make them applicable across
+  all future-based&nbsp;requests.</p>
+</li>
+</ul>
+<p>All in all, and despite its frivolous subject matter,
+a meme server is actually hitting quite a few notable spots in the microservice&nbsp;domain.</p>
+<p align="center">
+    <img src="http://xion.io/images/meme-shocked.png" alt="">
+</p>
+
+<h4>Learnings</h4>
+<p>As you may glean from its <a href="https://github.com/Xion/rofld">GitHub repo</a>,
+it would seem that the experiment was successful.
+Sure, you could implement some features in the captioning department
+(supporting animated GIFs comes to mind),
+but none of these are pertinent to the async mechanics of the&nbsp;server.</p>
+<p>And since it&#8217;s the async (I/O) in Rust that we&#8217;re interested in,
+let me now present you with an assorted collection of practical experiences with&nbsp;it.</p>
+<h5>&gt;0-cost&nbsp;futures</h5>
+<p>If you read the docs&#8217; preamble to <a href="https://docs.rs/futures">the <code>futures</code> crate</a>,
+you will see it mentioning the &#8220;zero-cost&#8221; aspect of the library.
+Consistent with the philosophy behind Rust,
+it proclaims to deliver its abstractions without any&nbsp;overhead.</p>
+<p>Yet, I&#8217;m not so sure how this promise can be delivered in&nbsp;practice.</p>
+<p>Flip through <a href="https://tokio.rs/docs/getting-started/simple-server/">the introductory tutorial to Tokio</a>,
+for example, and you will already find plenty of compromises.
+Without the crucial (but nightly-only)
+<a href="https://github.com/rust-lang/rfcs/blob/master/text/1522-conservative-impl-trait.md"><code>impl Trait</code> feature</a>,
+you are basically required to put all your futures in a <code>Box</code>.
+They even encourage it themselves, offering a convenient
+<a href="https://docs.rs/futures/0.1.13/futures/future/trait.Future.html#method.boxed"><code>Future::boxed</code> method</a>
+exactly for this purpose, as well the matching
+<a href="https://docs.rs/futures/0.1.13/futures/future/type.BoxFuture.html"><code>BoxFuture</code> typedef</a>
+right in the&nbsp;crate.</p>
+<p>But hey, you can always just use nightly Rust, right?
+<code>impl Trait</code> will stabilize eventually, so your code should be, ahem, <em>future-proof</em> either&nbsp;way.</p>
+<p>Unfortunately, this assumes all the futures that you&#8217;re building your request handlers from
+shall never cross any thread boundaries.
+(<code>BoxFuture</code>, for example, automatically constrains them to be <code>Send</code>).
+As you&#8217;ve likely guessed, this doesn&#8217;t jive very well with computationally intensive tasks
+which are best relegated to a thread pool-based executor, i.e. <a href="https://docs.rs/futures-cpupool"><code>futures_cpupool</code></a>.
+I suspect it&#8217;s not so bad if all you need to get from such a task is some primitive value,
+like an integer or a small&nbsp;structure.</p>
+<p>Lucky&nbsp;you.</p>
+<p>I had an entire <em>image</em> to squeeze through: a sizable <code>Vec&lt;u8&gt;</code> of its bytes.
+Suddenly, the fact that vectors are not <code>Send</code> started to percolate up the call chain,
+serving me with some juicy error&nbsp;messages.</p>
+<p>As it is, hindsight often provides better solutions than the one you go with at the time.
+Grudgingly, I started <em>making</em> all my futures <code>Send</code> in the most straightforward manner:
+by <a href="https://github.com/Xion/rofld/blob/7e7d3b160594689d2e4c80b7328f90f34546b955/src/ext.rs#L39">wrapping them in <code>Arc</code>/<code>Mutex</code></a>.
+That in itself wasn&#8217;t
+<a href="https://github.com/Xion/rofld/commit/15bcd60f76a97badb9b90721179daa0845b139dd#diff-126a37e2b594610dd09c3f228d9d1717L52">without its perils</a>,
+but at least allowed me to move&nbsp;forward.</p>
+<p>Ironically, this also shows an important, pragmatic property of the futures&#8217; system:
+sub-par hacks around it <em>are</em> possible &#8212;
+a fact you&#8217;ll be glad to know on the proverbial day before a&nbsp;deadline.</p>
+<h5>Templates-worthy error&nbsp;messages</h5>
+<p>Other significant properties of the futures&#8217; abstraction shall include
+telling the programmer what&#8217;s wrong with his code in the simplest,
+most straightforward, and concise manner&nbsp;possible.</p>
+<p>Here, let me show you an&nbsp;example:</p>
+<p align="center">
+    <img src="http://xion.io/images/rust-futures-error.png"><br>
+    <small>
+        &#8230;which you can also behold in its
+        <a href="https://gist.github.com/Xion/df1fb7fffa1afb4bfbf2838b9c3fc4c1">
+            gist form
+        </a>.
+    </small>
+</p>
+
+<p>The reason you will encounter such incomprehensible messages
+stems from the very building blocks of async&nbsp;code.</p>
+<p>Right now, each chained operation on a future &#8212; <code>map</code>, <code>and_then</code>, <code>or_else</code>, and so on &#8212;
+produces a <em>nested type</em>.
+Every subsequent application of those methods
+&#8220;contains&#8221; (in terms of the type system) <em>all the previous ones</em>.
+Keep going, and it will eventually balloon into one big onion of <code>Chain&lt;Map&lt;OrElse&lt;Chain&lt;Map&lt;...etc...&gt;&gt;&gt;&gt;&gt;</code>.</p>
+<p align="center">
+    <img src="http://xion.io/images/meme-yo-dawg.jpeg"><br>
+    <small>Futures are like ogres.</small>
+</p>
+
+<p>I haven&#8217;t personally hit any compiler limits in this regard,
+but I&#8217;m sure it is plausible for a complicated, real-world&nbsp;program.</p>
+<p>It also gets <em>worse</em> if you use nightly Rust with <code>impl Trait</code>.
+In this case, function boundaries no longer &#8220;break&#8221; type stacking
+via <code>Box</code>ing the results into trait objects.
+Indeed, you can very well end up with some truly gigantic constructs
+as the compiler tries represent the return types of your most complex&nbsp;handlers.</p>
+<p>But even if rustc is up to snuff and can deal with those fractals just fine,
+it doesn&#8217;t necessarily mean the <em>programmer</em> can.
+Looking at those error messages,
+I had vivid flashbacks from hacking on C++ templates with ancient compilers like <span class="caps">VS2005</span>.
+The difference is, of course, that we&#8217;re not trying any arcane metaprogramming here;
+we just want to do some relatively mundane&nbsp;I/O.</p>
+<p>I have no doubt the messaging will eventually improve,
+and the mile-long types will at least get pretty-printed.
+At the moment, however, prepare for some serious squinting and&nbsp;bracket-counting.</p>
+<h5>Where is my (language)&nbsp;support?</h5>
+<p>Sadly, those long, cryptic error messages are not the only way
+in which the Rust compiler disappoints&nbsp;us.</p>
+<p>I keep mentioning <code>impl Trait</code> as a generally desirable language feature
+for writers of asynchronous code.
+This improvement is still a relatively long way from getting precisely
+<a href="https://github.com/aturon/rfcs/blob/expand-impl-trait/text/0000-expand-impl-trait.md"><em>defined</em></a>,
+much less stabilized.
+And it is only a somewhat minor improvement in the async&nbsp;ergonomics.</p>
+<p>The wishlist is vastly longer and even more&nbsp;inchoate.</p>
+<p>Saying it bluntly, right now Rust doesn&#8217;t really support the async style <em>at all</em>.
+All the combined <span class="caps">API</span> surface of futures/Tokio/Hyper/etc. is a clever,
+but ultimately contrived design,
+and it has no intentional backing in the Rust language&nbsp;itself.</p>
+<p>This is a stark contrast with numerous other languages.
+They often support asynchronous I/O as something of a first class feature.
+The list includes at least
+<a href="https://msdn.microsoft.com/en-us/library/mt674882.aspx">C#</a>,
+<a href="https://docs.python.org/3/library/asyncio-task.html">Python 3.5+</a>,
+<a href="https://docs.hhvm.com/hack/async/awaitables">Hack/<span class="caps">PHP</span></a>,
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function"><span class="caps">ES8</span> / JavaScript</a>,
+and basically all the functional languages.
+They all have dedicated <code>async</code>, <code>await</code>, or equivalent constructs
+that make the callback-based nature of asynchronous code essentially&nbsp;transparent.</p>
+<p>The absence of similar support puts Rust in the same bucket as frontend JavaScript in the early 2010,
+where <code>.then</code>-chaining of promises reigned supreme.
+This is of course better than the callback hell of early Node
+but I wouldn&#8217;t think that&#8217;s a particularly high bar.
+In this regard, Rust leaves plenty to be&nbsp;desired.</p>
+<p>There are <a href="https://github.com/vadimcn/rfcs/blob/coroutines2/text/0000-coroutines.md">proposals</a>,
+obviously, to bring async coroutines into Rust.
+There is an even broader wish to make the language cross the <span class="caps">OOP</span>/<span class="caps">FP</span> fence already
+and commit to the functional way; this would mean adding an equivalent of Haskell&#8217;s <code>do</code> notation.</p>
+<p>Either development could be sufficient.
+Both, however, require significant amount of design and implementation work.
+If solved now, this would easily be the most significant addition to the language
+since its 1.0 release &#8212; but the solution is currently in the <span class="caps">RFC</span> stages <em>at best</em>.</p>
+<h5>Future&lt;Ecosystem&gt;</h5>
+<p>While the core language support is lacking,
+the great as usual Rust community has been picking up some of the slack
+by establishing and cultivating a steadily growing&nbsp;ecosystem.</p>
+<p>The constellation of async-related crates clusters mostly around the two core libraries:
+<code>futures</code> crate itself and Tokio.
+Any functionality you may need while writing asynchronous should likely be found
+quite easily by searching for one of those two keywords (plus Rust, of course).
+Another way of finding what you need is to look at
+<a href="https://tokio.rs/docs/going-deeper-tokio/third-party/">the list of Tokio-related crates</a>&nbsp;directly.</p>
+<p>To be fair, I can&#8217;t really say much about the completeness of this ecosystem.
+The project didn&#8217;t really require too many external dependencies &#8212;
+the only relevant ones&nbsp;were:</p>
+<ul>
+<li><code>futures_cpupool</code> mentioned&nbsp;before</li>
+<li><code>tokio-timer</code> for imposing a timeout on caption&nbsp;requests</li>
+<li><code>tokio-signal</code> which handles <span class="caps">SIGINT</span>/Ctrl+C  and allows for a graceful&nbsp;shutdown</li>
+</ul>
+<p>Normally, you&#8217;d also want to research the async database drivers
+for your storage system of choice.
+I would not expect anything resembling the <a href="http://diesel.rs">Diesel</a> <span class="caps">ORM</span> crate, though,
+nor a web framework comparable to <a href="http://ironframework.io/">Iron</a>,
+<a href="https://fengsp.github.io/pencil/pencil/">Pencil</a>,
+or <a href="https://rocket.rs/">Rocket</a>.</p>
+<h4>Conclusions</h4>
+<p>Alright, so what can we get from this overall&nbsp;analysis?</p>
+<p>Given the rapid development of async Rust ecosystem so far,
+it is clear the technology is very promising.
+If the community maintains its usual enthusiasm and keeps funneling it into Tokio et al.,
+it won&#8217;t be long before it matures into something&nbsp;remarkable.</p>
+<p>Right now, however, it exposes way too many rough edges to fully bet on it.
+Still, there may be some applications
+where you could get away with an async Rust backend even in production.
+But personally, I wouldn&#8217;t recommend it outside of non-essential services,
+or tools internal to your&nbsp;organization.</p>
+<p>If you do use async Rust for microservices,
+I&#8217;d also advise to take steps to ensure they remain &#8220;micro&#8221;.
+Like I&#8217;ve elaborated in the earlier sections,
+there are several issues that make future-based Rust code scale poorly
+with respect to maintainability.
+Keeping it simple is therefore&nbsp;essential.</p>
+<p>To sum up, async Rust is currently an option only for the adventurous and/or small.
+Others should stick to a tried <span class="amp">&amp;</span> tested solution:
+something like Java (with <a href="http://docs.paralleluniverse.co/quasar/">Quasar</a>),
+.<span class="caps">NET</span>, Go, or perhaps node.js at the very&nbsp;least.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It is also the crux of parallelism,
+but <a href="https://www.youtube.com/watch?v=cN_DpYBzKso">that&#8217;s different</a> and is not the focus here.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p><span class="dquo">&#8220;</span>Background&#8221; here refer to the low level, innate concurrency of the <span class="caps">OS</span> kernel
+(mediated with hardware interrupts), not the <code>epoll</code>-based event loops on the application side.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>There is a great parallel to be drawn between a trivial echo/Hello world server,
+and 3D graphics engine that only redraws empty screen.
+Both may start at some very high performance numbers (requests/frames per second)
+but once you start adding practical stuff, they all must drop <em>hyperbolically</em>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/rust.html">Rust</a>
+      <a href="http://xion.io/tag/async.html">async</a>
+      <a href="http://xion.io/tag/tokio.html">Tokio</a>
+      <a href="http://xion.io/tag/futures.html">futures</a>
+      <a href="http://xion.io/tag/http.html">HTTP</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Asynchronous Rust for fun & profit",
+  "headline": "Asynchronous Rust for fun & profit",
+  "datePublished": "2017-04-27 03:33:00+00:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/drafts/rust-async-closer-look.html",
+  "description": "…or: Is Rust webscale? In this day and age, no language can really make an impact anymore unless it enables its programmers to harness the power of the Internet. Rust is no different here. Despite posing as a true systems language (as opposed to those only marketed as such), it includes highly scalable servers as a prominent objective in its 2017 agenda. Presumably to satisfy this very objective, the Rust ecosystem has recently seen some major developments in the space of asynchronous I/O. Given the pace of those improvements, it may seem that production quality async services are quite possible already. But is that so? How exactly do you write async Rust servers in the early to mid 2017? To find out, I set to code up a toy application. Said program was a small intermediary/API server (a “microservice”, if you will) that tries to hit many of the typical requirements that arise in such projects. The main objective was to test the limits of asynchronous Rust, and see how easily (or difficult) they can be pushed. This post is a summary of all the lessons I’ve learned from that. It is necessarily quite long, so if you look for some TL;DR, scroll down straight to Conclusions. Asynchro-what? Before we dive in, I gotta clarify what “asynchronous” means in this context. Those familiar with async concepts can freely skip this section. Pulling some threads Asynchronous processing (or async for short) is brought up most often in the context of I/O operations: disk reads, network calls, database queries, and so on. Relatively speaking, all those tasks tend to be slow: they take orders of magnitude longer than just executing code or even accessing RAM. The “traditional” (synchronous) approach to dealing with them is to relegate those tasks to separate threads. When one thread has to wait for a lengthy I/O operation to complete, the operating system (its scheduler, to be precise) can suspend that thread. This lets others execute their code in the mean time and not waste CPU cycles. This is the essence of concurrency1. Schedule yourself But threads are not the only option when dealing with many things (i.e. requests) at once. The alternative approach is one where no threads are automatically suspended or resumed by the OS. Instead, a special version of I/O subroutines allows the program to continue execution immediately after issuing an I/O call. While the operation happens in the background2, the code is given an opaque handle — usually called a promise, a future, or an async result — that will eventually resolve to the actual return value. The program can wait for the handle synchronously, but it would typically hand it over to an event loop, an abstraction provided by a dedicated async framework. Such a framework (among which node.js is probably the best known example) maintains a list of all I/O “descriptors” (fds in Unix) that are associated with pending I/O operations. Then, in the loop, it simply waits on all of them, usually via the epoll system call. Whenever an I/O task completes, the loop would execute a callback associated with its result (or promise, or future). Through this callback, the application is able to process it. In a sense, this turns the event loop into a dedicated scheduler for its program. But why? So, what exactly the benefit of asynchronous I/O? If anything, it definitely sounds more complicated for the programmer. (Spoiler alert: it is). The impetus for the development of async techniques most likely came from the C10K problem. The short version of it is that computers are nowadays very fast and should therefore be able to serve thousands of requests simultaneously. (especially when those requests are mostly I/O, which translate to waiting time for the CPU). And if “serving” queries is indeed almost all waiting, then handling thousands of clients should be very possible. In some cases, however, it was found that when the OS is scheduling the threads, it introduces too much overhead on the frequent pause/resume state changes (context switching). Like I mentioned above, the asynchronous alternative does away with all that, and indeed lets the CPU just wait (on epoll) until something interesting happens. Once it does, the application can deal with it quickly, issue another I/O call, and let the server go back to waiting. With today’s processing power we can theoretically handle a lot of concurrent clients this way: up to hundreds of thousands or even millions. Reality check Well, ain’t that grand? No wonder everyone is writing everything in node.js now! Jokes aside, the actual benefits of asynchronous I/O (especially when weighed against its inconvenience for developers) are a bit harder to quantify. For one, they rely heavily on the assumption of fast code & slow I/O being valid in all situations. But this isn’t really self-evident, and becomes increasingly dubious as time goes on and code complexity grows. It should be obvious, for example, that a Python web frontend talking mostly to in-memory caches in the same datacenter will have radically different performance characteristics than a C++ proxy server calling HTTP APIs over public Internet. Those nuances are often lost in translation between simplistic benchmarks and exaggerated blog posts3. Upon a closer look, however, these details point quite clearly in favor of asynchronous Rust. Being a language that compiles to native code, it should usually run faster than interpreted (Python, Ruby) or even JITed (JVM & .NET) languages, very close to what is typically referred to as “bare metal” speed. For async I/O, it means the event loop won’t be disturbed for a (relatively) long time to do some trivial processing, leading to higher potential throughput of requests. All in all, it would seem that Rust is one of the few languages where async actually makes sense. Rust: the story so far Obviously, this means it’s been built into the language right from the start… right? Well, not really. It was always possible to use native epoll through FFI, of course, but that’s not exactly the level of abstraction we’d like to work with. Still, the upper layers of the async I/O stack have been steadily growing at least since Rust 1.0. The major milestones here include mio, a comparatively basic building block that provides asynchronous versions of some typical I/O channels, like the filesystem or TCP/IP. It also offers idiomatic wrappers over epoll, allowing us to write our own event loop. On the application side, the futures crate abstracts the notion of a potentially incomplete operation into, well, a future. Manipulating those futures is how one can now write asynchronous code in Rust. More recently, Tokio has been emerging as defacto framework for async I/O in Rust. It essentially combines the two previously mentioned crates, and provides additional abstractions specifically for network clients and servers. And finally, the popular HTTP framework Hyper is now also supporting asynchronous request handling via Tokio. What this means is that bread-and-butter of the Internet’s application layer — API servers talking JSON over HTTP — should now be fully supported by the ecosystem of asynchronous Rust. Let’s take it for a spin then, shall we? The Grand Project Earlier on, we have established that the main use case for asynchronous I/O is intermediate microservices. They often sit somewhere between a standard web frontend and a storage server or a database. Because of their typical role within a bigger system, these kinds of projects don’t tend to be particularly exciting on their own. But perhaps we can liven them up a little. In the end, it is all about the Internet that we’re talking here, and everything on the Internet can usually be improved by one simple addition. Image source …Okay, two possible additions — the other one being: If you’re really pedantic, you may call them image macros. But regardless of the name, the important part is putting text on pictures, preferably in a funny way. The microservice I wrote is doing just that. Thought it won’t ensure your memes are sufficiently hilarious, it will try to deliver them exactly to your specifications. You may thus think of it as possible backend for an image site like this one. Flimsy excuses & post-hoc justifications It is, of course, a complete coincidence, lacking any premeditation on my part, that when it comes to evaluating an async platform, a service like this fits the bill very well. And especially when said platform is async Rust. Why, though, is it such a happy, er, accident? It’s a simple, well-defined application. There is basically a single endpoint, accepting simple input (JSON or query string) and producing a straightforward result (an image). No need to persist any state made creating an MVP significantly easier. Caching can be used for meme templates and fonts. Besides being an inherent part of most network services, a cache also represents a point of contention for Rust programs. The language is widely known for its alergy to global mutable state, which is exactly what programmatic caches boil down to. Image captioning is a CPU-intensive operation. While the “async” part of async I/O may sometimes go all the way down, many practical services either evolve some important CPU-bound code, or require it right from the start. For this reason, I wanted to check if & how async Rust can mix with threaded concurrency. Configuration knobs can be added. Unlike trivial experiments in the vein of an echo or “Hello world” server, this kind of service warrants some flags that the user could tweak, like the number of image captioning threads, or the size of the template cache. We can see how easy (or how hard) it is to make them applicable across all future-based requests. All in all, and despite its frivolous subject matter, a meme server is actually hitting quite a few notable spots in the microservice domain. Learnings As you may glean from its GitHub repo, it would seem that the experiment was successful. Sure, you could implement some features in the captioning department (supporting animated GIFs comes to mind), but none of these are pertinent to the async mechanics of the server. And since it’s the async (I/O) in Rust that we’re interested in, let me now present you with an assorted collection of practical experiences with it. >0-cost futures If you read the docs’ preamble to the futures crate, you will see it mentioning the “zero-cost” aspect of the library. Consistent with the philosophy behind Rust, it proclaims to deliver its abstractions without any overhead. Yet, I’m not so sure how this promise can be delivered in practice. Flip through the introductory tutorial to Tokio, for example, and you will already find plenty of compromises. Without the crucial (but nightly-only) impl Trait feature, you are basically required to put all your futures in a Box. They even encourage it themselves, offering a convenient Future::boxed method exactly for this purpose, as well the matching BoxFuture typedef right in the crate. But hey, you can always just use nightly Rust, right? impl Trait will stabilize eventually, so your code should be, ahem, future-proof either way. Unfortunately, this assumes all the futures that you’re building your request handlers from shall never cross any thread boundaries. (BoxFuture, for example, automatically constrains them to be Send). As you’ve likely guessed, this doesn’t jive very well with computationally intensive tasks which are best relegated to a thread pool-based executor, i.e. futures_cpupool. I suspect it’s not so bad if all you need to get from such a task is some primitive value, like an integer or a small structure. Lucky you. I had an entire image to squeeze through: a sizable Vec<u8> of its bytes. Suddenly, the fact that vectors are not Send started to percolate up the call chain, serving me with some juicy error messages. As it is, hindsight often provides better solutions than the one you go with at the time. Grudgingly, I started making all my futures Send in the most straightforward manner: by wrapping them in Arc/Mutex. That in itself wasn’t without its perils, but at least allowed me to move forward. Ironically, this also shows an important, pragmatic property of the futures’ system: sub-par hacks around it are possible — a fact you’ll be glad to know on the proverbial day before a deadline. Templates-worthy error messages Other significant properties of the futures’ abstraction shall include telling the programmer what’s wrong with his code in the simplest, most straightforward, and concise manner possible. Here, let me show you an example: …which you can also behold in its gist form . The reason you will encounter such incomprehensible messages stems from the very building blocks of async code. Right now, each chained operation on a future — map, and_then, or_else, and so on — produces a nested type. Every subsequent application of those methods “contains” (in terms of the type system) all the previous ones. Keep going, and it will eventually balloon into one big onion of Chain<Map<OrElse<Chain<Map<...etc...>>>>>. Futures are like ogres. I haven’t personally hit any compiler limits in this regard, but I’m sure it is plausible for a complicated, real-world program. It also gets worse if you use nightly Rust with impl Trait. In this case, function boundaries no longer “break” type stacking via Boxing the results into trait objects. Indeed, you can very well end up with some truly gigantic constructs as the compiler tries represent the return types of your most complex handlers. But even if rustc is up to snuff and can deal with those fractals just fine, it doesn’t necessarily mean the programmer can. Looking at those error messages, I had vivid flashbacks from hacking on C++ templates with ancient compilers like VS2005. The difference is, of course, that we’re not trying any arcane metaprogramming here; we just want to do some relatively mundane I/O. I have no doubt the messaging will eventually improve, and the mile-long types will at least get pretty-printed. At the moment, however, prepare for some serious squinting and bracket-counting. Where is my (language) support? Sadly, those long, cryptic error messages are not the only way in which the Rust compiler disappoints us. I keep mentioning impl Trait as a generally desirable language feature for writers of asynchronous code. This improvement is still a relatively long way from getting precisely defined, much less stabilized. And it is only a somewhat minor improvement in the async ergonomics. The wishlist is vastly longer and even more inchoate. Saying it bluntly, right now Rust doesn’t really support the async style at all. All the combined API surface of futures/Tokio/Hyper/etc. is a clever, but ultimately contrived design, and it has no intentional backing in the Rust language itself. This is a stark contrast with numerous other languages. They often support asynchronous I/O as something of a first class feature. The list includes at least C#, Python 3.5+, Hack/PHP, ES8 / JavaScript, and basically all the functional languages. They all have dedicated async, await, or equivalent constructs that make the callback-based nature of asynchronous code essentially transparent. The absence of similar support puts Rust in the same bucket as frontend JavaScript in the early 2010, where .then-chaining of promises reigned supreme. This is of course better than the callback hell of early Node but I wouldn’t think that’s a particularly high bar. In this regard, Rust leaves plenty to be desired. There are proposals, obviously, to bring async coroutines into Rust. There is an even broader wish to make the language cross the OOP/FP fence already and commit to the functional way; this would mean adding an equivalent of Haskell’s do notation. Either development could be sufficient. Both, however, require significant amount of design and implementation work. If solved now, this would easily be the most significant addition to the language since its 1.0 release — but the solution is currently in the RFC stages at best. Future<Ecosystem> While the core language support is lacking, the great as usual Rust community has been picking up some of the slack by establishing and cultivating a steadily growing ecosystem. The constellation of async-related crates clusters mostly around the two core libraries: futures crate itself and Tokio. Any functionality you may need while writing asynchronous should likely be found quite easily by searching for one of those two keywords (plus Rust, of course). Another way of finding what you need is to look at the list of Tokio-related crates directly. To be fair, I can’t really say much about the completeness of this ecosystem. The project didn’t really require too many external dependencies — the only relevant ones were: futures_cpupool mentioned before tokio-timer for imposing a timeout on caption requests tokio-signal which handles SIGINT/Ctrl+C and allows for a graceful shutdown Normally, you’d also want to research the async database drivers for your storage system of choice. I would not expect anything resembling the Diesel ORM crate, though, nor a web framework comparable to Iron, Pencil, or Rocket. Conclusions Alright, so what can we get from this overall analysis? Given the rapid development of async Rust ecosystem so far, it is clear the technology is very promising. If the community maintains its usual enthusiasm and keeps funneling it into Tokio et al., it won’t be long before it matures into something remarkable. Right now, however, it exposes way too many rough edges to fully bet on it. Still, there may be some applications where you could get away with an async Rust backend even in production. But personally, I wouldn’t recommend it outside of non-essential services, or tools internal to your organization. If you do use async Rust for microservices, I’d also advise to take steps to ensure they remain “micro”. Like I’ve elaborated in the earlier sections, there are several issues that make future-based Rust code scale poorly with respect to maintainability. Keeping it simple is therefore essential. To sum up, async Rust is currently an option only for the adventurous and/or small. Others should stick to a tried & tested solution: something like Java (with Quasar), .NET, Go, or perhaps node.js at the very least. It is also the crux of parallelism, but that’s different and is not the focus here. ↩ “Background” here refer to the low level, innate concurrency of the OS kernel (mediated with hardware interrupts), not the epoll-based event loops on the application side. ↩ There is a great parallel to be drawn between a trivial echo/Hello world server, and 3D graphics engine that only redraws empty screen. Both may start at some very high performance numbers (requests/frames per second) but once you start adding practical stuff, they all must drop hyperbolically. ↩"
+}
+</script></body>
+</html>
