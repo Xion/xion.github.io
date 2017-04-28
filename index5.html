@@ -63,6 +63,241 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></a></h2>
+    <p>
+      Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/enums.html">enums</a>,      <a href="http://xion.io/tag/serialization.html">serialization</a>      &#8226; <a href="http://xion.io/post/code/python-enums-are-ok.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Little over two years ago, I was writing about
+<a href="http://xion.org.pl/2013/05/13/we-dont-need-no-enums-in-python/">my skepticism</a> towards the
+<a href="https://www.python.org/dev/peps/pep-0435/">addition of enum types to Python</a>. My stance has changed somewhat since then,
+and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent
+in the circumstances involving any kind of persistence,
+from <a href="https://docs.python.org/2/library/pickle.html">pickling</a> to&nbsp;databases.</p>
+<p>I will elaborate on that through the rest of this&nbsp;post.</p>
+<h4>Revision</h4>
+<p>First, let&#8217;s recap (or perhaps introduce) the important facts about enums in Python. An <em>enum</em>, or an enumeration type,
+is a special class that inherits from <code>enum.Enum</code><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> and defines one or more&nbsp;constants:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+
+<span class="k">class</span> <span class="nc">Cutlery</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">knife</span> <span class="o">=</span> <span class="s">&#39;knife&#39;</span>
+    <span class="n">fork</span> <span class="o">=</span> <span class="s">&#39;fork&#39;</span>
+    <span class="n">spoon</span> <span class="o">=</span> <span class="s">&#39;spoon&#39;</span>
+</pre></div>
+
+
+<p>Their values are then converted into singleton objects with distinct identity.
+They available as attributes of the enumeration&nbsp;type:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>As a shorthand for when the values themselves are not important, the <code>Enum</code> class can be directly invoked
+with constant names as&nbsp;strings:</p>
+<div class="highlight"><pre><span class="n">Cutlery</span> <span class="o">=</span> <span class="n">Enum</span><span class="p">(</span><span class="s">&#39;Cutlery&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<p>Resulting class offers some useful <span class="caps">API</span> that we&#8217;d expect from an enumeration type in any programming&nbsp;language:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">Cutlery</span><span class="p">)</span>
+<span class="p">[</span><span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span><span class="p">:</span> <span class="s">&#39;knife&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span><span class="p">]</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">Cutlery</span><span class="p">]</span>
+<span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">]</span>
+<span class="o">&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span> <span class="ow">in</span> <span class="n">Cutlery</span>
+<span class="bp">True</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spoon&#39;</span><span class="p">)</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spork&#39;</span><span class="p">)</span>
+<span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+<span class="c"># (...)</span>
+<span class="ne">ValueError</span><span class="p">:</span> <span class="s">&#39;spork&#39;</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">a</span> <span class="n">valid</span> <span class="n">Cutlery</span>
+</pre></div>
+
+
+<h4>How it was done&nbsp;previously</h4>
+<p>Of course, there is nothing really groundbreaking about assigning some values to &#8220;constants&#8221;. It&#8217;s been done like that
+since times immemorial, and quite often those constants have been grouped within finite&nbsp;sets.</p>
+<p>Here&#8217;s an example of a comment model in some imaginary <span class="caps">ORM</span>, complete with a status&nbsp;&#8220;enumeration&#8221;:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="n">APPROVED</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+    <span class="n">REJECTED</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+    <span class="n">IN_REVIEW</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+    <span class="n">STATES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">([</span><span class="n">APPROVED</span><span class="p">,</span> <span class="n">REJECTED</span><span class="p">,</span> <span class="n">IN_REVIEW</span><span class="p">])</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">String</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="n">STATES</span><span class="p">)</span>
+
+<span class="c"># usage</span>
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Boo&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">IN_REVIEW</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Converting it to use an <code>Enum</code> is relatively&nbsp;straightforward:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="n">approved</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+        <span class="n">rejected</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+        <span class="n">in_review</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">State</span><span class="p">])</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Meh.&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span><span class="o">.</span><span class="n">value</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>It is not apparent, though, if there is any immediate benefit of doing so. True, we no longer need to define the <code>STATES</code>
+set explicitly, but saving on this bit of boilerplate is balanced out by having to access the enum&#8217;s <code>value</code>
+when assigning it to a string&nbsp;property.</p>
+<p>All in all, it seems like a wash &#8212; though at least we&#8217;ve established that enums are <em>no worse</em> than their alternatives&nbsp;:)</p>
+<h4>Enums are&nbsp;interoperable</h4>
+<p>Obviously, this doesn&#8217;t exactly sound like high praise. Thing is, we haven&#8217;t really replaced the previous solution
+<em>completely</em>. Remnants of it still linger in the way the <code>state</code> property is declared. Even though it&#8217;s supposed to hold
+enum constants, it is defined as string, which at this point is more of an implementation detail of how those constants
+are&nbsp;serialized.</p>
+<p>What were really need here is a kind of <code>EnumProperty</code> that&#8217;d allow us to work solely with enum objects.
+Before the introduction of a standard <code>Enum</code> base, however, there was little incentive for ORMs and other similiar
+libraries to provide such a functionality. But now, it makes much more sense to support enums as first-class citizens,
+at least for data exchange and serialization, because users can be expected to already prefer the standard <code>Enum</code>
+in their own&nbsp;code.</p>
+<p>Thus, the previous example changes into something along these&nbsp;lines:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">EnumProperty</span><span class="p">(</span><span class="n">State</span><span class="p">)</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Yay!&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span>  <span class="c"># no .value!</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Details of <code>EnumProperty</code>, or some equivalent construct, are of course specific to any given data management library.
+In SQLAlchemy, for example, a <a href="https://gist.github.com/Xion/5564b907e5f4e883511c">custom column type</a>
+can handle the necessary serialization and deserialization between Python code and <span class="caps">SQL</span> queries,
+allowing you to define your models like this<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="c"># ...</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">255</span><span class="p">))</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">EnumType</span><span class="p">(</span><span class="n">State</span><span class="p">,</span> <span class="n">impl</span><span class="o">=</span><span class="n">String</span><span class="p">(</span><span class="mi">32</span><span class="p">)))</span>
+
+<span class="c"># usage like above</span>
+</pre></div>
+
+
+<p>In any case, the point is to have Python code operate solely on enum objects, while the persistence layer takes
+care of converting between them and their serializable&nbsp;values.</p>
+<h4>Enums are&nbsp;extensible</h4>
+<p>The other advantage <code>Enum</code>s have over loose collections of constants is that they are proper <em>types</em>.
+Like all user-defined types in Python, they can have additional methods and properties defined on their instances,
+or even on the type&nbsp;itself.</p>
+<p>Although this capability is (by default) not as powerful as e.g. in Java &#8212; where <em>each enum constant</em> can
+<a href="https://gist.github.com/chandrasekhar4u/431839b9eac715c08b71">override a method in its own way</a> &#8212; it can nevertheless
+be quite convenient at times. Typical use cases include constant&nbsp;classification:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_horizontal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_vertical</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">)</span>
+</pre></div>
+
+
+<p>and&nbsp;conversion:</p>
+<div class="highlight"><pre>    <span class="k">def</span> <span class="nf">as_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+</pre></div>
+
+
+<p>For the latter, it would be handy to have the Java&#8217;s ability to
+<a href="https://docs.oracle.com/javase/tutorial/java/javaOO/enum.html">attach additional data</a> to an enum constant.
+As it turns out, Python supports this feature natively in a very similar way.
+We simply have to override enum&#8217;s <code>__new__</code> method to parse out any extra values from the initializer
+and turn them into attributes of the enum&nbsp;instance:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">keycode</span><span class="p">,</span> <span class="n">vector</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">)</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_value_</span> <span class="o">=</span> <span class="n">keycode</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">vector</span> <span class="o">=</span> <span class="n">vector</span>
+        <span class="k">return</span> <span class="n">obj</span>
+</pre></div>
+
+
+<p>It&#8217;s possible, in fact, to insert any arbitrary computation here that yields the final <code>_value_</code> of an enum constant<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
+This trick can be used to, for example, construct enums that
+<a href="https://docs.python.org/3/library/enum.html#autonumber">automatically number themselves</a>.</p>
+<p>Finally, we can add static methods, class methods, or <a href="http://stackoverflow.com/a/3203659">class properties</a> to the
+<code>Enum</code> subclass, just like we would do with any other&nbsp;class:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">MyEnum</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="nd">@classproperty</span>
+    <span class="k">def</span> <span class="nf">__values__</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">cls</span><span class="p">]</span>
+</pre></div>
+
+
+<h4>Enums just&nbsp;are</h4>
+<p>All these things are possible primarly because of the most notable aspect of Python enums: their existence
+as an <em>explicit concept</em>. A syntactically unorganized bunch of constants cannot offer half of the highlighted features
+because there is nowhere to pin them&nbsp;on.</p>
+<p>For that reason alone, using enums as an explicit &#8212; rather than implicit &#8212; pattern seems worthwhile.
+The one benefit we&#8217;re certain to reap is better code structure through separation of important&nbsp;concepts.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The <code>enum</code> module is part of the Python standard library
+<a href="https://docs.python.org/3/library/enum.html">since version 3.4</a>
+but <a href="https://pypi.python.org/pypi/enum/">a fully functional backport</a> is available for Python 2.x as well.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>It is even possible to instruct SQLAlchemy how to map Python enums to
+<a href="http://www.postgresql.org/docs/9.1/static/datatype-enum.html"><code>ENUM</code> types</a> in database engines that support it,
+but details are outside of the scope of this article.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>If you&#8217;re fine with the enum&#8217;s <code>value</code> being the <em>whole</em> tuple (everything after the <code>=</code> sign),
+you can override <code>__init__</code> instead of <code>__new__</code>
+(cf. <a href="https://docs.python.org/3/library/enum.html#planet">the planet example</a> from standard docs).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
     <p>
       Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1187,132 +1422,6 @@ or privacy considerations. Personally, I wouldn&#8217;t recommend relying on any
 </li>
 <li id="fn:2">
 <p>Note that this is unrelated to the <em><span class="caps">HTML</span></em> escaping of <code>&amp;</code> character as <code>&amp;amp;</code> entity in the previous example.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Query string authentication in&nbsp;Requests</a></h2>
-    <p>
-      Posted on Fri 11 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/requests.html">Requests</a>,      <a href="http://xion.io/tag/http.html">HTTP</a>,      <a href="http://xion.io/tag/authentication.html">authentication</a>      &#8226; <a href="http://xion.io/post/code/requests-query-string-auth.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://python-requests.org">Requests</a> is a widely used Python library that provides a nicer <span class="caps">API</span> for writing <span class="caps">HTTP</span> clients
-than the standard <code>urllib2</code> module does. It deals with authentication in an especially concise way: through
-a simple <code>auth=</code> argument, rather than a
-<a href="https://gist.github.com/kennethreitz/973705">separate password manager <span class="amp">&amp;</span> authentication handler</a> or other such&nbsp;nonsense.</p>
-<p>There are <a href="http://docs.python-requests.org/en/latest/user/authentication/">several possible ways</a>
-to authenticate an <span class="caps">HTTP</span> call with Requests, and it&#8217;s pretty easy to
-<a href="http://docs.python-requests.org/en/latest/user/authentication/#new-forms-of-authentication">implement our own approach</a>
-if the server requires it. All the built-in ways, however, as well as
-<a href="http://docs.python-requests.org/en/latest/user/advanced/#custom-authentication">the examples of custom implementations</a>,
-are heavily biased towards using <span class="caps">HTTP</span> headers to transmit the necessary credentials (such as username/password
-or some kind of opaque&nbsp;token).</p>
-<h4>Non-standard&nbsp;auth</h4>
-<p>This is actually quite reasonable: the most popular authentication methods, including OAuth 1.0 <span class="amp">&amp;</span> 2.0, use <span class="caps">HTTP</span> headers
-either primarily or&nbsp;exclusively.</p>
-<p>Not every <span class="caps">HTTP</span> <span class="caps">API</span> follows this convention, though. Sometimes, credentials are put in other parts of the request,
-commonly the <span class="caps">URL</span> itself. It may seem like a bad idea at first but it can also be perfectly acceptable:
-credentials don&#8217;t have to expose secrets of any particular <em>user</em> of the remote&nbsp;system.</p>
-<p><a href="http://steamcommunity.com/dev">Steam <span class="caps">API</span></a> is a good example here. Calling any of
-<a href="https://developer.valvesoftware.com/wiki/Steam_Web_API#Interfaces_and_method">its endpoints</a> requires providing
-an <span class="caps">API</span> key but it grants no special rights to access data of any particular Steam user. All the information
-it returns is already visible on their public profile<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>For those special authentication schemes, Requests necessitate rolling out our own implementation.
-Thankfully, doing so is mostly pretty&nbsp;straightforward.</p>
-<h4>Simple&nbsp;example</h4>
-<p>All Requests&#8217; authenticators are callable objects inheriting from <code>requests.auth.AuthBase</code> class.
-Writing your own is hence a matter of defining a subclass of <code>AuthBase</code> with at least a <code>__call__</code> method:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">SillyAuth</span><span class="p">(</span><span class="n">AuthBase</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s">&#39;X-ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s">&#39;im valid so auth is yes&#39;</span>
-        <span class="k">return</span> <span class="n">request</span>
-
-<span class="c"># usage</span>
-<span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;http://example.com&#39;</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">SillyAuth</span><span class="p">())</span>
-</pre></div>
-
-
-<p>The job of an authenticator is to modify the <code>request</code> so that it includes appropriate credentials in whatever form
-necessary to have them accepted by the remote server. Like I&#8217;ve mentioned before, <span class="caps">HTTP</span> headers are the most common option,
-but the request can be modified in other ways as&nbsp;well.</p>
-<h4>Query string&nbsp;parameters</h4>
-<p>One problem with modifying a query string, though, is that it&#8217;s a part of request <span class="caps">URL</span>. By the time it reaches
-authenticators, the Requests library has already merged any additional query params into it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. Including more params
-will thus require modifying the <span class="caps">URL</span>.</p>
-<p>Though it may sound like a risky endeavour involving string manipulations that are fraught with security issues,
-it&#8217;s not really <em>that</em> bad at all. In fact, the Requests library provides an <span class="caps">API</span> to do exactly&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">QueryStringAuth</span><span class="p">(</span><span class="n">AuthBase</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Authenticator that attaches a set of query string parameters</span>
-<span class="sd">    (e.g. an API key) to the request.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">params</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">params</span> <span class="o">=</span> <span class="n">params</span>
-
-    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">:</span>
-            <span class="n">request</span><span class="o">.</span><span class="n">prepare_url</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">params</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">request</span>
-</pre></div>
-
-
-<p>Albeit <a href="http://docs.python-requests.org/en/latest/api/#requests.PreparedRequest.prepare_url">scantly documented</a>,
-the <code>prepare_url</code> method will take an existing <span class="caps">URL</span> and a dictionary of query string params, and outfit the request
-with a brand new <span class="caps">URL</span> that contains those params neatly&nbsp;encoded.</p>
-<p>Full implementation of <code>QueryStringAuth</code> is a <a href="https://gist.github.com/Xion/9c1bbbc287d4443dbaf5">little more involved</a>
-than the snippet above, because we should like to replicate all the idiosyncracies of how
-<a href="http://docs.python-requests.org/en/latest/user/quickstart/#passing-parameters-in-urls">regular Requests <span class="caps">API</span></a>
-handles query string params. Some of them &#8212; like allowing both strings and lists as param values &#8212; are taken care of
-by <code>prepare_url</code> itself, but the rest should be dealt with on our&nbsp;own.</p>
-<h4>Usage</h4>
-<p>To finish up, let&#8217;s use this authenticator to call Steam <span class="caps">API</span> and return a
-<a href="https://developer.valvesoftware.com/wiki/Steam_Web_API#GetOwnedGames_.28v0001.29">list of games</a>
-that a given user owns but hasn&#8217;t played&nbsp;yet:</p>
-<div class="highlight"><pre><span class="n">STEAM_API_KEY</span> <span class="o">=</span> <span class="s">&#39;a1b2c3d4e5f6g7h8i9j&#39;</span>  <span class="c"># not a real one, of course</span>
-
-
-<span class="k">def</span> <span class="nf">get_steam_backlog</span><span class="p">(</span><span class="n">steam_id</span><span class="p">):</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="s">&#39;http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/&#39;</span>
-    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s">&#39;steamid&#39;</span><span class="p">:</span> <span class="n">steam_id</span><span class="p">,</span>
-        <span class="s">&#39;include_appinfo&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-    <span class="p">}</span>
-
-    <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
-        <span class="n">url</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="n">QueryStringAuth</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="n">STEAM_API_KEY</span><span class="p">))</span>
-    <span class="n">games</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;response&#39;</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;games&#39;</span><span class="p">,</span> <span class="p">())</span>
-
-    <span class="k">for</span> <span class="n">game</span> <span class="ow">in</span> <span class="n">games</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">game</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;playtime_forever&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">):</span>
-            <span class="k">continue</span>
-        <span class="k">yield</span> <span class="n">game</span><span class="p">[</span><span class="s">&#39;name&#39;</span><span class="p">]</span>
-</pre></div>
-
-
-<p>We could&#8217;ve put <code>STEAM_API_KEY</code> directly in <code>params</code>, of course. Singling it out explicitly as an authentication
-detail, however, makes the code clearer and plays nicely with more advanced features of Requests,
-such as <a href="http://docs.python-requests.org/en/latest/user/advanced/#session-objects">sessions</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>It can be said that only in this case we&#8217;re dealing with exclusively <em>authentication</em>, whereas the others
-also perform <em>authorization</em>. I wouldn&#8217;t quibble too much about those details. The fact that both terms are often
-shortened to &#8220;auth&#8221; doesn&#8217;t exactly help with distinguishing them anyway.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>In fact, what <code>AuthBase.__call__</code> receives is a special
-<a href="http://docs.python-requests.org/en/latest/user/advanced/#prepared-requests"><code>PreparedRequest</code> object</a> which contains
-the exact bytes that&#8217;ll be sent to the server. Most of the higher level abstractions offered by the Requests library
-(like form data or <span class="caps">JSON</span> request body) has been compiled to raw octets at this point. This is done to allow
-some authenticators (like OAuth) to analyze the full request payload and sign it cryptographically
-as a part of their flow.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
