@@ -1,5 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-04-28T14:24:00+00:00</updated><entry><title>Asynchronous Rust for fun &amp; profit</title><link href="http://xion.io/post/programming/rust-async-closer-look.html" rel="alternate"></link><updated>2017-04-28T14:24:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-28:post/programming/rust-async-closer-look.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;or: Is Rust&amp;nbsp;webscale?&lt;/em&gt;&lt;/p&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-05-24T19:07:00+00:00</updated><entry><title>Long Live Dynamic Languages!</title><link href="http://xion.io/post/programming/long-live-dynamic-languages.html" rel="alternate"></link><updated>2017-05-24T19:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-05-24:post/programming/long-live-dynamic-languages.html</id><summary type="html">&lt;p&gt;If you followed the few (or a dozen) of my recent posts,
+you&amp;#8217;ve probably noticed a sizable bias in the choice of topics.
+The vast majority were about &lt;a href="http://rust-lang.org"&gt;Rust&lt;/a&gt; &amp;#8212;
+a native, bare metal, statically typed language with powerful compile time semantics
+but little in the way of runtime&amp;nbsp;flexibility.&lt;/p&gt;
+&lt;p&gt;Needless to say, Rust is radically different than (almost the exact opposite of) Python,
+the other language that I&amp;#8217;m covering sometimes.
+Considering this topical shift,
+it would fair to assume that I, too, have subscribed to the whole Static Typing™&amp;nbsp;trend.&lt;/p&gt;
+&lt;p&gt;But that wouldn&amp;#8217;t be very&amp;nbsp;accurate.&lt;/p&gt;
+&lt;p&gt;Don&amp;#8217;t get me wrong.
+As far as fashion cycles in the software industry go,
+the current trend towards static/compiled languages is difficult to disparage.
+Strong in both hype &lt;em&gt;and&lt;/em&gt; merit,
+it has given us some &lt;a href="http://rust-lang.org"&gt;really innovative&lt;/a&gt;
+&lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; &lt;a href="https://www.typescriptlang.org/"&gt;promising&lt;/a&gt; solutions
+(as well as some &lt;a href="http://golang.org"&gt;not-so-innovative&lt;/a&gt; ones)
+that are poised to shape the future of programming for years, if not decades to come.
+In many ways, it is also correcting mistakes of &lt;a href="https://www.java.com/en/"&gt;the previous generation&lt;/a&gt;:
+excessive boilerplate, byzantine abstractions, and software&amp;nbsp;bloat.&lt;/p&gt;
+&lt;p&gt;What about dynamic languages, then?
+Are they slowly going the way of the&amp;nbsp;dodo?&lt;/p&gt;
+&lt;h4&gt;Trigger warning: &lt;code&gt;TypeError&lt;/code&gt;&lt;/h4&gt;
+&lt;p&gt;Some programmers would certainly wish&amp;nbsp;so.&lt;/p&gt;
+&lt;p&gt;Indeed, it&amp;#8217;s not hard at all to find
+&lt;a href="https://arstechnica.com/information-technology/2014/06/why-do-dynamic-languages-make-it-difficult-to-maintain-large-codebases/"&gt;articles&lt;/a&gt;
+and &lt;a href="https://www.reddit.com/r/rust/comments/6aqksm/rust_productivity_compared_to_other_languages/dhgp037/"&gt;opinions&lt;/a&gt;
+about dynamic languages that are, well, less than&amp;nbsp;flattering.&lt;/p&gt;
+&lt;p&gt;The common argument echoed in those accounts points to supposed unsuitability of Python et al.
+for any large, multi-person project.
+The reasoning can be summed up as &amp;#8220;good for small scripts and not much else&amp;#8221;.
+Without statically checked types, the argument goes,
+anything bigger than a quick hack or a prototype
+shall inevitably become hairy and dangerous&amp;nbsp;monstrosity.&lt;/p&gt;
+&lt;p&gt;And when that happens,
+&lt;em&gt;a single typo&lt;/em&gt; can go unchecked and bring down the entire&amp;nbsp;system!&amp;#8230;&lt;/p&gt;
+&lt;p&gt;At the very end of this spectrum of beliefs,
+some pundits may eventually make the leap from languages to &lt;em&gt;people&lt;/em&gt;.
+If dynamically typed languages (or &amp;#8220;untyped&amp;#8221; ones, as they&amp;#8217;re often mislabeled)
+are letting even trivial bugs through,
+then obviously anyone who wants to use them is
+&lt;a href="https://danluu.com/images/empirical-pl/pl_godwin.png"&gt;dangerously irresponsible&lt;/a&gt;.
+It must follow that all they &lt;em&gt;really&lt;/em&gt; want is to hack up some shoddy code,
+&lt;em&gt;yolo&lt;/em&gt; it over to production, and let others worry about the&amp;nbsp;consequences.&lt;/p&gt;
+&lt;h4&gt;Mind the&amp;nbsp;gap&lt;/h4&gt;
+&lt;p&gt;It&amp;#8217;s likely unproductive to engage with someone who&amp;#8217;s that extreme.
+If the rhetoric is dialed down, however, we can definitely find the edge of&amp;nbsp;reason.&lt;/p&gt;
+&lt;p&gt;In my opinion, this fine line goes right through the &amp;#8220;good in small quantities&amp;#8221; argument.
+I can certainly understand the apprehension towards large projects
+that utilize dynamically typed languages throughout their codebases.
+The prospect of such a project &lt;em&gt;is&lt;/em&gt; scary,
+because it contains an additional element of uncertainty.
+More so than with many other technologies,
+you ought to &lt;em&gt;know what you&amp;#8217;re doing&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Some people (and teams) do. Others, not so&amp;nbsp;much.&lt;/p&gt;
+&lt;p&gt;I would therefore refine the argument
+so that it better reflects the strengths and weaknesses of dynamic languages.
+They are perfectly suited for at least the following&amp;nbsp;cases:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;anyone writing small, standalone applications or&amp;nbsp;scripts&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;any project&lt;/em&gt; (large or small) with a well-functioning team of talented&amp;nbsp;individuals&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The sad reality of the software industry is the vast, gaping chasm of calamity and despair
+that stretches between those two&amp;nbsp;scenarios.&lt;/p&gt;
+&lt;p&gt;Within lies the bulk of commercial software projects,
+consistently hamstrung by the usual suspects:
+incompetent management, unclear and shifting requirements, under- or overstaffing,
+ancient development practices, lack of coding standards, rampant bureaucracy,
+&lt;a href="http://www.daedtech.com/how-developers-stop-learning-rise-of-the-expert-beginner/"&gt;inexperienced developers&lt;/a&gt;,
+and so&amp;nbsp;on.&lt;/p&gt;
+&lt;p&gt;In such an environment,
+it becomes nigh impossible to capitalize on the strengths of dynamic languages.
+Instead, the main priority is to protect from even further productivity losses,
+which is what bog-standard languages like Java, C#, or Go tend to be pretty good at.
+Rather than to move fast, the objective is to remain moving &lt;em&gt;at all&lt;/em&gt;.&lt;/p&gt;
+&lt;h4&gt;Freedom of&amp;nbsp;choice&lt;/h4&gt;
+&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;But that&amp;#8217;s backwards&amp;#8221;, the usual retort goes.
+&amp;#8220;Static typing and compilation checks are what &lt;em&gt;enables&lt;/em&gt; me to be&amp;nbsp;productive!&amp;#8221;&lt;/p&gt;
+&lt;p&gt;I have no doubt that most people saying this do indeed believe
+they&amp;#8217;re better off programming in static languages.
+Regardless of what they think, however,
+there exists &lt;a href="https://danluu.com/empirical-pl/"&gt;no conclusive evidence&lt;/a&gt;
+to back up such claims as a universal&amp;nbsp;rule.&lt;/p&gt;
+&lt;p&gt;This is of course the perennial problem with software engineering in general,
+and the project management aspect of it in particular.
+There is very little proper research on optimal and effective approaches to it,
+which is why any of the so-called &amp;#8220;best practices&amp;#8221;
+are quite likely to stem from &lt;a href="https://leanpub.com/leprechauns"&gt;unsubstantiated hearsay&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;We can lament this state of affairs, of course.
+But on the other hand, we can also find it &lt;em&gt;liberating&lt;/em&gt;.
+In the absence of rigid prescriptions and judgments about productivity,
+we are free to explore, within technical limitations,
+what language works best for us, our team, and our&amp;nbsp;projects.&lt;/p&gt;
+&lt;p&gt;Sometimes it&amp;#8217;ll be Go, Java, Rust, or even Haskell.&lt;br&gt;
+A different situation may be best handled by Python, Ruby, or even&amp;nbsp;JavaScript.&lt;/p&gt;
+&lt;p&gt;As the old adage goes, there is no silver bullet.
+We should not try to polish static typing into&amp;nbsp;one.&lt;/p&gt;</summary><category term="Python"></category><category term="Rust"></category><category term="dynamic languages"></category><category term="dynamic typing"></category><category term="static typing"></category></entry><entry><title>Asynchronous Rust for fun &amp; profit</title><link href="http://xion.io/post/programming/rust-async-closer-look.html" rel="alternate"></link><updated>2017-05-20T14:33:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-28:post/programming/rust-async-closer-look.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;or: Is Rust&amp;nbsp;webscale?&lt;/em&gt;&lt;/p&gt;
 &lt;p&gt;In this day and age, no language can really make an impact anymore
 unless it enables its programmers to harness the power of the Internet.
 &lt;a href="https://www.rust-lang.org/en-US/"&gt;Rust&lt;/a&gt; is no different here.
@@ -376,7 +472,7 @@ something like Java (with &lt;a href="http://docs.paralleluniverse.co/quasar/"&g
 but &lt;a href="https://www.youtube.com/watch?v=cN_DpYBzKso"&gt;that&amp;#8217;s different&lt;/a&gt; and is not the focus here.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;li id="fn:2"&gt;
-&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Background&amp;#8221; here refer to the low level, innate concurrency of the &lt;span class="caps"&gt;OS&lt;/span&gt; kernel
+&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Background&amp;#8221; here refers to the low level, innate concurrency of the &lt;span class="caps"&gt;OS&lt;/span&gt; kernel
 (mediated with hardware interrupts), not the &lt;code&gt;epoll&lt;/code&gt;-based event loops on the application side.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;li id="fn:3"&gt;

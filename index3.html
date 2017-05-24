@@ -63,6 +63,111 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/programming/python-dont-use-click.html#python-dont-use-click">Please don&#8217;t use&nbsp;Click</a></h2>
+    <p>
+      Posted on Fri 20 May 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/cli.html">CLI</a>,      <a href="http://xion.io/tag/ui.html">UI</a>,      <a href="http://xion.io/tag/click.html">Click</a>      &#8226; <a href="http://xion.io/post/programming/python-dont-use-click.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>&#8230;not for standalone programs&nbsp;anyway.</em></p>
+<p>Chances are, you have written some command line programs in Python. This is quite probable even if you normally code
+in some other language. And if you have, it is not unlikely that you needed to parse the <code>argv</code> of your program at one
+point or&nbsp;another.</p>
+<p>There are plenty of options here, both in the standard library as well as among third party packages. One does stand out,
+however, and it&#8217;s mostly for how it is often overused. I&#8217;m talking about <a href="http://click.pocoo.org/">Click</a>&nbsp;here.</p>
+<p>If you wanted to use it in your next Python program, I hereby urge you to&nbsp;reconsider.</p>
+<h4>What&#8217;s the&nbsp;fuss?</h4>
+<p><img style="float:right; margin-left: 8px; margin: bottom: 7px" src="http://xion.io/images/click-logo.png" alt="click_">
+The somewhat bizarrely named Click library is described as a &#8220;package for creating beautiful
+command line interfaces&#8221;. Its main trick is the ability to create subcommands by adorning Python functions with the
+<code>@click.command()</code> decorator<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. It then makes them coalesce into an argument parser, equipped with the necessary
+dispatching&nbsp;logic.</p>
+<p>This idea isn&#8217;t new, of course. Prior art goes back at least seven years to the now-abandoned
+<a href="https://opster.readthedocs.io">opster</a> package. Click, however, was the first one of its kind to garner noticeable
+popularity, which is easily attributed to <a href="http://lucumr.pocoo.org/">whom it&#8217;s been authored by</a>.</p>
+<p>So while my arguments against using this kind of <span class="caps">CLI</span> framework would apply to any package implementing the paradigm,
+it just happens that Click is currently its most prominent example. Purely for the sake of convenience, I will therefore
+refer to it as if it was interchangeable with the whole concept. Because why not? Whatever you may say about
+the library&#8217;s name, it&#8217;s hard to imagine a more concise moniker than a simple <em>Click</em>.</p>
+<p>What&#8217;s wrong, then, with the way Click handles command line&nbsp;interfaces?</p>
+<h4><span class="caps">CLI</span>: Little&nbsp;Interfaces</h4>
+<p>It&#8217;s how it encourages to treat them as an <em>accidental afterthought</em> rather than a deliberate design&nbsp;decision.</p>
+<p>For applications invoked repeatedly from a terminal, their command line arguments and flags are the primary means of
+user interaction<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. It is how users communicate their intent to perform an action; provide the neccessary input data
+to carry it throgh; decide how they want to receive the output; and control many other aspects of the programs execution.
+Absent graphical components and widgets, the command line is virtually the only way to interact with a terminal&nbsp;program.</p>
+<p>In other words, it is <strong>the <span class="caps">UI</span></strong>.</p>
+<p>And how important the <span class="caps">UI</span> is for <em>any</em> application? It seems to be important enough that entire fields of study are devoted
+to reducing friction of human-computer interaction. In many projects, the emphasis on user interface design is on par
+with that of actual software engineering.<br>
+Like everything, of course, it is susceptible to trends and fads (such as the recent &#8220;mobile/responsive everything!&#8221;
+craze). But its significance remains undiminished. Quite the opposite: in the age of ubiquitous computing,
+user interfaces are probably more important than&nbsp;ever.</p>
+<p>Yes, this includes <span class="caps">CLI</span>. One of the main reasons we turn to the command line are <em>speed</em> and <em>efficacy</em>. Common tasks must
+utilize short and convenient syntax that is quick to integrate into user&#8217;s muscle memory. Others should not only be
+possible, but <em>discoverable</em> and <em>accessible</em> without going through reams of <code>man</code> pages.</p>
+<p>Any terminal program intended for frequent use by humans should therefore strive to excel in those two qualities.
+But except for <a href="http://linux.die.net/man/1/echo">the simplest of cases</a>, it won&#8217;t happen by itself.
+Designing an efficient <span class="caps">CLI</span> for any non-trivial application is a challenging and demanding&nbsp;task.</p>
+<h4>It doesn&#8217;t&nbsp;click</h4>
+<p>With Click, however, we&#8217;re encouraged to just wing&nbsp;it.</p>
+<p>Click tells us to slap some decorators on our top-level functions and call it a day. Sure, you can dig deep enough
+and uncover the underlying layers of abstraction that may eventually allow you do things for which <code>argparse</code> has
+a <a href="https://docs.python.org/3/library/argparse.html#mutual-exclusion">first-class support</a>.</p>
+<p>By default, however, Click shoehorns your programs into
+<a href="http://click.pocoo.org/5/quickstart/#basic-concepts">predefined patterns</a> that, incidentally, mirror those of some
+<a href="http://click.pocoo.org/5/complex/#building-a-git-clone">least intuitive</a> command-line tools in&nbsp;existence.</p>
+<p>Indeed, the whole idea of subdiving your program into several distinct is already suspect, for it appears at odds
+with the fundamental Unix philosophy of
+<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">doing one thing well</a>. While it is
+occasionally justified, it shouldn&#8217;t be the first thing that comes to your mind. But that&#8217;s completely at odds with the
+Click&#8217;s approach, where <em>not</em> ending up with multiple distinct commands is something you have to consciously&nbsp;avoid.</p>
+<h4>&#8230;though it sometimes&nbsp;might</h4>
+<p>So, what <em>am</em> I suggesting you use instead libraries such as Click?&#8230; Nothing outrageous,&nbsp;really.</p>
+<p>If you care about your command line interface, consider just using
+<a href="https://docs.python.org/3/library/argparse.html">the <code>argparse</code> module</a>. Yes, it will force you to create parser objects,
+add arguments <span class="amp">&amp;</span> flags to it, and in general pay some attention to the whole business. When it comes to <span class="caps">UI</span>, it&#8217;s always
+good to make it an explicit concern, maybe even sufficient to warrant
+<a href="https://github.com/Xion/gisht/blob/e86af37388573f00a4d6f282feca76ead88725d8/gisht/args/parser.py">its own module</a>.</p>
+<p>Alternatively, the <a href="https://github.com/docopt/docopt"><code>docopt</code> library</a> provides another take on the <span class="caps">UI</span>-first approach
+to <span class="caps">CLI</span>, though it is more limited in its capabilities<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Finally, I&#8217;m not advocating to ditch Click in <em>all</em> scenarios. There&#8217;s plenty of situations when we&#8217;re interested in
+getting <em>any</em> <span class="caps">CLI</span> up and running, and not so much in making the most efficient and intuitive interface possible. The prime
+example is any kind of automation scripts that are ancillary to some bigger project, like <em>manage.py</em> is in Django<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+The Python ecosystem doesn&#8217;t really have dedicated task runners that are as featureful as <a href="http://gruntjs.com">Grunt</a>
+or <a href="http://gulpjs.com/">Gulp</a>, and that makes Click a viable and compelling option<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.</p>
+<p>But for standalone programs whose <span class="caps">CLI</span> is the main interface? Yeah, not&nbsp;really.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Oddly enough, that pair of parentheses seems to be mandatory.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Environment variables and config files deserve a honorary mention, of course. But those are usually derivatives of
+the command line arguments, containing e.g. the default values for flags.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Click&#8217;s <a href="http://click.pocoo.org/5/why/#why-not-docopt-etc">own documentation</a> actually describes quite nicely
+how theirs and docopt&#8217;s philosophies differ in a way that&#8217;s consistent with this article.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Incidentally, this appears to be a major motivation behind creating Click in the first place:
+to support web applications built upon on the <a href="http://flask.pocoo.org/">Flask</a> framework, and possibly obviate the need
+for extensions such as <a href="http://flask-script.readthedocs.io/en/latest/">Flask-Script</a>.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>This saying, there are some task runners which offer similar experience, like <a href="http://pyinvoke.org">Invoke</a>.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-mock-configure.html#python-mock-configure">Mock.configure_mock fix for&nbsp;Python</a></h2>
     <p>
       Posted on Sat 07 May 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -899,128 +1004,6 @@ and those can be freely <code>Clone</code>-d (or even <code>Copy</code>-ed).&#16
 <p>If you want both shared ownership (&#8220;fake cloneability&#8221;) <em>and</em> the ability to mutate the shared value,
 take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code> type</a> and how it can be
 <a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition">wrapped in <code>Rc</code></a> to achieve both.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Requirements for Python&#8217;s&nbsp;pip</a></h2>
-    <p>
-      Posted on Sun 21 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/pip.html">pip</a>,      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/dependencies.html">dependencies</a>      &#8226; <a href="http://xion.io/post/code/python-pip-requirements.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In this post I&#8217;ll describe all (hopefully all!) the various ways you can specify a single dependency for a Python&nbsp;package.</p>
-<p>This assumes <em>pip</em> is used for installation. The list of dependencies then goes either in <code>install_requires=</code>
-parameter of the <code>setup</code> function within <em>setup.py</em>, or as a separate <em>requirements.txt</em> file. Commonly, it will actually
-go in both places, with the latter being the canonical source of&nbsp;truth:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">setuptools</span> <span class="kn">import</span> <span class="n">setup</span>
-
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;requirements.txt&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">rf</span><span class="p">:</span>
-    <span class="n">setup</span><span class="p">(</span>
-        <span class="c"># ...</span>
-        <span class="n">install_requires</span><span class="o">=</span><span class="n">rf</span><span class="o">.</span><span class="n">readlines</span><span class="p">(),</span>
-    <span class="p">)</span>
-</pre></div>
-
-
-<p>More details about this approach can be found in
-<a href="http://xion.org.pl/2014/01/27/anathomy-of-a-python-package/">one of my previous posts</a>.</p>
-<p>Here, I will concentrate on the format of a single line in <em>requirements.txt</em> that defines a dependency.
-There are numerous variants that <em>pip</em> supports, and they are all described in excruciating detail in
-<a href="https://www.python.org/dev/peps/pep-0440/"><span class="caps">PEP</span> 440</a>. This post shall serve as a short reference on the most useful&nbsp;ones.</p>
-<h4>Package name (and&nbsp;version)</h4>
-<p>The simplest and most common option is to identify a dependency by its package&nbsp;name:</p>
-<div class="highlight"><pre>SQLAlchemy
-</pre></div>
-
-
-<p>This will locate it in a global index of packages, which is sometimes called a &#8220;cheese shop&#8221;. Currently,
-by far the most popular package registry for Python is <a href="https://pypi.python.org">PyPI</a>, and <em>pip</em> uses it by default<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>Without any further modifiers, <em>pip</em> will download and install the &#8220;current&#8221; version of the package &#8212; either the newest,
-or the one designated explicitly by a maintainer. This obviously makes the dependency somewhat unpredictable,
-for it can mean unintended upgrades that introduce breaking changes to your&nbsp;code.</p>
-<p>To prevent this, you&#8217;d normally <em>pin</em> the dependency to an exact version<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre>SQLAlchemy==0.9.10
-</pre></div>
-
-
-<p>Other comparison operators are also&nbsp;available:</p>
-<div class="highlight"><pre>SQLAlchemy&gt;=0.9.10
-SQLAlchemy&lt;1.0.0
-</pre></div>
-
-
-<p>and can even be&nbsp;combined:</p>
-<div class="highlight"><pre>SQLAlchemy&gt;=0.9,&lt;1.0.0
-</pre></div>
-
-
-<p>Specs like that will make <em>pip</em> find the newest version that&#8217;s within given range. Assuming your dependency follows
-the <a href="http://semver.org/">semantic versioning</a> scheme, this will allow you to stay on top of any minor bugfixes
-and improvements to an older release (0.9.x here), without the risk of accidentally upgrading to a new one (1.x)
-that your code is not compatible with&nbsp;yet.</p>
-<h4>Repository <span class="caps">URL</span></h4>
-<p>Sometimes you want to live on the bleeding edge, though, and depend not just on the latest <em>release</em>,
-but the head <em>commit</em> to the package&#8217;s repository. This makes sense especially in large systems
-that are distributed among multiple repos, and where development happens in&nbsp;lockstep.</p>
-<p>For those occasions, and a few others, <em>pip</em> can recognize direct repository URLs. They are in the&nbsp;format:</p>
-<div class="highlight"><pre>$VCS+$PROTOCOL://$URL@$LABEL#egg=$PACKAGE
-</pre></div>
-
-
-<p>where the <code>$PROTOCOL</code> part can be optional if the version control system has a default there. That&#8217;s for example
-the case for <code>git</code>, which is of course the most important <span class="caps">VCS</span> you&#8217;d be interested in<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>:</p>
-<div class="highlight"><pre>git://git.example.com/somepackage#egg=somepackage
-</pre></div>
-
-
-<p>Note that the <code>#egg=$PACKAGE</code> part is not a part of the <code>$URL</code>, and it&#8217;s only there to give a local name for the package
-distribution. This is what makes it possible to refer to it later via <em>pip</em>, if only to remove it with
-<code>pip uninstall $PACKAGE</code>.
-Of course, the sanest practice is to use the PyPI moniker if&nbsp;possible.</p>
-<p>When no <code>$LABEL</code> is given, <em>pip</em> will use the <span class="caps">HEAD</span>, trunk, tip, or the equivalent default/current revision from the repo.
-Often though (at least in case of Git), you would also pick a branch, tag, or even a particular <em>commit hash</em>:</p>
-<div class="highlight"><pre>git+https://github.com/Xion/unmatcher.git@0.1.3.1#egg=unmatcher
-git+ssh://github.com/You/yourpackage.git@master#egg=yourpackage
-git+https://github.com/mitsuhiko/jinja2.git@5b498453b5898257b2287f14ef6c363799f1405a#egg=Jinja2
-</pre></div>
-
-
-<p>The last two options could be a good choice even with third party packages, when you don&#8217;t want to wait for a new PyPI
-release to get a necessary feature or an urgent bug&nbsp;fix.</p>
-<h4>Local&nbsp;filesystem</h4>
-<p>Lastly, you can ask <em>pip</em> to install a package from a local directory or archive. The former option is often used
-with the <code>-e</code> (<code>--editable</code>) flag for <code>pip install</code>. This installs the package in the so-called <em>development mode</em>,
-allowing you to edit its source code&nbsp;in-place:</p>
-<div class="highlight"><pre>$ pip install -e /home/me/Code/myotherpackage
-</pre></div>
-
-
-<p>You almost certainly don&#8217;t want to put this line in <em>requirements.txt</em>: you should still be pulling the other package
-from PyPI. But if it&#8217;s your own one  &#8212; maybe a self-contained utility library used by your main program &#8212;
-this setup will be very helpful for making changes to it, informed by your own usage of the&nbsp;package.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>This can be changed with <code>--index_url</code> flag to <code>pip install</code>. Running local indexes is a good practice
-for Python shops, especially those that rely on <code>pip install</code> as part of their deployment process.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>If the package uses <a href="http://semver.org/">semantic versioning</a>, a possible alternative to <code>==</code> is <code>~=</code>,
-which means &#8220;compatible&#8221; version. The precise meaning of this is
-<a href="https://www.python.org/dev/peps/pep-0440/#compatible-release">somewhat complicated</a>, but it roughly means that upgrades
-are permitted as long as nothing in the public interface changes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p><a href="https://pip.pypa.io/en/latest/reference/pip_install/#vcs-support">Other options</a> include <code>hg</code> (Mercurial),
-<code>svn</code>, and <code>bzr</code> (Bazaar).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

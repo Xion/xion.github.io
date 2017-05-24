@@ -1,5 +1,101 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-04-28T14:24:00+00:00</updated><entry><title>Asynchronous Rust for fun &amp; profit</title><link href="http://xion.io/post/programming/rust-async-closer-look.html" rel="alternate"></link><updated>2017-04-28T14:24:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-28:post/programming/rust-async-closer-look.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;or: Is Rust&amp;nbsp;webscale?&lt;/em&gt;&lt;/p&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-05-24T19:07:00+00:00</updated><entry><title>Long Live Dynamic Languages!</title><link href="http://xion.io/post/programming/long-live-dynamic-languages.html" rel="alternate"></link><updated>2017-05-24T19:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-05-24:post/programming/long-live-dynamic-languages.html</id><summary type="html">&lt;p&gt;If you followed the few (or a dozen) of my recent posts,
+you&amp;#8217;ve probably noticed a sizable bias in the choice of topics.
+The vast majority were about &lt;a href="http://rust-lang.org"&gt;Rust&lt;/a&gt; &amp;#8212;
+a native, bare metal, statically typed language with powerful compile time semantics
+but little in the way of runtime&amp;nbsp;flexibility.&lt;/p&gt;
+&lt;p&gt;Needless to say, Rust is radically different than (almost the exact opposite of) Python,
+the other language that I&amp;#8217;m covering sometimes.
+Considering this topical shift,
+it would fair to assume that I, too, have subscribed to the whole Static Typing™&amp;nbsp;trend.&lt;/p&gt;
+&lt;p&gt;But that wouldn&amp;#8217;t be very&amp;nbsp;accurate.&lt;/p&gt;
+&lt;p&gt;Don&amp;#8217;t get me wrong.
+As far as fashion cycles in the software industry go,
+the current trend towards static/compiled languages is difficult to disparage.
+Strong in both hype &lt;em&gt;and&lt;/em&gt; merit,
+it has given us some &lt;a href="http://rust-lang.org"&gt;really innovative&lt;/a&gt;
+&lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; &lt;a href="https://www.typescriptlang.org/"&gt;promising&lt;/a&gt; solutions
+(as well as some &lt;a href="http://golang.org"&gt;not-so-innovative&lt;/a&gt; ones)
+that are poised to shape the future of programming for years, if not decades to come.
+In many ways, it is also correcting mistakes of &lt;a href="https://www.java.com/en/"&gt;the previous generation&lt;/a&gt;:
+excessive boilerplate, byzantine abstractions, and software&amp;nbsp;bloat.&lt;/p&gt;
+&lt;p&gt;What about dynamic languages, then?
+Are they slowly going the way of the&amp;nbsp;dodo?&lt;/p&gt;
+&lt;h4&gt;Trigger warning: &lt;code&gt;TypeError&lt;/code&gt;&lt;/h4&gt;
+&lt;p&gt;Some programmers would certainly wish&amp;nbsp;so.&lt;/p&gt;
+&lt;p&gt;Indeed, it&amp;#8217;s not hard at all to find
+&lt;a href="https://arstechnica.com/information-technology/2014/06/why-do-dynamic-languages-make-it-difficult-to-maintain-large-codebases/"&gt;articles&lt;/a&gt;
+and &lt;a href="https://www.reddit.com/r/rust/comments/6aqksm/rust_productivity_compared_to_other_languages/dhgp037/"&gt;opinions&lt;/a&gt;
+about dynamic languages that are, well, less than&amp;nbsp;flattering.&lt;/p&gt;
+&lt;p&gt;The common argument echoed in those accounts points to supposed unsuitability of Python et al.
+for any large, multi-person project.
+The reasoning can be summed up as &amp;#8220;good for small scripts and not much else&amp;#8221;.
+Without statically checked types, the argument goes,
+anything bigger than a quick hack or a prototype
+shall inevitably become hairy and dangerous&amp;nbsp;monstrosity.&lt;/p&gt;
+&lt;p&gt;And when that happens,
+&lt;em&gt;a single typo&lt;/em&gt; can go unchecked and bring down the entire&amp;nbsp;system!&amp;#8230;&lt;/p&gt;
+&lt;p&gt;At the very end of this spectrum of beliefs,
+some pundits may eventually make the leap from languages to &lt;em&gt;people&lt;/em&gt;.
+If dynamically typed languages (or &amp;#8220;untyped&amp;#8221; ones, as they&amp;#8217;re often mislabeled)
+are letting even trivial bugs through,
+then obviously anyone who wants to use them is
+&lt;a href="https://danluu.com/images/empirical-pl/pl_godwin.png"&gt;dangerously irresponsible&lt;/a&gt;.
+It must follow that all they &lt;em&gt;really&lt;/em&gt; want is to hack up some shoddy code,
+&lt;em&gt;yolo&lt;/em&gt; it over to production, and let others worry about the&amp;nbsp;consequences.&lt;/p&gt;
+&lt;h4&gt;Mind the&amp;nbsp;gap&lt;/h4&gt;
+&lt;p&gt;It&amp;#8217;s likely unproductive to engage with someone who&amp;#8217;s that extreme.
+If the rhetoric is dialed down, however, we can definitely find the edge of&amp;nbsp;reason.&lt;/p&gt;
+&lt;p&gt;In my opinion, this fine line goes right through the &amp;#8220;good in small quantities&amp;#8221; argument.
+I can certainly understand the apprehension towards large projects
+that utilize dynamically typed languages throughout their codebases.
+The prospect of such a project &lt;em&gt;is&lt;/em&gt; scary,
+because it contains an additional element of uncertainty.
+More so than with many other technologies,
+you ought to &lt;em&gt;know what you&amp;#8217;re doing&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Some people (and teams) do. Others, not so&amp;nbsp;much.&lt;/p&gt;
+&lt;p&gt;I would therefore refine the argument
+so that it better reflects the strengths and weaknesses of dynamic languages.
+They are perfectly suited for at least the following&amp;nbsp;cases:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;anyone writing small, standalone applications or&amp;nbsp;scripts&lt;/li&gt;
+&lt;li&gt;&lt;em&gt;any project&lt;/em&gt; (large or small) with a well-functioning team of talented&amp;nbsp;individuals&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The sad reality of the software industry is the vast, gaping chasm of calamity and despair
+that stretches between those two&amp;nbsp;scenarios.&lt;/p&gt;
+&lt;p&gt;Within lies the bulk of commercial software projects,
+consistently hamstrung by the usual suspects:
+incompetent management, unclear and shifting requirements, under- or overstaffing,
+ancient development practices, lack of coding standards, rampant bureaucracy,
+&lt;a href="http://www.daedtech.com/how-developers-stop-learning-rise-of-the-expert-beginner/"&gt;inexperienced developers&lt;/a&gt;,
+and so&amp;nbsp;on.&lt;/p&gt;
+&lt;p&gt;In such an environment,
+it becomes nigh impossible to capitalize on the strengths of dynamic languages.
+Instead, the main priority is to protect from even further productivity losses,
+which is what bog-standard languages like Java, C#, or Go tend to be pretty good at.
+Rather than to move fast, the objective is to remain moving &lt;em&gt;at all&lt;/em&gt;.&lt;/p&gt;
+&lt;h4&gt;Freedom of&amp;nbsp;choice&lt;/h4&gt;
+&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;But that&amp;#8217;s backwards&amp;#8221;, the usual retort goes.
+&amp;#8220;Static typing and compilation checks are what &lt;em&gt;enables&lt;/em&gt; me to be&amp;nbsp;productive!&amp;#8221;&lt;/p&gt;
+&lt;p&gt;I have no doubt that most people saying this do indeed believe
+they&amp;#8217;re better off programming in static languages.
+Regardless of what they think, however,
+there exists &lt;a href="https://danluu.com/empirical-pl/"&gt;no conclusive evidence&lt;/a&gt;
+to back up such claims as a universal&amp;nbsp;rule.&lt;/p&gt;
+&lt;p&gt;This is of course the perennial problem with software engineering in general,
+and the project management aspect of it in particular.
+There is very little proper research on optimal and effective approaches to it,
+which is why any of the so-called &amp;#8220;best practices&amp;#8221;
+are quite likely to stem from &lt;a href="https://leanpub.com/leprechauns"&gt;unsubstantiated hearsay&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;We can lament this state of affairs, of course.
+But on the other hand, we can also find it &lt;em&gt;liberating&lt;/em&gt;.
+In the absence of rigid prescriptions and judgments about productivity,
+we are free to explore, within technical limitations,
+what language works best for us, our team, and our&amp;nbsp;projects.&lt;/p&gt;
+&lt;p&gt;Sometimes it&amp;#8217;ll be Go, Java, Rust, or even Haskell.&lt;br&gt;
+A different situation may be best handled by Python, Ruby, or even&amp;nbsp;JavaScript.&lt;/p&gt;
+&lt;p&gt;As the old adage goes, there is no silver bullet.
+We should not try to polish static typing into&amp;nbsp;one.&lt;/p&gt;</summary><category term="Python"></category><category term="Rust"></category><category term="dynamic languages"></category><category term="dynamic typing"></category><category term="static typing"></category></entry><entry><title>Asynchronous Rust for fun &amp; profit</title><link href="http://xion.io/post/programming/rust-async-closer-look.html" rel="alternate"></link><updated>2017-05-20T14:33:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-28:post/programming/rust-async-closer-look.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;or: Is Rust&amp;nbsp;webscale?&lt;/em&gt;&lt;/p&gt;
 &lt;p&gt;In this day and age, no language can really make an impact anymore
 unless it enables its programmers to harness the power of the Internet.
 &lt;a href="https://www.rust-lang.org/en-US/"&gt;Rust&lt;/a&gt; is no different here.
@@ -376,7 +472,7 @@ something like Java (with &lt;a href="http://docs.paralleluniverse.co/quasar/"&g
 but &lt;a href="https://www.youtube.com/watch?v=cN_DpYBzKso"&gt;that&amp;#8217;s different&lt;/a&gt; and is not the focus here.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;li id="fn:2"&gt;
-&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Background&amp;#8221; here refer to the low level, innate concurrency of the &lt;span class="caps"&gt;OS&lt;/span&gt; kernel
+&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Background&amp;#8221; here refers to the low level, innate concurrency of the &lt;span class="caps"&gt;OS&lt;/span&gt; kernel
 (mediated with hardware interrupts), not the &lt;code&gt;epoll&lt;/code&gt;-based event loops on the application side.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;li id="fn:3"&gt;
@@ -397,7 +493,7 @@ But futures, by their very nature, are meant to encapsulate &lt;em&gt;any&lt;/em
 For them, &amp;#8220;each individual case&amp;#8221; is literally &lt;em&gt;every asynchronous function&lt;/em&gt; in your code.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="async"></category><category term="Tokio"></category><category term="futures"></category><category term="HTTP"></category></entry><entry><title>Iteration patterns for Result &amp; Option</title><link href="http://xion.io/post/code/rust-iter-patterns.html" rel="alternate"></link><updated>2017-04-11T11:12:00-07:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-10:post/code/rust-iter-patterns.html</id><summary type="html">&lt;p&gt;Towards the end of &lt;a href="http://xion.io/post/code/rust-for-loop.html"&gt;my previous post about &lt;code&gt;for&lt;/code&gt; loops in Rust&lt;/a&gt;,
+&lt;/div&gt;</summary><category term="Rust"></category><category term="async"></category><category term="Tokio"></category><category term="futures"></category><category term="HTTP"></category></entry><entry><title>Iteration patterns for Result &amp; Option</title><link href="http://xion.io/post/code/rust-iter-patterns.html" rel="alternate"></link><updated>2017-04-11T11:12:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-10:post/code/rust-iter-patterns.html</id><summary type="html">&lt;p&gt;Towards the end of &lt;a href="http://xion.io/post/code/rust-for-loop.html"&gt;my previous post about &lt;code&gt;for&lt;/code&gt; loops in Rust&lt;/a&gt;,
 I mentioned how those loops can often be expressed in a more declarative way.
 This alternative approach involves chaining methods of
 &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"&gt;the &lt;code&gt;Iterator&lt;/code&gt; trait&lt;/a&gt;
@@ -1341,145 +1437,4 @@ but are treated as implicitly unstable &lt;span class="amp"&gt;&amp;amp;&lt;/spa
 &lt;p&gt;Or check what symbols there don&amp;#8217;t have a leading underscore.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="modules"></category><category term="imports"></category><category term="testing"></category></entry><entry><title>A tale of two Rusts</title><link href="http://xion.io/post/programming/rust-nightly-vs-stable.html" rel="alternate"></link><updated>2017-03-28T18:35:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-24:post/programming/rust-nightly-vs-stable.html</id><summary type="html">&lt;p&gt;The writing has been on the wall for many months now,
-but I think the time has come when we can officially declare&amp;nbsp;it.&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;Stable Rust is dead. Nightly Rust is the only&amp;nbsp;Rust.&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;h4&gt;Say&amp;nbsp;what?&lt;/h4&gt;
-&lt;p&gt;If you&amp;#8217;re out of the loop,
-&lt;a href="http://rust-lang.org/"&gt;Rust&lt;/a&gt; is this newfangled system programming language.
-Rust is meant to fit in the niches normally occupied by C,
-so its domain includes performance-sensitive and safety-critical applications.
-Embedded programming, &lt;span class="caps"&gt;OS&lt;/span&gt; kernels, databases, servers,
-and similar low-level pieces of computing and networking infrastructure
-are all within its&amp;nbsp;purview.&lt;/p&gt;
-&lt;p&gt;Of course, this &amp;#8220;replacing C&amp;#8221; thing is still an ambition that&amp;#8217;s years or decades away.
-But in theory, there is nothing preventing it from happening.
-The main thing Rust would need here is &lt;em&gt;time&lt;/em&gt;: time to buy trust of developers
-by having been used in real-world, production scenarios without&amp;nbsp;issues.&lt;/p&gt;
-&lt;p&gt;To facilitate this (and for other reasons),
-Rust has been using &lt;a href="https://doc.rust-lang.org/stable/book/release-channels.html"&gt;three &lt;em&gt;release channels&lt;/em&gt;&lt;/a&gt;
-with varying frequency of updates.
-There are the &lt;em&gt;stable&lt;/em&gt;, &lt;em&gt;beta&lt;/em&gt;, and &lt;em&gt;nightly&lt;/em&gt; Rust.
-Of those, beta is pretty much an
-&lt;a href="https://en.wikipedia.org/wiki/Software_release_life_cycle#Release_candidate"&gt;&lt;span class="caps"&gt;RC&lt;/span&gt;&lt;/a&gt;
-for a future stable release,
-so there aren&amp;#8217;t many differences at all between the first two&amp;nbsp;channels.&lt;/p&gt;
-&lt;h4&gt;Nightly&amp;nbsp;perks&lt;/h4&gt;
-&lt;p&gt;This cannot be said about&amp;nbsp;nightly.&lt;/p&gt;
-&lt;p&gt;In fact, nightly Rust is essentially &lt;em&gt;its own language&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;First, there is a number of exclusive language features that are only available on nightly.
-They are all guarded by numerous &lt;code&gt;#![feature(...)]&lt;/code&gt; gates
-which are required to activate them.
-Because stable Rust doesn&amp;#8217;t accept any such directive,
-trying to compile code that uses them will fail on a non-nightly&amp;nbsp;compiler.&lt;/p&gt;
-&lt;p&gt;This has been justified as a necessary step for testing out new features
-in real scenarios, or at least those that resemble (stable) reality as close as possible.
-Indeed, many features &lt;em&gt;did&lt;/em&gt; eventually land in stable Rust by going through this route
-&amp;#8212; a recent example would be &lt;a href="https://m4rw3r.github.io/rust-questionmark-operator"&gt;the &lt;code&gt;?&lt;/code&gt; operator&lt;/a&gt;,
-an error-handling measure analogous to the &lt;code&gt;try!&lt;/code&gt; macro.&lt;/p&gt;
-&lt;p&gt;But some features take a lot of time to stabilize.
-And few (like &lt;code&gt;zero_one&lt;/code&gt; which guards the numeric traits
-&lt;a href="https://doc.rust-lang.org/std/num/trait.Zero.html"&gt;&lt;code&gt;Zero&lt;/code&gt;&lt;/a&gt;
-and &lt;a href="https://doc.rust-lang.org/std/num/trait.One.html"&gt;&lt;code&gt;One&lt;/code&gt;&lt;/a&gt;) may even be deprecated
-without ever getting out of the nightly&amp;nbsp;channel.&lt;/p&gt;
-&lt;h4&gt;Unplugged&lt;/h4&gt;
-&lt;p&gt;Secondly, and most importantly, there is at least one feature
-that won&amp;#8217;t get stabilized &lt;strong&gt;ever&lt;/strong&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#![feature(plugin)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;And it&amp;#8217;s all by&amp;nbsp;design.&lt;/p&gt;
-&lt;p&gt;This &lt;code&gt;plugin&lt;/code&gt; switch is what&amp;#8217;s necessary to include &lt;code&gt;#![plugin(...)]&lt;/code&gt; directives.
-Those in turn activate &lt;em&gt;compiler plugins&lt;/em&gt;:
-user-provided additions to the compiler itself.
-Plugins operate against the &lt;span class="caps"&gt;API&lt;/span&gt; provided directly by &lt;code&gt;rustc&lt;/code&gt;
-and enhance its capabilities beyond what the language normally&amp;nbsp;provides.&lt;/p&gt;
-&lt;p&gt;Although it sounds rather ominous,
-the vast majority of plugins in the wild serve a singular purpose: &lt;em&gt;code generation&lt;/em&gt;.
-They are written with the sole purpose of combating Rust&amp;#8217;s rigidity,
-including the (perfectly expected) lack of dynamic runtime capabilities
-and the (disappointingly) stiff limits of its wanting macro&amp;nbsp;system.&lt;/p&gt;
-&lt;p&gt;This is how they are utilized by &lt;a href="http://diesel.rs/"&gt;Diesel&lt;/a&gt;, for example,
-a popular &lt;span class="caps"&gt;ORM&lt;/span&gt; and &lt;span class="caps"&gt;SQL&lt;/span&gt; query interface;
-or &lt;a href="https://serde.rs/"&gt;Serde&lt;/a&gt;, a serialization&amp;nbsp;framework.&lt;/p&gt;
-&lt;p&gt;Why compiler plugins can never be stable, though?
-It&amp;#8217;s because the internal &lt;span class="caps"&gt;API&lt;/span&gt; they are coded against
-goes too deep into the compiler bowels to ever get stabilized.
-If it were, it would severely limit the ability to further develop the language
-without significant breakage of the established&amp;nbsp;plugins.&lt;/p&gt;
-&lt;h4&gt;Pseudo-stable&lt;/h4&gt;
-&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Wait,&amp;#8221; you may ask, &amp;#8220;how do we even talk about «established» compiler plugins?
-Shouldn&amp;#8217;t they be, by their very definition, &lt;em&gt;unstable&lt;/em&gt;?&amp;#8221;&lt;/p&gt;
-&lt;p&gt;Well&amp;#8230; yes. They definitely should. And therein lies the crux of the&amp;nbsp;problem.&lt;/p&gt;
-&lt;p&gt;Turns out, plugins &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; nightly Rust are only &lt;em&gt;mostly&lt;/em&gt; treated as&amp;nbsp;unstable.&lt;/p&gt;
-&lt;p&gt;In reality, the comfort and convenience provided by nightly versions of many libraries
-&amp;#8212; all of which rely on compiler plugins &amp;#8212; is difficult to overstate.
-While their stable approximations are available, they at best require rather complicated&amp;nbsp;setup.&lt;/p&gt;
-&lt;p&gt;What&amp;#8217;s always involved is a custom build step,
-and usually a separate file for the relevant code symbols and declarations.
-In the end, we get a bunch of autogenerated modules
-whose prior non-existence during development may also confuse IDEs and autocompletion&amp;nbsp;tools.&lt;/p&gt;
-&lt;p&gt;For all those reasons and more,
-an ecosystem has developed where several popular libraries are &amp;#8220;nightly but pseudo-stable&amp;#8221;.
-This includes some key components in many serious applications,
-like the aforementioned &lt;span class="caps"&gt;ORM&lt;/span&gt; &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; serialization&amp;nbsp;crates.&lt;/p&gt;
-&lt;h4&gt;The&amp;nbsp;precedent&lt;/h4&gt;
-&lt;p&gt;And so has been the state of affairs until very recently.
-The nightly Rust has been offering some extremely enticing features,
-but the stable channel was at least paid a lip service to.
-However, the mentality among library authors that &amp;#8220;nightly-first&amp;#8221; is an acceptable policy
-had been strong for a long time&amp;nbsp;now.&lt;/p&gt;
-&lt;p&gt;No wonder it has finally shifted towards&amp;nbsp;&amp;#8220;nightly-only&amp;#8221;.&lt;/p&gt;
-&lt;p&gt;Meet &lt;a href="http://rocket.rs"&gt;Rocket&lt;/a&gt;,
-the latest contestant in the already rich lineup of &lt;a href="http://www.arewewebyet.org/topics/frameworks/"&gt;Rust web frameworks&lt;/a&gt;.
-Everything about it is really slick:
-a flashy designer website; approachable and comprehensive documentation;
-and concise, &lt;a href="http://flask.pocoo.org/"&gt;Flask&lt;/a&gt;-like &lt;span class="caps"&gt;API&lt;/span&gt; for
-&lt;a href="https://rocket.rs/overview/#anatomy-of-a-rocket-application"&gt;routing&lt;/a&gt;
-and response handling.
-Predictably, it&amp;#8217;s been making quite a
-&lt;a href="https://www.reddit.com/r/rust/comments/5jxv6u/rocket_web_framework_for_rust/"&gt;buzz&lt;/a&gt; on
-&lt;a href="https://www.reddit.com/r/programming/comments/5jy64x/rocket_a_web_framework_for_rust/"&gt;Reddit&lt;/a&gt;
-and &lt;a href="https://news.ycombinator.com/item?id=13245475"&gt;elsewhere&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;There is just an itty bitty little problem: Rocket &lt;em&gt;only works on nightly&lt;/em&gt;.
-No alternatives, no codegen shims&amp;#8230;
-and no prospects of any change in the foreseeable future.
-Yet, there doesn&amp;#8217;t seem to be many people concerned about this,
-so clearly this is (a new?)&amp;nbsp;norm.&lt;/p&gt;
-&lt;h4&gt;The Rusts&amp;nbsp;split&lt;/h4&gt;
-&lt;p&gt;In essence, Rust is now two separate&amp;nbsp;languages.&lt;/p&gt;
-&lt;p&gt;The stable-nightly divide has essentially evolved into something that closely resembles
-the early stages of the &lt;a href="https://wiki.python.org/moin/Python2orPython3"&gt;2.x vs. 3.x&lt;/a&gt; split in the Python world.
-The people still &amp;#8220;stuck&amp;#8221; on 2.7 (i.e. stable) were &amp;#8220;holdouts&amp;#8221;,
-and the future was with 3.x (nightly).
-Sure, there have been some pithy backports (feature stabilizations),
-but the interesting stuff has been happening on the other&amp;nbsp;side.&lt;/p&gt;
-&lt;p&gt;It&amp;#8217;s astonishing that Rust managed to replicate this phenomenon
-without any major version bumps, and with no backwards-incompatible releases.
-Technically, everything is still version 1.x..
-Not even &lt;a href="http://crates.io"&gt;Cargo&lt;/a&gt;, the Rust package manager, recognizes the stable-nightly&amp;nbsp;distinction.&lt;/p&gt;
-&lt;p&gt;But that&amp;#8217;s hardly any consolation when you try to install a nightly-only crate on stable Rust.
-You will download it just fine, and get all the way to compiling its code,
-only to have it error out due to unsupported &lt;code&gt;#![feature(...)]&lt;/code&gt; declarations.&lt;/p&gt;
-&lt;h4&gt;What&amp;nbsp;now?&lt;/h4&gt;
-&lt;p&gt;The natural question is, can this situation be effectively&amp;nbsp;addressed?&lt;/p&gt;
-&lt;p&gt;I hope it&amp;#8217;s obvious why stable Rust cannot suddenly start supporting compiler plugins.
-Given that they rely on &lt;code&gt;rustc&lt;/code&gt; internals which aren&amp;#8217;t standardized,
-doing so would be contrary to the very definition of a &amp;#8220;stable&amp;#8221; release&amp;nbsp;channel.&lt;/p&gt;
-&lt;p&gt;The other option is to fully embrace nightly as &lt;em&gt;de facto&lt;/em&gt; recommended toolchain.
-This has been informally happening already,
-despite the &lt;a href="https://doc.rust-lang.org/stable/book/release-channels.html#choosing-a-version"&gt;contrary recommendations&lt;/a&gt;
-in the official&amp;nbsp;docs.&lt;/p&gt;
-&lt;p&gt;The downsides are obvious here, though: nightly Rust is not a misnomer at all.
-The compiler is in active development and its build &lt;a href="https://travis-ci.org/rust-lang/rust/builds"&gt;breaks often&lt;/a&gt;.
-Some of those breakages make it into nightly releases with unsatisfying&amp;nbsp;regularity.&lt;/p&gt;
-&lt;p&gt;Of course, there was also another option:
-stick to the intended purpose of release channels and don&amp;#8217;t build castles on the sand
-by publishing nightly-first or nightly-only crates.
-This ship seems to have sailed by now, as the community has collectively decided&amp;nbsp;otherwise.&lt;/p&gt;
-&lt;p&gt;Oh&amp;nbsp;well.&lt;/p&gt;
-&lt;p&gt;It&amp;#8217;s just a little ironic that in a language that is so focused on safety,
-everyone is perfectly happy with an &lt;em&gt;unstable compiler&lt;/em&gt;.&lt;/p&gt;</summary><category term="Rust"></category><category term="nightly Rust"></category><category term="stable Rust"></category><category term="Rocket.rs"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Python"></category><category term="modules"></category><category term="imports"></category><category term="testing"></category></entry></feed>

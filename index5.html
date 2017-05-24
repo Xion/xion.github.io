@@ -63,6 +63,238 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/celery-include-flask-request-context.html#celery-include-flask-request-context">Celery task in a Flask request&nbsp;context</a></h2>
+    <p>
+      Posted on Tue 03 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/celery.html">Celery</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/queue.html">queue</a>,      <a href="http://xion.io/tag/request-context.html">request context</a>      &#8226; <a href="http://xion.io/post/code/celery-include-flask-request-context.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://celeryproject.org">Celery</a> is an asynchronous task worker that&#8217;s frequently used for background processing
+in Python web apps. Rather than performing a time-consuming task within the request loop, we delegate it to a <em>queue</em>
+so that a <em>worker process</em> can pick it up when ready. The immediate benefit is much better latency for the end user.
+Pros also include easier scalability, since you can adjust the number of workers to your task&nbsp;load.</p>
+<p>Examples of tasks that are usually best done in the background vary from fetching data through a third-party <span class="caps">API</span>
+to sending emails, and from pushing mobile notifications to pruning the database of stale records. Anything that may
+take more than a couple hundred milliseconds to complete &#8212; and isn&#8217;t absolutely essential to the current <span class="caps">HTTP</span> request &#8212;
+is typically a good candidate for asynchronous&nbsp;processing.</p>
+<p>In Celery, workers are just regular Python processes, often running the exact same code that&#8217;s powering the app&#8217;s web
+frontend<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. But unlike most of that code, they aren&#8217;t servicing any <span class="caps">HTTP</span> requests &#8212; they simply run some function
+with given arguments, both specified by whomever sent a task for execution. Indeed, those functions don&#8217;t even <em>know</em>
+who or what asked for them to be&nbsp;executed.</p>
+<p>Neat, right? It is what we usually compliment as <em>decoupling</em>, or separation of concerns. They are valuable qualities even
+regardless of the <span class="caps">UI</span> and scaling benefits mentioned&nbsp;earlier.</p>
+<h4>Not quite&nbsp;web</h4>
+<p>But those qualities come with a trade-off. Task code is no longer a web frontend code: it doesn&#8217;t run within the
+comfy environment of our web framework of choice. Losing it may be quite unnerving, actually, because in a typical
+web application there will be many things tied directly to the <span class="caps">HTTP</span> request pipeline. After all, this is what web
+applications <em>do</em> &#8212; respond to <span class="caps">HTTP</span> requests &#8212; so it often makes perfect sense e.g. to marry the request flow
+with database transactions, committing or rolling those back according to <span class="caps">HTTP</span> status code that the app&nbsp;produced.</p>
+<p>Tasks may also require a database, though, if only to
+<a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#state">assert the expected state of the world</a>.
+Similar goes for memcache, a Redis instance, or basically any resource used by the frontend code.
+Alas, it&#8217;s quite possible <em>the very reason</em> we delegate work to a task is to shift lengthy interactions with those
+external systems away from the <span class="caps">UI</span>. Obviously, we&#8217;re going to need them for&nbsp;that!</p>
+<h4>Fake a&nbsp;request</h4>
+<p>So one way or another, our tasks will most likely need some initialization and/or cleanup code. And since it&#8217;s probably
+the same code that most <span class="caps">HTTP</span> request handlers require and use already, why not just <em>pretend we&#8217;re handling a request
+after all</em>?</p>
+<p>In <a href="http://flask.pocoo.org">Flask</a>, we can pull that off rather easily.
+The <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.test_request_context"><code>test_request_context</code> method</a>
+is conveniently provided to allow for faking the <em>request context</em> &#8212; that is, an execution environment for <span class="caps">HTTP</span> handlers.
+Like the name suggest, it is used mostly <a href="http://flask.pocoo.org/docs/0.10/testing/">for testing</a>, but there is nothing
+stopping us from using it in tasks run by&nbsp;Celery.</p>
+<p>We probably don&#8217;t want to call it directly, though. What would be better is to have Celery prepare the context first,
+and then run the task code as if it was an <span class="caps">HTTP</span> handler. For even better results, the context would preserve information
+extracted from the <em>actual <span class="caps">HTTP</span> request</em>, one that has sent the task for execution. Moving some work to the background
+would then be a trivial matter, for both the task and the original handler would operate within the same&nbsp;environment.</p>
+<p>Convenient? I believe so. And as I&#8217;ll demonstrate next, it isn&#8217;t very complicated to implement&nbsp;either.</p>
+<h4>Wrap the&nbsp;decorator?</h4>
+<p>At least one piece of the solution should stand out as pretty obvious. Since our intention is to wrap the task&#8217;s code
+in some additional packaging &#8212; the request context &#8212; it seems fairly natural to write our own <code>@task</code> decorator:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">functools</span>
+
+<span class="kn">from</span> <span class="nn">myapp</span> <span class="kn">import</span> <span class="n">app</span><span class="p">,</span> <span class="n">celery</span>
+
+
+<span class="k">def</span> <span class="nf">task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Decorator function to apply to Celery tasks.</span>
+<span class="sd">    Executes the actual task inside Flask&#39;s test request context.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Actual decorator.&quot;&quot;&quot;</span>
+        <span class="nd">@celery.task</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nd">@functools.wraps</span><span class="p">(</span><span class="n">func</span><span class="p">)</span>
+        <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+                <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">wrapped</span>
+
+    <span class="k">return</span> <span class="n">decorator</span>
+</pre></div>
+
+
+<p>Here, <code>app</code> is the <a href="http://flask.pocoo.org/docs/0.10/api/#application-object"><code>Flask</code> application</a>, and <code>celery</code> is the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery-application-objects"><code>Celery</code> object</a>
+that&#8217;s often configured alongside&nbsp;it.</p>
+<h4>The <code>Task</code> class</h4>
+<p>While this technique will give us <em>a</em> request context inside the task code, it won&#8217;t be <em>the</em> request context
+from which the task has been sent for execution. To replicate that context correctly, we need additional support
+on the sender&nbsp;side.</p>
+<p>Internally, Celery is converting every function we annotate with <code>@task</code> decorator into a subclass of
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task"><code>Celery.app.task.Task</code></a>.
+This process can be customized, for example by providing an explicit <code>base=</code> parameter to <code>@task</code> which
+specifies a <a href="http://docs.celeryproject.org/en/latest/userguide/tasks.html#custom-task-classes">custom <code>Task</code> subclass</a>
+to use in place of the default one. Within that subclass, we&#8217;re free to override any functionality that we need&nbsp;to.</p>
+<p>In our case, we&#8217;ll scrape the current request context from Flask for all relevant information,
+and later use it to recreate the context in the task&nbsp;code.</p>
+<p>But before we get to that, let&#8217;s just create the <code>Task</code> subclass and move the above execution logic to it.
+This way, users won&#8217;t have to use a completely new <code>@task</code> decorator which would needlessly couple them to a specific
+<code>Celery</code> app&nbsp;instance:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">celery</span> <span class="kn">import</span> <span class="n">Task</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Base class for tasks that run inside a Flask request context.&quot;&quot;&quot;</span>
+    <span class="n">abstract</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Instead, they can either set this class as <code>base=</code> for a specific&nbsp;task:</p>
+<div class="highlight"><pre><span class="nd">@celery.task</span><span class="p">(</span><span class="n">base</span><span class="o">=</span><span class="n">RequestContextTask</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">sync_user_data</span><span class="p">(</span><span class="n">user_id</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or make it into new default for all their&nbsp;tasks:</p>
+<div class="highlight"><pre><span class="n">celery</span> <span class="o">=</span> <span class="n">Celery</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+<span class="n">celery</span><span class="o">.</span><span class="n">Task</span> <span class="o">=</span> <span class="n">RequestContextTask</span>
+</pre></div>
+
+
+<h4>Invocation&nbsp;patterns</h4>
+<p>When the frontend asks for a task to be executed, it most often uses the
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.delay"><code>Task.delay</code> method</a>.
+It will package a payload contaning task arguments, and send it off through a <em>broker</em> &#8212;
+usually an <a href="https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol"><span class="caps">AMQP</span></a>-based queue,
+such as <a href="https://www.rabbitmq.com/">RabbitMQ</a> &#8212; so that a Celery worker can pick it up and actually&nbsp;execute.</p>
+<p>But there are other means of task invocation. We can even run it
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.apply">&#8220;in place&#8221;</a>,
+locally and synchronously, which is especially useful for various testing scenarios. Lastly, a task can also be
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.app.task.html#celery.app.task.Task.retry">retried</a> from within
+its own code, terminating its current run and scheduling another attempt for some future&nbsp;date.</p>
+<p>Obviously, for the <code>RequestContextTask</code> to be useful, it needs to behave correctly in every situation.
+Therefore we need to cover all the entry points I&#8217;ve mentioned &#8212;
+the asynchronous call, a synchronous invocation, and a task&nbsp;retry:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">apply_async</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply_async</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">retry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_include_context</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span> \
+            <span class="o">.</span><span class="n">retry</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="o">**</span><span class="n">rest</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Note that <code>Task.apply_async</code> is being called internally by <code>Task.delay</code>,
+so it&#8217;s only that first method that we have to&nbsp;override.</p>
+<h4>Context in a&nbsp;box</h4>
+<p>As you can deduce right away, the Flask-related magic is meant to go in the <code>_include_context</code> method.
+The idea is to prepare arguments for the eventual invocation of <code>Flask.test_request_context</code>,
+and pass them through an extra task parameter.
+Those arguments are relatively uncomplicated: they are just a medley of various pieces of information
+that we can easily obtain from the Flask&#8217;s <code>request</code> object:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">has_request_context</span><span class="p">,</span> <span class="n">request</span>
+
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="n">CONTEXT_ARG_NAME</span> <span class="o">=</span> <span class="s">&#39;_flask_request_context&#39;</span>
+
+    <span class="c"># ...</span>
+
+    <span class="k">def</span> <span class="nf">_include_request_context</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Includes all the information about current HTTP request context</span>
+<span class="sd">        as an additional argument to the task.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s">&#39;path&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="p">,</span>
+            <span class="s">&#39;base_url&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">url_root</span><span class="p">,</span>
+            <span class="s">&#39;method&#39;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">method</span><span class="p">,</span>
+            <span class="s">&#39;headers&#39;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="s">&#39;?&#39;</span> <span class="ow">in</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="s">&#39;query_string&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="p">[(</span><span class="n">request</span><span class="o">.</span><span class="n">url</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s">&#39;?&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):]</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">]</span> <span class="o">=</span> <span class="n">context</span>
+</pre></div>
+
+
+<p>On the worker side, we simply unpack them and recreate the&nbsp;context:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">make_response</span>
+
+<span class="k">class</span> <span class="nc">RequestContextTask</span><span class="p">(</span><span class="n">Task</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="k">def</span> <span class="nf">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="n">call</span> <span class="o">=</span> <span class="k">lambda</span><span class="p">:</span> <span class="nb">super</span><span class="p">(</span><span class="n">RequestContextTask</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="n">context</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">CONTEXT_ARG_NAME</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">context</span> <span class="ow">is</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">has_request_context</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">call</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">test_request_context</span><span class="p">(</span><span class="o">**</span><span class="n">context</span><span class="p">):</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">call</span><span class="p">()</span>
+            <span class="n">app</span><span class="o">.</span><span class="n">process_response</span><span class="p">(</span><span class="n">make_response</span><span class="p">(</span><span class="n">result</span> <span class="ow">or</span> <span class="s">&#39;&#39;</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+
+
+<p>The only tricky part is calling
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.process_response"><code>Flask.process_response</code></a> at the end.
+We need to do that for the <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.after_request"><code>@after_request</code> hooks</a>
+to execute correctly. This is quite crucial, because those hooks are where you&#8217;d normally put important cleanup code,
+like commit/rollback of the database&nbsp;transaction.</p>
+<h4>Complete&nbsp;solution</h4>
+<p>To see how all those code snippets fit together, see <a href="https://gist.github.com/Xion/46d739b980af14a0d3ea">this gist</a>.
+You may also want to have a look at
+<a href="http://flask.pocoo.org/docs/0.10/patterns/celery/">the article on Celery integration</a> in Flask docs for some tips on
+how to integrate it with your own&nbsp;project.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This isn&#8217;t strictly necessary, as Celery supports sending tasks for execution
+<a href="http://docs.celeryproject.org/en/latest/reference/celery.html#celery.Celery.send_task">by explicit name</a>.
+For that request to reach the worker, however,
+the <a href="http://docs.celeryproject.org/en/latest/configuration.html#broker-url">task broker configuration</a>
+must be correctly shared between sender and the worker.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></a></h2>
     <p>
       Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1329,99 +1561,6 @@ to service all requests &#8212; if only a little slower &#8212; without any (mem
 <li id="fn:2">
 <p>On all distros, as well as in Homebrew for <span class="caps">OSX</span>, it should be available as a package with a totally uncreative
 name of <code>expect</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">mailto: URLs in&nbsp;JavaScript</a></h2>
-    <p>
-      Posted on Tue 15 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/email.html">email</a>,      <a href="http://xion.io/tag/url.html">URL</a>      &#8226; <a href="http://xion.io/post/code/js-mailto-urls.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Though not as popular as back in the days, <code>mailto:</code> URLs are sometimes still the best way
-&#8212; and most certainly the easiest &#8212; to enable users to send emails from a web application. Typically, they are used
-in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
-<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com&quot;</span><span class="nt">&gt;</span>Send email<span class="nt">&lt;/a&gt;</span>
-</pre></div>
-
-
-<p>Depending on the operating system and browser settings, clicking on such a link could invoke a different mail client.
-In the past, this could cause much confusion if the user has never used its local email application (e.g. Outlook),
-but nowadays browsers are increasingly doing the right thing and presenting a choice of possible options.
-This includes the various web applications from popular email providers. User can thus choose &#8212; say &#8212; Gmail, and have
-all subsequent <code>mailto:</code> links take them to a <em>Compose Mail</em> view&nbsp;there.</p>
-<p>Given those developments, it&#8217;s possible that soon those URLs won&#8217;t be as quaint as they used to be ;)
-In any case, I think it&#8217;s worthwhile to have a few <code>mailto:</code> tricks up our sleeve for when they turn out to be
-an appropriate solution for the task at&nbsp;hand.</p>
-<h4>Triggering them in&nbsp;JavaScript</h4>
-<p>In the example above, I&#8217;ve used a <code>mailto:</code> <span class="caps">URL</span> directly in some <span class="caps">HTML</span> markup. For the most part, however, those URLs
-behave like any other and support a lot of the same functionality that <code>http://</code> URLs&nbsp;do:</p>
-<div class="highlight"><pre><span class="kd">function</span> <span class="nx">sendEmail</span><span class="p">(</span><span class="nx">address</span><span class="p">)</span> <span class="p">{</span>
-    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nx">address</span><span class="p">;</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>Predictably, calling this <code>sendEmail</code> function is equivalent to clicking on a <code>mailto:</code> link. This additional level
-of indirection, however, may be enough to fool some web crawlers that look for email addresses to spam. Its effectiveness
-depends largely on how radically we&#8217;re going to obfuscate the <code>address</code> argument in the actual&nbsp;invocation.</p>
-<p>More importantly, though, a function like that can be part of some more complicated logic. The only limitation is
-the same one that restricts where and when it&#8217;s possible to <code>window.open</code> another browser window. Namely, it has to be
-called in a direct response to a <span class="caps">UI</span> action triggered by the user (a button click would be a good&nbsp;example).</p>
-<h4>Customization</h4>
-<p>In their simplest form, <code>mailto:</code> URLs aren&#8217;t terribly interesting, since their only parameter is the address of a sole recipient. Fortunately, this isn&#8217;t where their capabilities end: it&#8217;s possible to customize other email fields as well,
-such as the subject or even body<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>Somewhat surprisingly, all this can be done in a manner that&#8217;s more typical for <code>http://</code> <span class="caps">URL</span>: with query string
-parameters. Right after the recipient&#8217;s address, we can drop a question mark and add some ampersand-separated
-key-value&nbsp;pairs:</p>
-<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com?subject=Hi&amp;amp;body=Hello%20John!&quot;</span><span class="nt">&gt;</span>
-  Say hello to John!
-<span class="nt">&lt;/a&gt;</span>
-</pre></div>
-
-
-<p>A more programmatic approach is of course also possible. One thing we need to remember, though, is the proper escaping
-of input values in order to make them safe to put inside an <span class="caps">URL</span><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
-The <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent"><code>encodeURIComponent</code> function</a> can be used for this&nbsp;purpose:</p>
-<div class="highlight"><pre><span class="kd">function</span> <span class="nx">getMailtoUrl</span><span class="p">(</span><span class="nx">to</span><span class="p">,</span> <span class="nx">subject</span><span class="p">,</span> <span class="nx">body</span><span class="p">)</span> <span class="p">{</span>
-    <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="p">[];</span>
-    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">subject</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;subject=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">subject</span><span class="p">));</span>
-    <span class="p">}</span>
-    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">body</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;body=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">body</span><span class="p">))</span>
-    <span class="p">}</span>
-
-    <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">to</span><span class="p">);</span>
-    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">url</span> <span class="o">+=</span> <span class="s1">&#39;?&#39;</span> <span class="o">+</span> <span class="nx">args</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;&amp;&#39;</span><span class="p">);</span>
-    <span class="p">}</span>
-    <span class="k">return</span> <span class="nx">url</span><span class="p">;</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>In theory, almost any of the numerous <a href="https://en.wikipedia.org/wiki/Email#Header_fields">email headers</a> can be specified
-this way. However, support may vary across browsers, especially since some of the headers
-(like <a href="https://en.wikipedia.org/wiki/Blind_carbon_copy">the <code>Bcc:</code> one</a>) are subject to certain security
-or privacy considerations. Personally, I wouldn&#8217;t recommend relying on anything besides
-<code>subject=</code> and <code>body=</code>, with a possible addition of <code>cc=</code> for
-<a href="https://en.wikipedia.org/wiki/Carbon_copy">the <code>Cc:</code>header </a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>By <a href="http://www.ietf.org/rfc/rfc2368.txt"><span class="caps">RFC</span> 2368</a>, only <em>text/plain</em> email body can be specified this way.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Note that this is unrelated to the <em><span class="caps">HTML</span></em> escaping of <code>&amp;</code> character as <code>&amp;amp;</code> entity in the previous example.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
