@@ -1,5 +1,349 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-05-24T19:07:00+00:00</updated><entry><title>Long Live Dynamic Languages!</title><link href="http://xion.io/post/programming/long-live-dynamic-languages.html" rel="alternate"></link><updated>2017-05-24T19:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-05-24:post/programming/long-live-dynamic-languages.html</id><summary type="html">&lt;p&gt;If you followed the few (or a dozen) of my recent posts,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-06-13T22:56:00+00:00</updated><entry><title>Rust as a gateway drug to Haskell</title><link href="http://xion.io/post/programming/rust-into-haskell.html" rel="alternate"></link><updated>2017-06-13T22:56:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-13:post/programming/rust-into-haskell.html</id><summary type="html">&lt;p&gt;For work-related reasons,
+I had to recently get up to speed on programming in &lt;a href="https://www.haskell.org/"&gt;Haskell&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Before that, I had very little actual experience with the language,
+clocking probably at less than a thousand lines of working code over a couple of years.
+Nothing impressive either:
+some &lt;a href="https://gist.github.com/Xion/b8fdb6a896264915ad85"&gt;wrapper script&lt;/a&gt; here,
+some &lt;a href="https://gist.github.com/Xion/1525222"&gt;experimental rewrite&lt;/a&gt;&amp;nbsp;there&amp;#8230;&lt;/p&gt;
+&lt;p&gt;These days, I heard, there are a few resources for learning Haskell&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;
+that don&amp;#8217;t require having a PhD in category theory&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.
+They may be quite helpful when your exposure to the functional programming is limited.
+In my case, however, the one thing that &lt;em&gt;really&lt;/em&gt; enabled me to become (somewhat) productive
+was not even related to Haskell at&amp;nbsp;all.&lt;/p&gt;
+&lt;p&gt;It was &lt;a href="http://rust-lang.org/"&gt;Rust&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;In theory, this shouldn&amp;#8217;t really make much of a sense.
+If you compare both languages by putting checkmarks in a feature chart,
+you won&amp;#8217;t find them to have much in&amp;nbsp;common.&lt;/p&gt;
+&lt;p&gt;Some of the obvious differences&amp;nbsp;include:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;predominantly functional vs. mostly&amp;nbsp;imperative&lt;/li&gt;
+&lt;li&gt;garbage collection vs. explicit memory&amp;nbsp;management&lt;/li&gt;
+&lt;li&gt;lazy vs. eager&amp;nbsp;evaluation&lt;/li&gt;
+&lt;li&gt;rich runtime&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt; vs. almost no&amp;nbsp;runtime&lt;/li&gt;
+&lt;li&gt;global vs. localized type&amp;nbsp;inference&lt;/li&gt;
+&lt;li&gt;indentation vs.&amp;nbsp;braces&lt;/li&gt;
+&lt;li&gt;two decades (!) vs. barely two years since&amp;nbsp;release&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Setting aside syntax, most of those differences are pretty&amp;nbsp;significant.&lt;/p&gt;
+&lt;p&gt;You probably wouldn&amp;#8217;t use Haskell for embedded programming, for instance,
+both for performance (&lt;span class="caps"&gt;GC&lt;/span&gt;) and memory usage reasons (laziness).
+Similarly, Rust&amp;#8217;s ownership system can be too much of a hassle for high level code
+that isn&amp;#8217;t subject to real time&amp;nbsp;requirements.&lt;/p&gt;
+&lt;p&gt;But if you look a little deeper,
+beyond just the surface descriptions of both languages,
+you can find plenty of &lt;em&gt;concepts&lt;/em&gt; they&amp;nbsp;share.&lt;/p&gt;
+&lt;h4&gt;Traits: they are typeclasses,&amp;nbsp;essentially&lt;/h4&gt;
+&lt;p&gt;Take Haskell&amp;#8217;s typeclasses, for example &amp;#8212;
+the cornerstone of its rich and expressive type&amp;nbsp;system.&lt;/p&gt;
+&lt;p&gt;A &lt;a href="https://en.wikipedia.org/wiki/Type_class"&gt;&lt;em&gt;typeclass&lt;/em&gt;&lt;/a&gt; is, simply speaking,
+a list of capabilities:
+it defines what a type can &lt;em&gt;do&lt;/em&gt;.
+There exist analogs of typeclasses in most programming languages,
+but they are normally called interfaces or protocols,
+and remain closely tied to the object-oriented&amp;nbsp;paradigm.&lt;/p&gt;
+&lt;p&gt;Not so in&amp;nbsp;Haskell.&lt;/p&gt;
+&lt;p&gt;Or in Rust for that matter, where the equivalent concept exists under the name of &lt;em&gt;traits&lt;/em&gt;.
+What typeclasses and traits have in common is that
+they&amp;#8217;re used for &lt;em&gt;all kinds of polymorphism&lt;/em&gt; in their respective&amp;nbsp;languages.&lt;/p&gt;
+&lt;h5&gt;Generics&lt;/h5&gt;
+&lt;p&gt;For example, let&amp;#8217;s consider &lt;em&gt;parametrized types&lt;/em&gt;,
+sometimes also referred to as templates (C++) or generics&amp;nbsp;(C#).&lt;/p&gt;
+&lt;p&gt;In many cases, a generic function or type requires its type arguments
+to exhibit certain characteristics.
+In some languages (like the legacy C++), this is checked only implicitly:
+as long as the template type-checks after its expansion, everything is&amp;nbsp;okay:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;template&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="k"&gt;typename&lt;/span&gt; &lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;T&lt;/span&gt; &lt;span class="n"&gt;min&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;T&lt;/span&gt; &lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;b&lt;/span&gt; &lt;span class="o"&gt;?&lt;/span&gt; &lt;span class="nl"&gt;b&lt;/span&gt; &lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+
+&lt;span class="k"&gt;struct&lt;/span&gt; &lt;span class="n"&gt;Foo&lt;/span&gt; &lt;span class="p"&gt;{};&lt;/span&gt;
+
+&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="nf"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
+    &lt;span class="n"&gt;min&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;  &lt;span class="c1"&gt;// OK&lt;/span&gt;
+    &lt;span class="n"&gt;min&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt; &lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;  &lt;span class="c1"&gt;// ERROR, no operator `&amp;gt;`&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;More advanced type systems, however, allow to specify the generic constraints &lt;em&gt;explicitly&lt;/em&gt;.
+This is the case in&amp;nbsp;Rust:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;min&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Ord&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;as well as in&amp;nbsp;Haskell:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;min&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Ord&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;
+&lt;span class="nf"&gt;min&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="n"&gt;b&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;if&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="o"&gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;b&lt;/span&gt; &lt;span class="kr"&gt;then&lt;/span&gt; &lt;span class="n"&gt;b&lt;/span&gt; &lt;span class="kr"&gt;else&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;In both languages, the notion of a type supporting certain operations (like comparison/ordering)
+is represented as its own, first-class concept:
+a &lt;em&gt;trait&lt;/em&gt; (Rust) or a &lt;em&gt;typeclass&lt;/em&gt; (Haskell).
+Since the compiler is aware of those constraints,
+it can verify that the &lt;code&gt;min&lt;/code&gt; function is used correctly even before
+it tries to generate code for a specific substitution of &lt;code&gt;T&lt;/code&gt;.&lt;/p&gt;
+&lt;h5&gt;Dynamic&amp;nbsp;dispatch&lt;/h5&gt;
+&lt;p&gt;On the other hand, let&amp;#8217;s look at &lt;em&gt;runtime polymorphism&lt;/em&gt;:
+the one that &lt;span class="caps"&gt;OO&lt;/span&gt; languages implement
+through abstract base classes and virtual methods.
+It&amp;#8217;s the tool of choice if you need a container of objects of different types,
+which nevertheless all expose the same&amp;nbsp;interface.&lt;/p&gt;
+&lt;p&gt;To offer it, Rust has &lt;a href="https://doc.rust-lang.org/book/first-edition/trait-objects.html"&gt;&lt;em&gt;trait objects&lt;/em&gt;&lt;/a&gt;,
+and they work pretty much exactly like base class pointers/references from Java, C++, or&amp;nbsp;C#.&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Trait definition&lt;/span&gt;
+&lt;span class="k"&gt;trait&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Draw&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;draw&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="c1"&gt;// Data type implementing the trait&lt;/span&gt;
+&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Circle&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;radius&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Draw&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Circle&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;draw&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="cm"&gt;/* omitted */&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="c1"&gt;// Usage&lt;/span&gt;
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;draw_all&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;objects&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Draw&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;obj&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;objects&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;obj&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;draw&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The Haskell analogue is, in turn, based on typeclasses,
+though the specifics can be a little bit&amp;nbsp;trickier:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cm"&gt;{-# LANGUAGE ExistentialQuantification #-}&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- Typeclass definition&lt;/span&gt;
+&lt;span class="kr"&gt;class&lt;/span&gt; &lt;span class="kt"&gt;Draw&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="kr"&gt;where&lt;/span&gt;
+    &lt;span class="n"&gt;draw&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- Polymorphic wrapper type&lt;/span&gt;
+&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Draw&amp;#39;&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;forall&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="kt"&gt;Draw&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Draw&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;
+&lt;span class="kr"&gt;instance&lt;/span&gt; &lt;span class="kt"&gt;Draw&lt;/span&gt; &lt;span class="kt"&gt;Draw&amp;#39;&lt;/span&gt; &lt;span class="kr"&gt;where&lt;/span&gt;
+    &lt;span class="n"&gt;draw&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Draw&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;d&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;draw&lt;/span&gt; &lt;span class="n"&gt;d&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- Data types instantiating (&amp;quot;implementing&amp;quot;) the typeclass&lt;/span&gt;
+&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Circle&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Circle&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="kr"&gt;instance&lt;/span&gt; &lt;span class="kt"&gt;Draw&lt;/span&gt; &lt;span class="kt"&gt;Circle&lt;/span&gt; &lt;span class="kr"&gt;where&lt;/span&gt; &lt;span class="n"&gt;draw&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;undefined&lt;/span&gt; &lt;span class="c1"&gt;-- omitted&lt;/span&gt;
+&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Square&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Square&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="kr"&gt;instance&lt;/span&gt; &lt;span class="kt"&gt;Draw&lt;/span&gt; &lt;span class="kt"&gt;Square&lt;/span&gt; &lt;span class="kr"&gt;where&lt;/span&gt; &lt;span class="n"&gt;draw&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;undefined&lt;/span&gt; &lt;span class="c1"&gt;-- omitted&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- Usage&lt;/span&gt;
+&lt;span class="nf"&gt;drawAll&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Draw&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="nf"&gt;drawAll&lt;/span&gt; &lt;span class="n"&gt;ds&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;mapM_&lt;/span&gt; &lt;span class="n"&gt;draw&lt;/span&gt; &lt;span class="n"&gt;ds&lt;/span&gt;
+
+&lt;span class="nf"&gt;main&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="kr"&gt;let&lt;/span&gt; &lt;span class="n"&gt;shapes&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Draw&amp;#39;&lt;/span&gt; &lt;span class="kt"&gt;Circle&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Draw&amp;#39;&lt;/span&gt; &lt;span class="kt"&gt;Square&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="n"&gt;drawAll&lt;/span&gt; &lt;span class="n"&gt;shapes&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Here, the generic function can use typeclass constraints directly (&lt;code&gt;(Draw a) =&amp;gt; ...&lt;/code&gt;),
+but creating a container of different object types requires a polymorphic wrapper&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;h5&gt;Differences&lt;/h5&gt;
+&lt;p&gt;All those similarities do not mean that
+Rust traits and Haskell typeclasses are one and the same.
+There are, in fact, quite a few differences, owing mostly to the fact that
+Haskell&amp;#8217;s type system is more&amp;nbsp;expressive:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Rust lacks &lt;a href="https://en.wikipedia.org/wiki/Kind_(type_theory)#Kinds_in_Haskell"&gt;&lt;em&gt;higher kinded types&lt;/em&gt;&lt;/a&gt;,
+  making certain abstractions impossible to encode as traits.
+  It &lt;em&gt;is&lt;/em&gt; possible, however, to implement a trait for infinitely many types at once
+  if the &lt;code&gt;impl&lt;/code&gt;ementation itself is generic
+  (like &lt;a href="https://github.com/Xion/rofld/blob/2a9e427707cc93c716e011e99b0127f19cd770a5/src/lib/resources/mod.rs#L45"&gt;here&lt;/a&gt;).&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;When defining a trait in Rust, you can ask implementors to provide some auxiliary,
+  &lt;a href="https://doc.rust-lang.org/book/first-edition/associated-types.html"&gt;associated types&lt;/a&gt;
+  in addition to just methods&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;.
+  A similar mechanism in Haskell is expanded into &lt;a href="https://wiki.haskell.org/GHC/Type_families"&gt;type families&lt;/a&gt;,
+  and requires enabling a &lt;a href="https://ocharles.org.uk/blog/posts/2014-12-12-type-families.html"&gt;&lt;span class="caps"&gt;GHC&lt;/span&gt; extension&lt;/a&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;While typeclasses in Haskell can be implemented for multiple types simultaneously
+  via a &lt;a href="https://wiki.haskell.org/Multi-parameter_type_class"&gt;&lt;span class="caps"&gt;GHC&lt;/span&gt; extension&lt;/a&gt;,
+  Rust&amp;#8217;s take on this feature is to make &lt;em&gt;traits themselves&lt;/em&gt; generic (e.g. &lt;code&gt;trait Foo&amp;lt;T&amp;gt;&lt;/code&gt;).
+  The end result is roughly similar;
+  however, the &amp;#8220;main implementing type&amp;#8221; (one after &lt;code&gt;for&lt;/code&gt; in &lt;code&gt;impl ... for ...&lt;/code&gt;)
+  is still a method receiver (&lt;code&gt;self&lt;/code&gt;), just like in &lt;span class="caps"&gt;OO&lt;/span&gt;&amp;nbsp;languages.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Rust enforces &lt;em&gt;coherence rules&lt;/em&gt; on trait implementations.
+  The topic is actually
+  &lt;a href="http://smallcultfollowing.com/babysteps/blog/2015/01/14/little-orphan-impls/"&gt;rather complicated&lt;/a&gt;,
+  but the gist is about local (current package) vs. remote (other packages / standard library)
+  traits and types.&lt;br&gt;
+  Without too much detail, coherence demands that there be a local type or trait
+  somewhere in the &lt;code&gt;impl ... for ...&lt;/code&gt; construct.
+  Haskell doesn&amp;#8217;t have this limitation,
+  although it is recommended &lt;a href="https://wiki.haskell.org/Orphan_instance"&gt;not to take advantage of this&lt;/a&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;The&amp;nbsp;M-word&lt;/h4&gt;
+&lt;p&gt;Another area of overlap between Haskell and Rust exists
+in the &lt;em&gt;data model&lt;/em&gt; utilized by those languages.
+Both are taking heavy advantage of &lt;a href="https://en.wikipedia.org/wiki/Algebraic_data_type"&gt;&lt;em&gt;algebraic data types&lt;/em&gt; (&lt;span class="caps"&gt;ADT&lt;/span&gt;)&lt;/a&gt;,
+including the ability to define both &lt;em&gt;product types&lt;/em&gt; (&amp;#8220;regular&amp;#8221; structs and records)
+as well as &lt;em&gt;sum types&lt;/em&gt; (tagged&amp;nbsp;unions).&lt;/p&gt;
+&lt;h5&gt;&lt;code&gt;Maybe&lt;/code&gt; you&amp;#8217;d like &lt;code&gt;Some(T)&lt;/code&gt;?&lt;/h5&gt;
+&lt;p&gt;Even more interestingly,
+code in both languages makes extensive use of the two most basic&amp;nbsp;ADTs:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;Option&lt;/code&gt; (Rust) or &lt;code&gt;Maybe&lt;/code&gt; (Haskell) &amp;#8212;
+  for denoting a presence or absence of a&amp;nbsp;value&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;Result&lt;/code&gt; (Rust) or &lt;code&gt;Either&lt;/code&gt; (Haskell) &amp;#8212;
+  for representing the alternative of &amp;#8220;correct&amp;#8221; and &amp;#8220;erroneous&amp;#8221;&amp;nbsp;value&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;These aren&amp;#8217;t just simple datatypes.
+They are deeply interwoven into the basic semantics of both languages,
+not to mention their standard libraries and community-provided&amp;nbsp;packages.&lt;/p&gt;
+&lt;p&gt;The &lt;code&gt;Option&lt;/code&gt;/&lt;code&gt;Maybe&lt;/code&gt; type, for example,
+is the alternative to &lt;em&gt;nullable references&lt;/em&gt;:
+something that&amp;#8217;s been
+&lt;a href="https://www.lucidchart.com/techblog/2015/08/31/the-worst-mistake-of-computer-science/"&gt;heavily criticized&lt;/a&gt;
+for making programs prone to unexpected &lt;code&gt;NullReferenceException&lt;/code&gt;s.
+The idea behind both of those types is to make actual values impossible to confuse with &lt;code&gt;null&lt;/code&gt;s
+by encoding the potential nullability into the type&amp;nbsp;system:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;!-- --&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Maybe&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Just&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kt"&gt;Nothing&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;code&gt;Result&lt;/code&gt; and &lt;code&gt;Either&lt;/code&gt;, on the other hand,
+can be thought as an extension of this idea.
+They also represent two possibilities,
+but the &amp;#8220;wrong&amp;#8221; one isn&amp;#8217;t just &lt;code&gt;None&lt;/code&gt; or &lt;code&gt;Nothing&lt;/code&gt;
+&amp;#8212; it has some more information associated with&amp;nbsp;it:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;E&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;E&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;!-- --&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Either&lt;/span&gt; &lt;span class="n"&gt;e&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Left&lt;/span&gt; &lt;span class="n"&gt;e&lt;/span&gt; &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kt"&gt;Right&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This dichotomy between the &lt;code&gt;Ok&lt;/code&gt; (or &lt;code&gt;Right&lt;/code&gt;) value and the &lt;code&gt;Err&lt;/code&gt;or value (or the &lt;code&gt;Left&lt;/code&gt; one)
+makes it a great vehicle for carrying results of functions that can &lt;em&gt;fail&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;In Rust, this replaces the traditional error handling mechanisms based on exceptions.
+In Haskell, the exceptions are present and sometimes necessary,
+but &lt;code&gt;Either&lt;/code&gt; is nevertheless the preferred approach to dealing with&amp;nbsp;errors.&lt;/p&gt;
+&lt;h5&gt;What to &lt;code&gt;do&lt;/code&gt;?&lt;/h5&gt;
+&lt;p&gt;One thing that Haskell does better is &lt;em&gt;composing&lt;/em&gt; those fallible functions
+into bigger chunks of&amp;nbsp;logic.&lt;/p&gt;
+&lt;p&gt;Relatively recently, Rust has added the &lt;a href="https://m4rw3r.github.io/rust-questionmark-operator"&gt;&lt;code&gt;?&lt;/code&gt; operator&lt;/a&gt;
+as a replacement for the &lt;code&gt;try!&lt;/code&gt; macro.
+This is now the preferred way of &lt;em&gt;error propagation&lt;/em&gt;,
+allowing for a more concise composition of functions that return &lt;code&gt;Result&lt;/code&gt;s:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c-Doc"&gt;/// Read an integer from given file.&lt;/span&gt;
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;int_from_file&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="nb"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;io&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fs&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;File&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;?&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;read_to_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;?&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map_err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;io&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;io&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ErrorKind&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;InvalidData&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="o"&gt;?&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;But Haskell had it for much longer,
+and it&amp;#8217;s something of a hallmark of the language and functional programming in general
+&amp;#8212; even though it looks thoroughly &lt;em&gt;imperative&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;intFromFile&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;FilePath&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="kt"&gt;Int&lt;/span&gt;
+&lt;span class="nf"&gt;intFromFile&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="n"&gt;s&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;readFile&lt;/span&gt; &lt;span class="n"&gt;path&lt;/span&gt;
+    &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;readIO&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;
+    &lt;span class="n"&gt;return&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;If you haven&amp;#8217;t seen it before, this is of course a &lt;em&gt;monad&lt;/em&gt; &amp;#8212; the &lt;code&gt;IO&lt;/code&gt; monad, to be precise.
+While discussing monads in detail is way outside of the scope of this article,
+we can definitely notice some analogies with Rust.
+The &lt;code&gt;do&lt;/code&gt; notation with &lt;code&gt;&amp;lt;-&lt;/code&gt; arrows is evidently similar to
+how in Rust you&amp;#8217;d assign the result of a fallible operation after &amp;#8220;unpacking&amp;#8221; it with &lt;code&gt;?&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;But of course,
+there&amp;#8217;s plenty of different monads in Haskell: not just &lt;code&gt;IO&lt;/code&gt;,
+but also &lt;code&gt;Either&lt;/code&gt;, &lt;code&gt;Maybe&lt;/code&gt;, &lt;code&gt;Reader&lt;/code&gt;, &lt;code&gt;Writer&lt;/code&gt;, &lt;code&gt;Cont&lt;/code&gt;, &lt;code&gt;STM&lt;/code&gt;, and many others.
+In Rust (at least as of 1.19), the &lt;code&gt;?&lt;/code&gt; operator only works for &lt;code&gt;Result&lt;/code&gt; types,
+although there is &lt;a href="https://github.com/rust-lang/rfcs/issues/1718"&gt;some talk&lt;/a&gt;
+about extending it to &lt;code&gt;Option&lt;/code&gt; as well&lt;sup id="fnref:6"&gt;&lt;a class="footnote-ref" href="#fn:6" rel="footnote"&gt;6&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Eventually, we may see the language adopt some variant of the &lt;code&gt;do&lt;/code&gt; notation,
+though the motivation for this will most likely come from
+&lt;a href="https://github.com/alexcrichton/futures-await"&gt;asynchronous programming with &lt;code&gt;Future&lt;/code&gt;s&lt;/a&gt;
+rather than plain &lt;code&gt;Result&lt;/code&gt;s.
+General monads, however, require support for &lt;em&gt;higher kinded types&lt;/em&gt;
+which &lt;a href="https://github.com/rust-lang/rfcs/issues/324"&gt;isn&amp;#8217;t coming anytime soon&lt;/a&gt;.&lt;/p&gt;
+&lt;h4&gt;A path through&amp;nbsp;Rust?&lt;/h4&gt;
+&lt;p&gt;Now that we&amp;#8217;ve discussed those similarities,
+the obvious question&amp;nbsp;arises.&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Is learning Rust worthwhile
+if your ultimate goal is getting proficient at functional programming in general,
+or Haskell in&amp;nbsp;particular?&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;My answer to that is actually pretty&amp;nbsp;straightforward.&lt;/p&gt;
+&lt;p&gt;If &amp;#8220;getting to &lt;span class="caps"&gt;FP&lt;/span&gt;&amp;#8221; is your main goal, then Rust will &lt;em&gt;not&lt;/em&gt; help you very much.
+Functional paradigm isn&amp;#8217;t the main idea behind the language &amp;#8212;
+its shtick is mostly &lt;em&gt;memory safety&lt;/em&gt;, and zero-cost abstractions.
+While it succeeds somewhat at being &amp;#8220;Haskell Lite&amp;#8221;,
+it really strives to be &lt;em&gt;safer C++&lt;/em&gt;&lt;sup id="fnref:7"&gt;&lt;a class="footnote-ref" href="#fn:7" rel="footnote"&gt;7&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;But if, on the other hand, you regard &lt;span class="caps"&gt;FP&lt;/span&gt; mostly as a curiosity
+that seems to be seeping into your favorite imperative language at an increasing rate,
+Rust can be a good way to gain familiarity with this peculiar&amp;nbsp;beast.&lt;/p&gt;
+&lt;p&gt;At the very least, you will learn the functional way of &lt;em&gt;modeling programs&lt;/em&gt;,
+with lots of smart enums/unions and structs but without&amp;nbsp;inheritance.&lt;/p&gt;
+&lt;p&gt;And the best part is: you will be so busy
+&lt;a href="https://m-decoster.github.io//2017/01/16/fighting-borrowchk/"&gt;fighting the borrow checker&lt;/a&gt;
+you won&amp;#8217;t even notice when it happens&amp;nbsp;;-)&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Just ask in &lt;code&gt;#haskell-beginners&lt;/code&gt; on Freenode if you&amp;#8217;re interested.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Though ironically,
+I found the &lt;a href="https://www.youtube.com/playlist?list=PLbgaMIhjbmEnaH_LTkxLI7FMa2HsnawM_"&gt;&lt;span class="caps"&gt;CT&lt;/span&gt; lectures by Bartosz Milewski&lt;/a&gt;
+very helpful in developing the right intuitions, even though they&amp;#8217;re very abstract.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;For example, Haskell has &lt;em&gt;green threads&lt;/em&gt; (created with &lt;code&gt;forkIO&lt;/code&gt;)
+which are somewhat similar to goroutines from Go.
+To get anything remotely similar in Rust, you need to use &lt;a href="http://tokio.rs"&gt;external libraries&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;Note that such containers aren&amp;#8217;t very idiomatic Haskell.
+A more typical solution would be to just curry the &lt;code&gt;draw&lt;/code&gt; function,
+implicitly putting the &lt;code&gt;Draw&lt;/code&gt; object inside its closure.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:5"&gt;
+&lt;p&gt;This mechanisms expands to
+&lt;a href="https://doc.rust-lang.org/1.6.0/book/associated-constants.html"&gt;associated constants&lt;/a&gt;
+in Rust 1.20.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:6"&gt;
+&lt;p&gt;Those two types also have a form of &lt;em&gt;monadic bind&lt;/em&gt; (&lt;code&gt;&amp;gt;&amp;gt;=&lt;/code&gt; in Haskell)
+exposed as &lt;a href="https://doc.rust-lang.org/std/result/enum.Result.html#method.and_then"&gt;the &lt;code&gt;and_then&lt;/code&gt; method&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:7"&gt;
+&lt;p&gt;If you want another language for easing into the concept of functional programming,
+I&amp;#8217;ve heard that Scala fills that niche quite well.&amp;#160;&lt;a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="Haskell"></category><category term="traits"></category><category term="typeclasses"></category><category term="monads"></category><category term="ADTs"></category><category term="FP"></category></entry><entry><title>Long Live Dynamic Languages!</title><link href="http://xion.io/post/programming/long-live-dynamic-languages.html" rel="alternate"></link><updated>2017-05-24T19:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-05-24:post/programming/long-live-dynamic-languages.html</id><summary type="html">&lt;p&gt;If you followed the few (or a dozen) of my recent posts,
 you&amp;#8217;ve probably noticed a sizable bias in the choice of topics.
 The vast majority were about &lt;a href="http://rust-lang.org"&gt;Rust&lt;/a&gt; &amp;#8212;
 a native, bare metal, statically typed language with powerful compile time semantics
@@ -1272,169 +1616,4 @@ rewriting module paths willy-nilly is most certainly a bad&amp;nbsp;idea.&lt;/p&
 essentially by abusing the approach I describe later in this post.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="unit tests"></category><category term="testing"></category><category term="modules"></category></entry><entry><title>__all__ and wild imports in Python</title><link href="http://xion.io/post/code/python-all-wild-imports.html" rel="alternate"></link><updated>2016-12-26T20:51:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-26:post/code/python-all-wild-imports.html</id><summary type="html">&lt;p&gt;An often misunderstood piece of Python import machinery is the &lt;code&gt;__all__&lt;/code&gt; attribute.
-While it is completely &lt;em&gt;optional&lt;/em&gt;,
-it&amp;#8217;s common to see modules with the &lt;code&gt;__all__&lt;/code&gt; list populated&amp;nbsp;explicitly:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;__all__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;Foo&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;bar&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-
-&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-
-&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;bar&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-
-&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;baz&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
-    &lt;span class="c"&gt;# ...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Before explaining what the real purpose of &lt;code&gt;__all__&lt;/code&gt; is
-(and how it relates to the titular wild imports),
-let&amp;#8217;s deconstruct some common misconceptions by highlighting what it &lt;em&gt;isn&amp;#8217;t&lt;/em&gt;:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;p&gt;&lt;code&gt;__all__&lt;/code&gt; doesn&amp;#8217;t prevent any of the module symbols (functions, classes, etc.)
-from being &lt;em&gt;directly&lt;/em&gt; imported.
-In our the example, the seemingly omitted &lt;code&gt;baz&lt;/code&gt; function (which is not included in &lt;code&gt;__all__&lt;/code&gt;),
-is still &lt;em&gt;perfectly importable&lt;/em&gt; by writing &lt;code&gt;from module import baz&lt;/code&gt;.&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;Similarly, &lt;code&gt;__all__&lt;/code&gt; doesn&amp;#8217;t influence what symbols are included in the results of
-&lt;code&gt;dir(module)&lt;/code&gt; or &lt;code&gt;vars(module)&lt;/code&gt;. So in the case above, a &lt;code&gt;dir&lt;/code&gt; call would result in a
-&lt;code&gt;['Foo', 'bar', 'baz']&lt;/code&gt; list, even though &lt;code&gt;'baz'&lt;/code&gt; does not occur in &lt;code&gt;__all__&lt;/code&gt;.&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;In other words, the content of &lt;code&gt;__all__&lt;/code&gt; is more of a convention
-rather than a strict limitation.
-Regardless of what you put there, every symbol defined in your module
-will still be accessible from the&amp;nbsp;outside.&lt;/p&gt;
-&lt;p&gt;This is a clear reflection of the common policy in Python:
-assume &lt;a href="https://mail.python.org/pipermail/tutor/2003-October/025932.html"&gt;everyone is a consenting adult&lt;/a&gt;,
-and that visibility controls are not necessary.
-Without an explicit &lt;code&gt;__all__&lt;/code&gt; list,
-Python simply puts all of the module &amp;#8220;public&amp;#8221; symbols there anyway&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h4&gt;The meaning of it &lt;code&gt;__all__&lt;/code&gt;&lt;/h4&gt;
-&lt;p&gt;So, what does &lt;code&gt;__all__&lt;/code&gt; actually&amp;nbsp;effect?&lt;/p&gt;
-&lt;p&gt;This is neatly summed up in this brief
-&lt;a href="http://stackoverflow.com/a/2187636/434799"&gt;StackOverflow answer&lt;/a&gt;.
-Simply speaking, its purpose is&amp;nbsp;twofold:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;p&gt;It tells the readers of the source code &amp;#8212; be it humans or automated tools &amp;#8212;
-what&amp;#8217;s the conventional &lt;em&gt;public &lt;span class="caps"&gt;API&lt;/span&gt;&lt;/em&gt; exposed by the&amp;nbsp;module.&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;It lists names to import when performing the so-called &lt;em&gt;wild import&lt;/em&gt;:
-&lt;code&gt;from module import *&lt;/code&gt;.&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;Because of the default content of &lt;code&gt;__all__&lt;/code&gt; that I mentioned earlier,
-the public &lt;span class="caps"&gt;API&lt;/span&gt; of a module can also be defined implicitly.
-Some style guides (like the &lt;a href="https://google.github.io/styleguide/pyguide.html"&gt;Google one&lt;/a&gt;)
-are therefore relying on the &lt;code&gt;public&lt;/code&gt; and &lt;code&gt;_private&lt;/code&gt; naming exclusively.
-Nevertheless, an explicit &lt;code&gt;__all__&lt;/code&gt; list is still a perfectly valid option,
-especially considering that no approach offers any form of &lt;em&gt;actual&lt;/em&gt; access&amp;nbsp;control.&lt;/p&gt;
-&lt;h4&gt;Import&amp;nbsp;star&lt;/h4&gt;
-&lt;p&gt;The second point, however, has some real runtime&amp;nbsp;significance.&lt;/p&gt;
-&lt;p&gt;In Python, like in many other languages,
-it is recommended to be explicit about the exact functions and classes we&amp;#8217;re importing.
-Commonly, the &lt;code&gt;import&lt;/code&gt; statement will thus take one of the following&amp;nbsp;forms:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;random&lt;/span&gt;
-&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;urllib.parse&lt;/span&gt;
-&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;random&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;randint&lt;/span&gt;
-&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;logging&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;fatal&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;warning&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;warn&lt;/span&gt;
-&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;urllib.parse&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;urlparse&lt;/span&gt;
-&lt;span class="c"&gt;# etc.&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;In each case, it&amp;#8217;s easy to see the relevant &lt;em&gt;name&lt;/em&gt; being imported.
-Regardless of the exact syntax and the possible presence of aliasing (&lt;code&gt;as&lt;/code&gt;),
-it&amp;#8217;s always the last (qualified) name in the &lt;code&gt;import&lt;/code&gt; statement,
-before a newline or&amp;nbsp;comma.&lt;/p&gt;
-&lt;p&gt;Contrast this with an &lt;code&gt;import&lt;/code&gt; that ends with an&amp;nbsp;asterisk:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;itertools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This is called a &lt;em&gt;star&lt;/em&gt; or &lt;em&gt;wild import&lt;/em&gt;, and it isn&amp;#8217;t so straightforward.
-This is also the reason why using it is &lt;a href="http://stackoverflow.com/a/3615206/434799"&gt;generally discouraged&lt;/a&gt;,
-except for some &lt;a href="http://stackoverflow.com/a/3615238/434799"&gt;very specific situations&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;Why? Because you cannot easily see what exact names are being imported here.
-For that you&amp;#8217;d have to go to the module&amp;#8217;s source and &amp;#8212; you guessed it &amp;#8212;
-look at the &lt;code&gt;__all__&lt;/code&gt; list&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h4&gt;Taming the&amp;nbsp;wild&lt;/h4&gt;
-&lt;p&gt;Barring some less important details,
-the mechanics of &lt;code&gt;import *&lt;/code&gt; could therefore be expressed in the following Python&amp;nbsp;(pseudo)code:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;module&lt;/span&gt; &lt;span class="kn"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;__temp&lt;/span&gt;
-&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;__name&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;module&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-    &lt;span class="nb"&gt;globals&lt;/span&gt;&lt;span class="p"&gt;()[&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;getattr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;__temp&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;__name&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="k"&gt;del&lt;/span&gt; &lt;span class="n"&gt;__temp&lt;/span&gt;
-&lt;span class="k"&gt;del&lt;/span&gt; &lt;span class="n"&gt;__name&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;One interesting case to consider is
-what happens when &lt;code&gt;__all__&lt;/code&gt; contains a &lt;em&gt;wrong&lt;/em&gt;&amp;nbsp;name.&lt;/p&gt;
-&lt;p&gt;What if one of the strings there doesn&amp;#8217;t correspond to any name within the&amp;nbsp;module?&amp;#8230;&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c"&gt;# foo.py&lt;/span&gt;
-&lt;span class="n"&gt;__all__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;Foo&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-
-&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;bar&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
-    &lt;span class="k"&gt;pass&lt;/span&gt;
-
-&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;foo&lt;/span&gt;
-&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;foo&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="o"&gt;*&lt;/span&gt;
-&lt;span class="n"&gt;Traceback&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;most&lt;/span&gt; &lt;span class="n"&gt;recent&lt;/span&gt; &lt;span class="n"&gt;call&lt;/span&gt; &lt;span class="n"&gt;last&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-  &lt;span class="n"&gt;File&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;&amp;lt;stdin&amp;gt;&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;module&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;
-&lt;span class="ne"&gt;AttributeError&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;module&amp;#39;&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt; &lt;span class="n"&gt;has&lt;/span&gt; &lt;span class="n"&gt;no&lt;/span&gt; &lt;span class="n"&gt;attribute&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;Foo&amp;#39;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Quite predictably, &lt;code&gt;import *&lt;/code&gt; blows up.&lt;br&gt;
-Notice, however, that regular import &lt;em&gt;still works&lt;/em&gt;.&lt;br&gt;&lt;/p&gt;
-&lt;p&gt;All in all (ahem), this hints at a cute little trick which is also very&amp;nbsp;self-evident:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;__all__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;DO_NOT_WILD_IMPORT&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Put this in a Python module, and no one will be able to &lt;code&gt;import *&lt;/code&gt; from it!&lt;br&gt;
-Much more effective than any lint warning ;-)&lt;br&gt;&lt;/p&gt;
-&lt;h4&gt;Test &lt;code&gt;__all__&lt;/code&gt; the&amp;nbsp;things&lt;/h4&gt;
-&lt;p&gt;Jokes aside, this phenomenon (&lt;code&gt;__all__&lt;/code&gt; with an out-of-place name in it) can also backfire.
-Especially when
-&lt;a href="https://github.com/Xion/callee/blob/277add8170bd0c758f3c4a3068127e8229d2e2d1/callee/__init__.py#L31"&gt;reexporting&lt;/a&gt;,
-it&amp;#8217;s relatively easy to introduce stray &lt;code&gt;'name'&lt;/code&gt; into &lt;code&gt;__all__&lt;/code&gt;:
-one which doesn&amp;#8217;t correspond to any &lt;code&gt;name&lt;/code&gt; that&amp;#8217;s &lt;em&gt;actually present&lt;/em&gt; in the&amp;nbsp;namespace.&lt;/p&gt;
-&lt;p&gt;If we commit such a mishap, we are inadvertently lying about the public &lt;span class="caps"&gt;API&lt;/span&gt; of our package.
-What&amp;#8217;s worse is that this mistake can propagate through documentation generators,
-and ultimately mislead our&amp;nbsp;users.&lt;/p&gt;
-&lt;p&gt;While some linters may be able to catch this,
-a &lt;a href="https://github.com/Xion/callee/blob/277add8170bd0c758f3c4a3068127e8229d2e2d1/tests/test_all.py#L10"&gt;simple test&lt;/a&gt;
-like this&amp;nbsp;one:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;test_all&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Test that __all__ contains only names that are actually exported.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-    &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;yourpackage&lt;/span&gt;
-
-    &lt;span class="n"&gt;missing&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;set&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;n&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;n&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;yourpackage&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;__all__&lt;/span&gt;
-                  &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="nb"&gt;getattr&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;yourpackage&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;n&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;assertEmpty&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;
-        &lt;span class="n"&gt;missing&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;msg&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;__all__ contains unresolved names: &lt;/span&gt;&lt;span class="si"&gt;%s&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;
-            &lt;span class="s"&gt;&amp;quot;, &amp;quot;&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;missing&lt;/span&gt;&lt;span class="p"&gt;),))&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;is a quick &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; easy way to ensure this never&amp;nbsp;happens.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Public&amp;#8221; symbols have names that don&amp;#8217;t begin with underscore (&lt;code&gt;_&lt;/code&gt;).
-Of course, &amp;#8220;non-public&amp;#8221; ones are still accessible
-but are treated as implicitly unstable &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; discouraged.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Or check what symbols there don&amp;#8217;t have a leading underscore.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="modules"></category><category term="imports"></category><category term="testing"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="unit tests"></category><category term="testing"></category><category term="modules"></category></entry></feed>

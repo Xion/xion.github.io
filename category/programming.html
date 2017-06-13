@@ -63,6 +63,365 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/programming/rust-into-haskell.html#rust-into-haskell">Rust as a gateway drug to&nbsp;Haskell</a></h2>
+    <p>
+      Posted on Tue 13 June 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/haskell.html">Haskell</a>,      <a href="http://xion.io/tag/traits.html">traits</a>,      <a href="http://xion.io/tag/typeclasses.html">typeclasses</a>,      <a href="http://xion.io/tag/monads.html">monads</a>,      <a href="http://xion.io/tag/adts.html">ADTs</a>,      <a href="http://xion.io/tag/fp.html">FP</a>      &#8226; <a href="http://xion.io/post/programming/rust-into-haskell.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>For work-related reasons,
+I had to recently get up to speed on programming in <a href="https://www.haskell.org/">Haskell</a>.</p>
+<p>Before that, I had very little actual experience with the language,
+clocking probably at less than a thousand lines of working code over a couple of years.
+Nothing impressive either:
+some <a href="https://gist.github.com/Xion/b8fdb6a896264915ad85">wrapper script</a> here,
+some <a href="https://gist.github.com/Xion/1525222">experimental rewrite</a>&nbsp;there&#8230;</p>
+<p>These days, I heard, there are a few resources for learning Haskell<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>
+that don&#8217;t require having a PhD in category theory<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+They may be quite helpful when your exposure to the functional programming is limited.
+In my case, however, the one thing that <em>really</em> enabled me to become (somewhat) productive
+was not even related to Haskell at&nbsp;all.</p>
+<p>It was <a href="http://rust-lang.org/">Rust</a>.</p>
+<p>In theory, this shouldn&#8217;t really make much of a sense.
+If you compare both languages by putting checkmarks in a feature chart,
+you won&#8217;t find them to have much in&nbsp;common.</p>
+<p>Some of the obvious differences&nbsp;include:</p>
+<ul>
+<li>predominantly functional vs. mostly&nbsp;imperative</li>
+<li>garbage collection vs. explicit memory&nbsp;management</li>
+<li>lazy vs. eager&nbsp;evaluation</li>
+<li>rich runtime<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup> vs. almost no&nbsp;runtime</li>
+<li>global vs. localized type&nbsp;inference</li>
+<li>indentation vs.&nbsp;braces</li>
+<li>two decades (!) vs. barely two years since&nbsp;release</li>
+</ul>
+<p>Setting aside syntax, most of those differences are pretty&nbsp;significant.</p>
+<p>You probably wouldn&#8217;t use Haskell for embedded programming, for instance,
+both for performance (<span class="caps">GC</span>) and memory usage reasons (laziness).
+Similarly, Rust&#8217;s ownership system can be too much of a hassle for high level code
+that isn&#8217;t subject to real time&nbsp;requirements.</p>
+<p>But if you look a little deeper,
+beyond just the surface descriptions of both languages,
+you can find plenty of <em>concepts</em> they&nbsp;share.</p>
+<h4>Traits: they are typeclasses,&nbsp;essentially</h4>
+<p>Take Haskell&#8217;s typeclasses, for example &#8212;
+the cornerstone of its rich and expressive type&nbsp;system.</p>
+<p>A <a href="https://en.wikipedia.org/wiki/Type_class"><em>typeclass</em></a> is, simply speaking,
+a list of capabilities:
+it defines what a type can <em>do</em>.
+There exist analogs of typeclasses in most programming languages,
+but they are normally called interfaces or protocols,
+and remain closely tied to the object-oriented&nbsp;paradigm.</p>
+<p>Not so in&nbsp;Haskell.</p>
+<p>Or in Rust for that matter, where the equivalent concept exists under the name of <em>traits</em>.
+What typeclasses and traits have in common is that
+they&#8217;re used for <em>all kinds of polymorphism</em> in their respective&nbsp;languages.</p>
+<h5>Generics</h5>
+<p>For example, let&#8217;s consider <em>parametrized types</em>,
+sometimes also referred to as templates (C++) or generics&nbsp;(C#).</p>
+<p>In many cases, a generic function or type requires its type arguments
+to exhibit certain characteristics.
+In some languages (like the legacy C++), this is checked only implicitly:
+as long as the template type-checks after its expansion, everything is&nbsp;okay:</p>
+<div class="highlight"><pre><span class="k">template</span> <span class="o">&lt;</span><span class="k">typename</span> <span class="n">T</span><span class="o">&gt;</span> <span class="n">T</span> <span class="n">min</span><span class="p">(</span><span class="n">T</span> <span class="n">a</span><span class="p">,</span> <span class="n">T</span> <span class="n">b</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">a</span> <span class="o">&gt;</span> <span class="n">b</span> <span class="o">?</span> <span class="nl">b</span> <span class="p">:</span> <span class="n">a</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">struct</span> <span class="n">Foo</span> <span class="p">{};</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">min</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">);</span>  <span class="c1">// OK</span>
+    <span class="n">min</span><span class="p">(</span><span class="n">Foo</span><span class="p">(),</span> <span class="n">Foo</span><span class="p">());</span>  <span class="c1">// ERROR, no operator `&gt;`</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>More advanced type systems, however, allow to specify the generic constraints <em>explicitly</em>.
+This is the case in&nbsp;Rust:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">min</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Ord</span><span class="o">&gt;</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>as well as in&nbsp;Haskell:</p>
+<div class="highlight"><pre><span class="nf">min</span> <span class="ow">::</span> <span class="p">(</span><span class="kt">Ord</span> <span class="n">a</span><span class="p">)</span> <span class="ow">=&gt;</span> <span class="n">a</span> <span class="ow">-&gt;</span> <span class="n">a</span> <span class="ow">-&gt;</span> <span class="n">a</span>
+<span class="nf">min</span> <span class="n">a</span> <span class="n">b</span> <span class="ow">=</span> <span class="kr">if</span> <span class="n">a</span> <span class="o">&gt;</span> <span class="n">b</span> <span class="kr">then</span> <span class="n">b</span> <span class="kr">else</span> <span class="n">a</span>
+</pre></div>
+
+
+<p>In both languages, the notion of a type supporting certain operations (like comparison/ordering)
+is represented as its own, first-class concept:
+a <em>trait</em> (Rust) or a <em>typeclass</em> (Haskell).
+Since the compiler is aware of those constraints,
+it can verify that the <code>min</code> function is used correctly even before
+it tries to generate code for a specific substitution of <code>T</code>.</p>
+<h5>Dynamic&nbsp;dispatch</h5>
+<p>On the other hand, let&#8217;s look at <em>runtime polymorphism</em>:
+the one that <span class="caps">OO</span> languages implement
+through abstract base classes and virtual methods.
+It&#8217;s the tool of choice if you need a container of objects of different types,
+which nevertheless all expose the same&nbsp;interface.</p>
+<p>To offer it, Rust has <a href="https://doc.rust-lang.org/book/first-edition/trait-objects.html"><em>trait objects</em></a>,
+and they work pretty much exactly like base class pointers/references from Java, C++, or&nbsp;C#.</p>
+<div class="highlight"><pre><span class="c1">// Trait definition</span>
+<span class="k">trait</span><span class="w"> </span><span class="n">Draw</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">draw</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="c1">// Data type implementing the trait</span>
+<span class="k">struct</span><span class="w"> </span><span class="n">Circle</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">radius</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="k">impl</span><span class="w"> </span><span class="n">Draw</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">Circle</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">draw</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* omitted */</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="c1">// Usage</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">draw_all</span><span class="p">(</span><span class="n">objects</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">Box</span><span class="o">&lt;</span><span class="n">Draw</span><span class="o">&gt;&gt;</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="o">&amp;</span><span class="n">obj</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">objects</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">obj</span><span class="p">.</span><span class="n">draw</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The Haskell analogue is, in turn, based on typeclasses,
+though the specifics can be a little bit&nbsp;trickier:</p>
+<div class="highlight"><pre><span class="cm">{-# LANGUAGE ExistentialQuantification #-}</span>
+
+<span class="c1">-- Typeclass definition</span>
+<span class="kr">class</span> <span class="kt">Draw</span> <span class="n">a</span> <span class="kr">where</span>
+    <span class="n">draw</span> <span class="ow">::</span> <span class="n">a</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="nb">()</span>
+
+<span class="c1">-- Polymorphic wrapper type</span>
+<span class="kr">data</span> <span class="kt">Draw&#39;</span> <span class="ow">=</span> <span class="n">forall</span> <span class="n">a</span><span class="o">.</span> <span class="kt">Draw</span> <span class="n">a</span> <span class="ow">=&gt;</span> <span class="kt">Draw&#39;</span> <span class="n">a</span>
+<span class="kr">instance</span> <span class="kt">Draw</span> <span class="kt">Draw&#39;</span> <span class="kr">where</span>
+    <span class="n">draw</span> <span class="p">(</span><span class="kt">Draw&#39;</span> <span class="n">d</span><span class="p">)</span> <span class="ow">=</span> <span class="n">draw</span> <span class="n">d</span>
+
+<span class="c1">-- Data types instantiating (&quot;implementing&quot;) the typeclass</span>
+<span class="kr">data</span> <span class="kt">Circle</span> <span class="ow">=</span> <span class="kt">Circle</span> <span class="nb">()</span>
+<span class="kr">instance</span> <span class="kt">Draw</span> <span class="kt">Circle</span> <span class="kr">where</span> <span class="n">draw</span> <span class="ow">=</span> <span class="n">undefined</span> <span class="c1">-- omitted</span>
+<span class="kr">data</span> <span class="kt">Square</span> <span class="ow">=</span> <span class="kt">Square</span> <span class="nb">()</span>
+<span class="kr">instance</span> <span class="kt">Draw</span> <span class="kt">Square</span> <span class="kr">where</span> <span class="n">draw</span> <span class="ow">=</span> <span class="n">undefined</span> <span class="c1">-- omitted</span>
+
+<span class="c1">-- Usage</span>
+<span class="nf">drawAll</span> <span class="ow">::</span> <span class="p">(</span><span class="kt">Draw</span> <span class="n">a</span><span class="p">)</span> <span class="ow">=&gt;</span> <span class="p">[</span><span class="n">a</span><span class="p">]</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="nb">()</span>
+<span class="nf">drawAll</span> <span class="n">ds</span> <span class="ow">=</span> <span class="n">mapM_</span> <span class="n">draw</span> <span class="n">ds</span>
+
+<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="kr">let</span> <span class="n">shapes</span> <span class="ow">=</span> <span class="p">[</span><span class="kt">Draw&#39;</span> <span class="kt">Circle</span> <span class="nb">()</span><span class="p">,</span> <span class="kt">Draw&#39;</span> <span class="kt">Square</span> <span class="nb">()</span><span class="p">]</span>
+    <span class="n">drawAll</span> <span class="n">shapes</span>
+</pre></div>
+
+
+<p>Here, the generic function can use typeclass constraints directly (<code>(Draw a) =&gt; ...</code>),
+but creating a container of different object types requires a polymorphic wrapper<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.</p>
+<h5>Differences</h5>
+<p>All those similarities do not mean that
+Rust traits and Haskell typeclasses are one and the same.
+There are, in fact, quite a few differences, owing mostly to the fact that
+Haskell&#8217;s type system is more&nbsp;expressive:</p>
+<ul>
+<li>
+<p>Rust lacks <a href="https://en.wikipedia.org/wiki/Kind_(type_theory)#Kinds_in_Haskell"><em>higher kinded types</em></a>,
+  making certain abstractions impossible to encode as traits.
+  It <em>is</em> possible, however, to implement a trait for infinitely many types at once
+  if the <code>impl</code>ementation itself is generic
+  (like <a href="https://github.com/Xion/rofld/blob/2a9e427707cc93c716e011e99b0127f19cd770a5/src/lib/resources/mod.rs#L45">here</a>).</p>
+</li>
+<li>
+<p>When defining a trait in Rust, you can ask implementors to provide some auxiliary,
+  <a href="https://doc.rust-lang.org/book/first-edition/associated-types.html">associated types</a>
+  in addition to just methods<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.
+  A similar mechanism in Haskell is expanded into <a href="https://wiki.haskell.org/GHC/Type_families">type families</a>,
+  and requires enabling a <a href="https://ocharles.org.uk/blog/posts/2014-12-12-type-families.html"><span class="caps">GHC</span> extension</a>.</p>
+</li>
+<li>
+<p>While typeclasses in Haskell can be implemented for multiple types simultaneously
+  via a <a href="https://wiki.haskell.org/Multi-parameter_type_class"><span class="caps">GHC</span> extension</a>,
+  Rust&#8217;s take on this feature is to make <em>traits themselves</em> generic (e.g. <code>trait Foo&lt;T&gt;</code>).
+  The end result is roughly similar;
+  however, the &#8220;main implementing type&#8221; (one after <code>for</code> in <code>impl ... for ...</code>)
+  is still a method receiver (<code>self</code>), just like in <span class="caps">OO</span>&nbsp;languages.</p>
+</li>
+<li>
+<p>Rust enforces <em>coherence rules</em> on trait implementations.
+  The topic is actually
+  <a href="http://smallcultfollowing.com/babysteps/blog/2015/01/14/little-orphan-impls/">rather complicated</a>,
+  but the gist is about local (current package) vs. remote (other packages / standard library)
+  traits and types.<br>
+  Without too much detail, coherence demands that there be a local type or trait
+  somewhere in the <code>impl ... for ...</code> construct.
+  Haskell doesn&#8217;t have this limitation,
+  although it is recommended <a href="https://wiki.haskell.org/Orphan_instance">not to take advantage of this</a>.</p>
+</li>
+</ul>
+<h4>The&nbsp;M-word</h4>
+<p>Another area of overlap between Haskell and Rust exists
+in the <em>data model</em> utilized by those languages.
+Both are taking heavy advantage of <a href="https://en.wikipedia.org/wiki/Algebraic_data_type"><em>algebraic data types</em> (<span class="caps">ADT</span>)</a>,
+including the ability to define both <em>product types</em> (&#8220;regular&#8221; structs and records)
+as well as <em>sum types</em> (tagged&nbsp;unions).</p>
+<h5><code>Maybe</code> you&#8217;d like <code>Some(T)</code>?</h5>
+<p>Even more interestingly,
+code in both languages makes extensive use of the two most basic&nbsp;ADTs:</p>
+<ul>
+<li><code>Option</code> (Rust) or <code>Maybe</code> (Haskell) &#8212;
+  for denoting a presence or absence of a&nbsp;value</li>
+<li><code>Result</code> (Rust) or <code>Either</code> (Haskell) &#8212;
+  for representing the alternative of &#8220;correct&#8221; and &#8220;erroneous&#8221;&nbsp;value</li>
+</ul>
+<p>These aren&#8217;t just simple datatypes.
+They are deeply interwoven into the basic semantics of both languages,
+not to mention their standard libraries and community-provided&nbsp;packages.</p>
+<p>The <code>Option</code>/<code>Maybe</code> type, for example,
+is the alternative to <em>nullable references</em>:
+something that&#8217;s been
+<a href="https://www.lucidchart.com/techblog/2015/08/31/the-worst-mistake-of-computer-science/">heavily criticized</a>
+for making programs prone to unexpected <code>NullReferenceException</code>s.
+The idea behind both of those types is to make actual values impossible to confuse with <code>null</code>s
+by encoding the potential nullability into the type&nbsp;system:</p>
+<div class="highlight"><pre><span class="k">enum</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"> </span><span class="nb">None</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre><span class="kr">data</span> <span class="kt">Maybe</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">Just</span> <span class="n">a</span> <span class="o">|</span> <span class="kt">Nothing</span>
+</pre></div>
+
+
+<p><code>Result</code> and <code>Either</code>, on the other hand,
+can be thought as an extension of this idea.
+They also represent two possibilities,
+but the &#8220;wrong&#8221; one isn&#8217;t just <code>None</code> or <code>Nothing</code>
+&#8212; it has some more information associated with&nbsp;it:</p>
+<div class="highlight"><pre><span class="k">enum</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">E</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">E</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre><span class="kr">data</span> <span class="kt">Either</span> <span class="n">e</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">Left</span> <span class="n">e</span> <span class="o">|</span> <span class="kt">Right</span> <span class="n">a</span>
+</pre></div>
+
+
+<p>This dichotomy between the <code>Ok</code> (or <code>Right</code>) value and the <code>Err</code>or value (or the <code>Left</code> one)
+makes it a great vehicle for carrying results of functions that can <em>fail</em>.</p>
+<p>In Rust, this replaces the traditional error handling mechanisms based on exceptions.
+In Haskell, the exceptions are present and sometimes necessary,
+but <code>Either</code> is nevertheless the preferred approach to dealing with&nbsp;errors.</p>
+<h5>What to <code>do</code>?</h5>
+<p>One thing that Haskell does better is <em>composing</em> those fallible functions
+into bigger chunks of&nbsp;logic.</p>
+<p>Relatively recently, Rust has added the <a href="https://m4rw3r.github.io/rust-questionmark-operator"><code>?</code> operator</a>
+as a replacement for the <code>try!</code> macro.
+This is now the preferred way of <em>error propagation</em>,
+allowing for a more concise composition of functions that return <code>Result</code>s:</p>
+<div class="highlight"><pre><span class="c-Doc">/// Read an integer from given file.</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">int_from_file</span><span class="p">(</span><span class="n">path</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="nb">Path</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">io</span><span class="o">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fs</span><span class="o">::</span><span class="n">File</span><span class="o">::</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">?</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">String</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="n">file</span><span class="p">.</span><span class="n">read_to_string</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">s</span><span class="p">)</span><span class="o">?</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">io</span><span class="o">::</span><span class="n">Error</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="n">io</span><span class="o">::</span><span class="n">ErrorKind</span><span class="o">::</span><span class="n">InvalidData</span><span class="p">,</span><span class="w"> </span><span class="n">e</span><span class="p">))</span><span class="o">?</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>But Haskell had it for much longer,
+and it&#8217;s something of a hallmark of the language and functional programming in general
+&#8212; even though it looks thoroughly <em>imperative</em>:</p>
+<div class="highlight"><pre><span class="nf">intFromFile</span> <span class="ow">::</span> <span class="kt">FilePath</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="kt">Int</span>
+<span class="nf">intFromFile</span> <span class="n">path</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">s</span> <span class="ow">&lt;-</span> <span class="n">readFile</span> <span class="n">path</span>
+    <span class="n">i</span> <span class="ow">&lt;-</span> <span class="n">readIO</span> <span class="n">s</span>
+    <span class="n">return</span> <span class="n">i</span>
+</pre></div>
+
+
+<p>If you haven&#8217;t seen it before, this is of course a <em>monad</em> &#8212; the <code>IO</code> monad, to be precise.
+While discussing monads in detail is way outside of the scope of this article,
+we can definitely notice some analogies with Rust.
+The <code>do</code> notation with <code>&lt;-</code> arrows is evidently similar to
+how in Rust you&#8217;d assign the result of a fallible operation after &#8220;unpacking&#8221; it with <code>?</code>.</p>
+<p>But of course,
+there&#8217;s plenty of different monads in Haskell: not just <code>IO</code>,
+but also <code>Either</code>, <code>Maybe</code>, <code>Reader</code>, <code>Writer</code>, <code>Cont</code>, <code>STM</code>, and many others.
+In Rust (at least as of 1.19), the <code>?</code> operator only works for <code>Result</code> types,
+although there is <a href="https://github.com/rust-lang/rfcs/issues/1718">some talk</a>
+about extending it to <code>Option</code> as well<sup id="fnref:6"><a class="footnote-ref" href="#fn:6" rel="footnote">6</a></sup>.</p>
+<p>Eventually, we may see the language adopt some variant of the <code>do</code> notation,
+though the motivation for this will most likely come from
+<a href="https://github.com/alexcrichton/futures-await">asynchronous programming with <code>Future</code>s</a>
+rather than plain <code>Result</code>s.
+General monads, however, require support for <em>higher kinded types</em>
+which <a href="https://github.com/rust-lang/rfcs/issues/324">isn&#8217;t coming anytime soon</a>.</p>
+<h4>A path through&nbsp;Rust?</h4>
+<p>Now that we&#8217;ve discussed those similarities,
+the obvious question&nbsp;arises.</p>
+<blockquote>
+<p>Is learning Rust worthwhile
+if your ultimate goal is getting proficient at functional programming in general,
+or Haskell in&nbsp;particular?</p>
+</blockquote>
+<p>My answer to that is actually pretty&nbsp;straightforward.</p>
+<p>If &#8220;getting to <span class="caps">FP</span>&#8221; is your main goal, then Rust will <em>not</em> help you very much.
+Functional paradigm isn&#8217;t the main idea behind the language &#8212;
+its shtick is mostly <em>memory safety</em>, and zero-cost abstractions.
+While it succeeds somewhat at being &#8220;Haskell Lite&#8221;,
+it really strives to be <em>safer C++</em><sup id="fnref:7"><a class="footnote-ref" href="#fn:7" rel="footnote">7</a></sup>.</p>
+<p>But if, on the other hand, you regard <span class="caps">FP</span> mostly as a curiosity
+that seems to be seeping into your favorite imperative language at an increasing rate,
+Rust can be a good way to gain familiarity with this peculiar&nbsp;beast.</p>
+<p>At the very least, you will learn the functional way of <em>modeling programs</em>,
+with lots of smart enums/unions and structs but without&nbsp;inheritance.</p>
+<p>And the best part is: you will be so busy
+<a href="https://m-decoster.github.io//2017/01/16/fighting-borrowchk/">fighting the borrow checker</a>
+you won&#8217;t even notice when it happens&nbsp;;-)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Just ask in <code>#haskell-beginners</code> on Freenode if you&#8217;re interested.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Though ironically,
+I found the <a href="https://www.youtube.com/playlist?list=PLbgaMIhjbmEnaH_LTkxLI7FMa2HsnawM_"><span class="caps">CT</span> lectures by Bartosz Milewski</a>
+very helpful in developing the right intuitions, even though they&#8217;re very abstract.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>For example, Haskell has <em>green threads</em> (created with <code>forkIO</code>)
+which are somewhat similar to goroutines from Go.
+To get anything remotely similar in Rust, you need to use <a href="http://tokio.rs">external libraries</a>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Note that such containers aren&#8217;t very idiomatic Haskell.
+A more typical solution would be to just curry the <code>draw</code> function,
+implicitly putting the <code>Draw</code> object inside its closure.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>This mechanisms expands to
+<a href="https://doc.rust-lang.org/1.6.0/book/associated-constants.html">associated constants</a>
+in Rust 1.20.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+<li id="fn:6">
+<p>Those two types also have a form of <em>monadic bind</em> (<code>&gt;&gt;=</code> in Haskell)
+exposed as <a href="https://doc.rust-lang.org/std/result/enum.Result.html#method.and_then">the <code>and_then</code> method</a>.&#160;<a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text">&#8617;</a></p>
+</li>
+<li id="fn:7">
+<p>If you want another language for easing into the concept of functional programming,
+I&#8217;ve heard that Scala fills that niche quite well.&#160;<a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/programming/rust-into-haskell.html#rust-into-haskell">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/long-live-dynamic-languages.html#long-live-dynamic-languages">Long Live Dynamic&nbsp;Languages!</a></h2>
     <p>
       Posted on Wed 24 May 2017 in <a href="http://xion.io/category/programming.html">Programming</a>

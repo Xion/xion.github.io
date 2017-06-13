@@ -63,6 +63,166 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Tricks with ownership in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Mon 07 March 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/reference-counting.html">reference counting</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-borrowchk-tricks.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>&#8230;or how I learned to stop worrying and love the borrow&nbsp;checker.</em></p>
+<p>Having no equivalents in other languages, the <a href="https://doc.rust-lang.org/book/ownership.html">borrow checker</a>
+is arguably the most difficult thing to come to terms with when learning Rust. It&#8217;s easy to understand why it&#8217;s immensely
+useful, especially if you recall
+<a href="https://googleonlinesecurity.blogspot.com/2016/02/cve-2015-7547-glibc-getaddrinfo-stack.html">the various vulnerabities</a>
+stemming from memory mismanagement. But that knowledge doesn&#8217;t exactly help when the compiler is whining about what
+seems like a perfectly correct&nbsp;code.</p>
+<p>Let&#8217;s face it: it will take some time to become productive writing efficient and safe code. It&#8217;s not entirely unlike
+adjusting to a different paradigm such as functional programming when you&#8217;ve been writing mostly imperative code.
+Before that happens, though, you can use some tricks to make the transition a little&nbsp;easier.</p>
+<h4>Just <code>clone</code> it</h4>
+<p>Ideally, we&#8217;d want our code to be both correct <em>and</em> fast. But if we cannot quite get to the &#8220;correctness&#8221; part yet &#8212;
+because our program doesn&#8217;t, you know, <em>compile</em> &#8212; then how about paying for it with a small (and refundable)
+performance&nbsp;hit?</p>
+<p>This is where the <code>clone</code> method comes in handy. Many problems with the borrow checker stem from trying to spread
+object ownership too thin. It is a precious resource and it&#8217;s not very cheap to &#8220;produce&#8221;, which is why good Rust code
+often deals with just immutable or mutable&nbsp;references.</p>
+<p>But if that proves difficult, then &#8220;making more objects&#8221; is a great intermediate solution. Incidentally, this is what
+higher level languages are doing all the time, and often transparently. To ease the transition to Rust from
+those languages, we can start off by replicating their&nbsp;behavior.</p>
+<p>As an example, consider a function that tries to convert some value to <code>String</code>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">maybe_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// omitted</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>If we attempt to build upon it and create a <code>Vec</code>tor&nbsp;version:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_all_to_string</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">results</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="n">maybe_to_string</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">res</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">find</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">is_err</span><span class="p">())</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>then we&#8217;ll be unpleasantly surprised by a borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>error: cannot move out of borrowed content [E0507]
+    Ok(results.iter().map(|r| r.ok().unwrap()).collect())
+                              ^
+</pre></div>
+
+
+<p>Much head scratching will ensue, and we may eventually find an idiomatic and efficient solution.
+However, a simple stepping stone in the shape of additional <code>clone()</code> call can help move things forward just
+a little&nbsp;quicker:</p>
+<div class="highlight"><pre><span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">struct</span><span class="w"> </span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="c1">// ...</span>
+<span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">clone</span><span class="p">().</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+</pre></div>
+
+
+<p>The performance tradeoff is explicit, and easy to find later on with a simple <code>grep clone\(\)</code> or similar.
+When you learn to do things the Rusty way, it won&#8217;t be hard to go back to your &#8220;hack&#8221; and fix it&nbsp;properly.</p>
+<h4>Refcounting to the&nbsp;rescue</h4>
+<p>Adding <code>clone()</code> willy-nilly to make the code compile is a valid workaround when we&#8217;re just learning. Sometimes, however,
+even some gratuitous cloning doesn&#8217;t <em>quite</em> solve the problem, because the <code>clone()</code> itself can become an&nbsp;issue.</p>
+<p>For one, it requires our objects to implement the <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html"><code>Clone</code> trait</a>.
+This was apparent even in our previous example, since we had to add a <code>#[derive(Clone)]</code> attribute to the <code>struct Error</code>
+in order to make it <code>clone</code>-able.</p>
+<p>Fortunately, in the vast majority of cases this will be all that&#8217;s necessary, as most built-in types in Rust implement
+<code>Clone</code> already. One notable exception are <em>function traits</em> (<code>FnOnce</code>, <code>Fn</code>, and <code>FnMut</code>) which are used to store
+and refer to <em>closures</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Structures and other custom types that contain them (or those which <em>may</em> contain them)
+cannot therefore implement <code>Clone</code> through a simple <code>#[derive]</code> annotation:</p>
+<div class="highlight"><pre><span class="c-Doc">/// A value that&#39;s either there already</span>
+<span class="c-Doc">/// or can be obtained by calling a function.</span>
+<span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>error: the trait `core::marker::Sized` is not implemented for the type `core::ops::Fn() -&gt; T + &#39;static` [E0277]
+    #[derive(Clone)]
+             ^~~~~
+</pre></div>
+
+
+<p>What can we do in this case, then? Well, there is yet another kind of performance concessions we can make,
+and this one will likely sound familiar if you&#8217;ve ever worked with a higher level language before. Instead of actually
+cloning an object, you can merely increment its <em>reference counter</em>. As the most rudimentary kind of garbage collection,
+this allows to safely share the object between multiple &#8220;owners&#8221;, where each can behave as if it had
+its own copy of&nbsp;it.</p>
+<p>Rust&#8217;s pointer type that provides reference counting capabilities is called <code>std::rc::Rc</code>. Conceptually, it is analogous
+to <code>std::shared_ptr</code> from C++, and it similarly keeps the refcount updated when the pointer is &#8220;acquired&#8221; (<code>clone</code>-ed)
+and &#8220;released&#8221; (<code>drop</code>-ed). Because no data is moved around during either of those two operations, <code>Rc</code> can refer even
+to types whose size isn&#8217;t known at compilation time, like abstract&nbsp;closures:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">rc</span><span class="o">::</span><span class="n">Rc</span><span class="p">;</span><span class="w"></span>
+
+<span class="cp">#[derive(Clone)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">LazyValue</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Clone</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Immediate</span><span class="p">(</span><span class="n">T</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Deferred</span><span class="p">(</span><span class="n">Rc</span><span class="o">&lt;</span><span class="n">Fn</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Wrapping them in <code>Rc</code> therefore makes them &#8220;cloneable&#8221;. They aren&#8217;t actually cloned, of course, but because of
+the inherent immutability of Rust types they will appear so to any outside observer<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4>Move&nbsp;it!</h4>
+<p>Ultimately, most problems with the borrow checker boil down to unskillful mixing of the two ways you handle data in Rust.
+There is <em>ownership</em>, which is passed around by moving the values; and there is <em>borrowing</em>, which means operating
+on them through&nbsp;references.</p>
+<p>When you try to switch from one to the other, some friction is bound to occur. Code that uses references, for example,
+has to be copiously sprinkled with <code>&amp;</code> and <code>&amp;mut</code>, and may sometimes require explicit lifetime annotations. All these
+have to be added or removed, and changes like that tend to propagate quite readily to the upper layers
+of the program&#8217;s&nbsp;logic.</p>
+<p>Therefore it is generally preferable, if at all possible, to deal with data directly
+and not through references. To maintain efficiency, however, we need to learn how to move the objects through the various
+stages of our algorithms. It turns out it&#8217;s surprisingly easy to inadvertently borrow something, hindering the possibility
+of producing a moved&nbsp;value.</p>
+<p>Take our first example. The intuitively named <code>Vec::iter</code> method produces an iterator that we can <code>map</code> over, but does
+it really go over the actual <em>items</em> in the vector? Nope! It gives us a <em>reference</em> to each one &#8212; a borrow, if you will
+&#8212; which is exactly why we originally had to use <code>clone</code> to get out of this&nbsp;bind.</p>
+<p>Instead, why not just get the elements themselves, by moving them out of the vector? <code>Vec::into_iter</code> allows to do exactly&nbsp;this:</p>
+<div class="highlight"><pre><span class="nb">Ok</span><span class="p">(</span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="n">r</span><span class="p">.</span><span class="n">ok</span><span class="p">().</span><span class="n">unwrap</span><span class="p">()).</span><span class="n">collect</span><span class="p">())</span><span class="w"></span>
+</pre></div>
+
+
+<p>and enables us to remove the <code>clone()</code> call. The family of similar <code>into_X</code> (or even just <code>into</code>) methods can be reliably counted
+on at least in the standard library. They are also part of a more-or-less official
+<a href="https://aturon.github.io/style/naming.html#conversions">naming convention</a> that you should also follow in your own&nbsp;code.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Note how this is different from function <em>types</em>, i.e. <code>fn(A, B, C, ...) -&gt; Ret</code>. It is because plain functions
+do not carry their closure environments along with them. This makes them little more than just pointers to some code,
+and those can be freely <code>Clone</code>-d (or even <code>Copy</code>-ed).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>If you want both shared ownership (&#8220;fake cloneability&#8221;) <em>and</em> the ability to mutate the shared value,
+take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.html"><code>RefCell</code> type</a> and how it can be
+<a href="http://doc.rust-lang.org/nightly/book/choosing-your-guarantees.html#composition">wrapped in <code>Rc</code></a> to achieve both.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Requirements for Python&#8217;s&nbsp;pip</a></h2>
     <p>
       Posted on Sun 21 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -894,111 +1054,6 @@ has to be <a href="http://knockoutjs.com/documentation/custom-bindings-controlli
 about our intentions through the <code>return</code> value from <code>init</code>. Otherwise, it would try to apply the <em>original</em>
 <code>bindingContext</code> recursively, which in our case would amount to applying it <strong>twice</strong>.
 <code>{ controlsDescendantBindings: true }</code> prevents Knockout from doing so&nbsp;erroneously.</p>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Turn SQLAlchemy queries into literal <span class="caps">SQL</span></a></h2>
-    <p>
-      Posted on Thu 12 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>,      <a href="http://xion.io/tag/sql.html">SQL</a>,      <a href="http://xion.io/tag/databases.html">databases</a>      &#8226; <a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Like I mentioned in the <a href="http://xion.io/post/code/sqlalchemy-regex-filters.html">post about adding regular expression support</a>,
-the nice thing about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a> is the clean, layered structure of various abstractions
-it&nbsp;utilizes.</p>
-<p>Regretably, though, we know that <a href="https://en.wikipedia.org/wiki/Leaky_abstraction">software abstractions tend to leak</a>.
-Inn particular, any <span class="caps">ORM</span> seem to be a poster child of this rule, especially in the popular opinion among
-<a href="https://www.reddit.com/r/programming/search?q=ORM&amp;restrict_sr=on">developer crowds</a>.
-By design, they&#8217;re intended to hide at least <em>some</em> details of the operations on a database,
-but those very details can be quite critical at times. There are situations when we simply want to know
-what <em>exactly</em> is going on, and how all those model classes and mappers and relationships translate
-to the actual <span class="caps">SQL</span>&nbsp;code.</p>
-<p>To make it a little more concrete, let&#8217;s focus on the SQLAlchemy <code>Query</code> class. Given such a query, we&#8217;d like to get
-the final <span class="caps">SQL</span> representation of it, the one that&#8217;s ultimately sent to the database, It could be useful
-for any number of things, from logging<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> to profiling, or just displaying in the web page&#8217;s footer,
-or even solely for prototyping in the Python <span class="caps">REPL</span>.</p>
-<p>In other words, we want to turn&nbsp;this:</p>
-<div class="highlight"><pre><span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">some_email</span><span class="p">)</span>
-</pre></div>
-
-
-<p>into something like&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">SELECT</span> <span class="n">users</span><span class="p">.</span><span class="n">id</span> <span class="k">FROM</span> <span class="n">users</span> <span class="k">WHERE</span> <span class="n">users</span><span class="p">.</span><span class="n">email</span> <span class="o">=</span> <span class="p">:</span><span class="mi">1</span>
-</pre></div>
-
-
-<p>regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related
-<code>JOIN</code>s it&nbsp;involves.</p>
-<h4>It&#8217;s a&nbsp;dialect</h4>
-<p>There is one aspect we cannot really universalize, though. It&#8217;s the specific <em>database backend</em> that SQLAlchemy
-should compile our query for. Shrugging off syntactical and semantical differences between database engines
-is one thing that using an <span class="caps">ORM</span> can potentially buy us, but if we want to get down to the <span class="caps">SQL</span> level,
-we need to be specific about&nbsp;it.</p>
-<p>In SQLAlchemy&#8217;s parlance, any specific variant of the <span class="caps">SQL</span> language is called a <em>dialect</em>. Most of the time,
-you&#8217;ll be interested in the particular dialect your database of choice is using. This is easily obtainable from
-the <a href="docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session">database <code>Session</code></a>:</p>
-<div class="highlight"><pre><span class="n">dialect</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
-</pre></div>
-
-
-<p>The resulting
-<a href="http://docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Dialect"><code>Dialect</code> object</a>
-is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of
-the database backends it supports. For our purposes, though, it can be treated as a completely opaque&nbsp;token.</p>
-<h4>Compile <span class="amp">&amp;</span>&nbsp;unwrap</h4>
-<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representation of our <code>Query</code>.
-Or, to be more precise, the compiled version of the query&#8217;s
-<a href="docs.sqlalchemy.org/en/latest/core/selectable.html#sqlalchemy.sql.expression.Select"><code>Select</code> statement</a></p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="s">&#39;foo@example.com&#39;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">print</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span><span class="p">))</span>
-<span class="n">SELECT</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span>
-<span class="n">FROM</span> <span class="n">users</span>
-<span class="n">WHERE</span> <span class="n">users</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="o">%</span><span class="p">(</span><span class="n">email_1</span><span class="p">)</span><span class="n">s</span>
-</pre></div>
-
-
-<p>Perhaps unsurprisingly, even after compilation the result is still just <em>another object</em>:
-the <a href="docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Compiled"><code>Compiled</code> one</a>.
-As you can see, however, the actual <span class="caps">SQL</span> text is just its <code>__str__</code><span class="quo">&#8216;</span>ing representation, which we can <code>print</code> directly
-or obtain with <code>str()</code> or <code>unicode()</code>.</p>
-<h4><code>Query.to_sql</code></h4>
-<p>But obviously, we don&#8217;t want to type the above incantations every time we need to take a peek at the generated <span class="caps">SQL</span>
-for an <span class="caps">ORM</span> query. Probably the best solution is to extend the <code>Query</code> class so that it offers this additional
-functionality under a new&nbsp;method:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
-
-
-<span class="k">class</span> <span class="nc">Query</span><span class="p">(</span><span class="n">_Query</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Custom, enhanced SQLALchemy Query class.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">to_sql</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Return a literal SQL representation of the query.&quot;&quot;&quot;</span>
-        <span class="n">dialect</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
-        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">dialect</span><span class="p">))</span>
-</pre></div>
-
-
-<p>This new <code>Query</code> class needs then be passed as
-<a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.params.query_cls"><code>query_cls</code> argument</a>
-to the constructor of <code>Session</code>. Details may vary a little bit depending on how exactly your application is set up,
-but in most cases, it should be <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">easy enough to figure out</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>If you&#8217;re only interested in indiscriminate logging of all queries, setting the
-<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine.params.echo"><code>echo</code> parameter</a>
-in <a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine"><code>create_engine</code></a> may be sufficient.
-Another alternative is to look directly at the
-<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#configuring-logging">logging configuration options</a>
-for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
   </div>
 </article>
 
