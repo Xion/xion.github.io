@@ -63,6 +63,122 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Pipe `xargs` into&nbsp;`find`</a></h2>
+    <p>
+      Posted on Sun 03 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/shell-scripting.html">shell scripting</a>,      <a href="http://xion.io/tag/bash.html">Bash</a>,      <a href="http://xion.io/tag/xargs.html">xargs</a>,      <a href="http://xion.io/tag/find.html">find</a>,      <a href="http://xion.io/tag/zsh.html">zsh</a>      &#8226; <a href="http://xion.io/post/code/shell-xargs-into-find.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a trick that&#8217;s hardly new, but if you haven&#8217;t heard about, it will save you a trip to a man page or&nbsp;two.</p>
+<p>Assuming you&#8217;re a person who mostly prefers the terminal over some fancy <span class="caps">GUI</span>, you&#8217;ve probably used the <code>find</code> command
+along with <code>xargs</code> at least a few times. It&#8217;s very common, for example, to use the results of <code>find</code> as arguments
+to some other program. It could something as simple as figuring out which modules in your project have grown
+slightly too&nbsp;large:</p>
+<div class="highlight"><pre>$ find . -name &#39;*.py&#39; | xargs wc -l | sort -hr
+1467 total
+ 322 callee/base.py
+ 261 callee/general.py
+ 251 callee/collections.py
+# etc.
+</pre></div>
+
+
+<p>We find them all first, and then use <code>xargs</code> to build a long <code>wc</code> invocation, and we finally display results
+in the reverse order. Pretty easy stuff: I don&#8217;t usually have to try more than a dozen times to get it right!<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup></p>
+<p>But how about the opposite situation? Let&#8217;s say you have a list of <em>directories</em> you want to search through with <code>find</code>.
+Doing so may seem easy enough<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre>$ cat packagedirs.txt | xargs find -name &#39;__init__.py&#39;
+</pre></div>
+
+
+<p>Except it&#8217;s not going to work. Like a few other Unix commands, <code>find</code> is very particular about the order of arguments
+it receives. Not only are the predicate flags (like <code>-name</code>) considered in sequence, but they also have to appear
+<em>after</em> the directories we want to search&nbsp;through.</p>
+<p>But in the <code>xargs</code> invocation above, essentially the opposite is going to&nbsp;happen.</p>
+<h4>The replacement&nbsp;flag</h4>
+<p>So how to remedy this? Enter the <code>-I</code> flag to <code>xargs</code>:</p>
+<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} find {} -name &#39;__init__.py&#39;
+</pre></div>
+
+
+<p>This flag will tell <code>xargs</code> quite a few&nbsp;things.</p>
+<p>The most important one is to stop putting the arguments at the end of the command invocation.
+Instead, it shall place them wherever it sees the <em>replacement string</em> &#8212; here, pair of braces<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>: <code>{}</code>.
+And because we placed the braces where <code>find</code> is normally expecting the list of directories to search through,
+the command will now get us exactly the results we&nbsp;wanted.</p>
+<p>What&#8217;s almost impossible to see, however, is that it may not use the exact <em>way</em> we intended to obtain those results.
+The difference is easier to spot when we replace <code>find</code> with <code>echo</code>:</p>
+<div class="highlight"><pre>$ cat &gt;/tmp/list
+foo
+bar
+$ cat /tmp/list | xargs echo
+foo bar
+$ cat /tmp/list | xargs -I{} echo {}
+foo
+bar
+</pre></div>
+
+
+<p>or, better yet, use <code>xargs</code> with the <code>-t</code> flag to print the commands on stderr before executing&nbsp;them:</p>
+<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} -t find {} -name &#39;__init__.py&#39; &gt;/dev/null
+find callee -name &#39;__init__.py&#39;
+find tests -name &#39;__init__.py&#39;
+</pre></div>
+
+
+<p>As you can see, we actually have more than one <code>find</code> invocation&nbsp;here!</p>
+<p>This is the second effect of <code>-I</code>: it causes <code>xargs</code> to execute given command line <em>for each argument separately</em>.
+It so happens that it doesn&#8217;t really make any difference for our usage of <code>find</code>, which is why it wasn&#8217;t at all obvious
+we were running it multiple&nbsp;times.</p>
+<p>To avoid problems, though, you should definitely be cognizant of this fact when calling other programs with <code>xargs -I</code>.</p>
+<h4>Make arguments spaced&nbsp;again</h4>
+<p>Incidentally, I&#8217;m not aware of any method that&#8217;d actually make <code>xargs</code> produce <code>find foo bar -name ...</code> calls.
+If you need this exact form, probably the easiest way is to use plain old shell&nbsp;variables:</p>
+<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find $d -name &#39;*.py&#39;)
+</pre></div>
+
+
+<p>This takes advantage of the <a href="http://mywiki.wooledge.org/WordSplitting">word splitting</a> feature of Bash and a few other
+compatible shells. Caveat is, you may be using a shell where this behavior is disabled by default. The result would be
+making <code>find</code> interpret the content of <code>$d</code> as a <em>single</em> directory name: <code>foo bar</code> rather than <code>foo</code> and <code>bar</code>.</p>
+<p>zsh is one such shell. Although <a href="http://zsh.sourceforge.net/FAQ/zshfaq03.html#l18">probably a good thing overall</a>,
+in times like these you&#8217;d want to bring the &#8220;normal&#8221; behavior back. In zsh, it&#8217;s fortunately pretty&nbsp;simple:</p>
+<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find ${=d} -name &#39;*.py&#39;)
+</pre></div>
+
+
+<p>What about a portable solution? As far as I can tell, the only certain way you can ensure word splitting occurs
+is to use <code>eval</code>. Here, the <code>xargs</code> command can actually come in handy again, albeit only as a&nbsp;prop:</p>
+<div class="highlight"><pre>$ (d=$(cat packagedirs.txt | xargs echo); eval &quot;find $d -name &#39;*.py&#39;&quot;)
+</pre></div>
+
+
+<p>One would hope such hacks aren&#8217;t needed very&nbsp;often.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A completely kosher version would also use the <code>-print0</code> flag to <code>find</code> and the <code>-0</code> flag to <code>xargs</code>.
+It&#8217;s not necessary here because Python module files cannot contain spaces.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Purists shall excuse my use of <code>cat</code> here, it&#8217;s merely for illustrative purposes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>This use of braces in <code>find</code> has of course nothing to do with the <em>other</em> possible occurrences of <code>{}</code> there,
+like in the <code>-exec</code> flag. Since you cannot force <code>find</code> to expect a different placeholder, you should use something else
+for <code>xargs</code> in those cases, .e.g: <code>xargs -I^ find ^ -name '__main__.py' -exec 'python {}' \;</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Tricks with ownership in&nbsp;Rust</a></h2>
     <p>
       Posted on Mon 07 March 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -966,112 +1082,6 @@ about our intentions through the <code>return</code> value from <code>init</code
 <code>bindingContext</code> recursively, which in our case would amount to applying it <strong>twice</strong>.
 <code>{ controlsDescendantBindings: true }</code> prevents Knockout from doing so&nbsp;erroneously.</p>
       <a class="btn" href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Turn SQLAlchemy queries into literal <span class="caps">SQL</span></a></h2>
-    <p>
-      Posted on Thu 12 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/sqlalchemy.html">SQLAlchemy</a>,      <a href="http://xion.io/tag/sql.html">SQL</a>,      <a href="http://xion.io/tag/databases.html">databases</a>      &#8226; <a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Like I mentioned in the <a href="http://xion.io/post/code/sqlalchemy-regex-filters.html">post about adding regular expression support</a>,
-the nice thing about <a href="http://www.sqlalchemy.org/">SQLAlchemy</a> is the clean, layered structure of various abstractions
-it&nbsp;utilizes.</p>
-<p>Regretably, though, we know that <a href="https://en.wikipedia.org/wiki/Leaky_abstraction">software abstractions tend to leak</a>.
-Inn particular, any <span class="caps">ORM</span> seem to be a poster child of this rule, especially in the popular opinion among
-<a href="https://www.reddit.com/r/programming/search?q=ORM&amp;restrict_sr=on">developer crowds</a>.
-By design, they&#8217;re intended to hide at least <em>some</em> details of the operations on a database,
-but those very details can be quite critical at times. There are situations when we simply want to know
-what <em>exactly</em> is going on, and how all those model classes and mappers and relationships translate
-to the actual <span class="caps">SQL</span>&nbsp;code.</p>
-<p>To make it a little more concrete, let&#8217;s focus on the SQLAlchemy <code>Query</code> class. Given such a query, we&#8217;d like to get
-the final <span class="caps">SQL</span> representation of it, the one that&#8217;s ultimately sent to the database, It could be useful
-for any number of things, from logging<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> to profiling, or just displaying in the web page&#8217;s footer,
-or even solely for prototyping in the Python <span class="caps">REPL</span>.</p>
-<p>In other words, we want to turn&nbsp;this:</p>
-<div class="highlight"><pre><span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="n">some_email</span><span class="p">)</span>
-</pre></div>
-
-
-<p>into something like&nbsp;this:</p>
-<div class="highlight"><pre><span class="k">SELECT</span> <span class="n">users</span><span class="p">.</span><span class="n">id</span> <span class="k">FROM</span> <span class="n">users</span> <span class="k">WHERE</span> <span class="n">users</span><span class="p">.</span><span class="n">email</span> <span class="o">=</span> <span class="p">:</span><span class="mi">1</span>
-</pre></div>
-
-
-<p>regardless of the complexity of the query, the number of model classes it spans, or the number of relationship-related
-<code>JOIN</code>s it&nbsp;involves.</p>
-<h4>It&#8217;s a&nbsp;dialect</h4>
-<p>There is one aspect we cannot really universalize, though. It&#8217;s the specific <em>database backend</em> that SQLAlchemy
-should compile our query for. Shrugging off syntactical and semantical differences between database engines
-is one thing that using an <span class="caps">ORM</span> can potentially buy us, but if we want to get down to the <span class="caps">SQL</span> level,
-we need to be specific about&nbsp;it.</p>
-<p>In SQLAlchemy&#8217;s parlance, any specific variant of the <span class="caps">SQL</span> language is called a <em>dialect</em>. Most of the time,
-you&#8217;ll be interested in the particular dialect your database of choice is using. This is easily obtainable from
-the <a href="docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session">database <code>Session</code></a>:</p>
-<div class="highlight"><pre><span class="n">dialect</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
-</pre></div>
-
-
-<p>The resulting
-<a href="http://docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Dialect"><code>Dialect</code> object</a>
-is little more than a container for small tidbits of information, used by SQLAlchemy to handle various quirks of
-the database backends it supports. For our purposes, though, it can be treated as a completely opaque&nbsp;token.</p>
-<h4>Compile <span class="amp">&amp;</span>&nbsp;unwrap</h4>
-<p>With the <code>Dialect</code> in hand, we can invoke the query compiler to get the textual representation of our <code>Query</code>.
-Or, to be more precise, the compiled version of the query&#8217;s
-<a href="docs.sqlalchemy.org/en/latest/core/selectable.html#sqlalchemy.sql.expression.Select"><code>Select</code> statement</a></p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">query</span> <span class="o">=</span> <span class="n">db_session</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">User</span><span class="o">.</span><span class="n">email</span> <span class="o">==</span> <span class="s">&#39;foo@example.com&#39;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="k">print</span><span class="p">(</span><span class="n">query</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">db_session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span><span class="p">))</span>
-<span class="n">SELECT</span> <span class="n">user</span><span class="o">.</span><span class="n">id</span>
-<span class="n">FROM</span> <span class="n">users</span>
-<span class="n">WHERE</span> <span class="n">users</span><span class="o">.</span><span class="n">email</span> <span class="o">=</span> <span class="o">%</span><span class="p">(</span><span class="n">email_1</span><span class="p">)</span><span class="n">s</span>
-</pre></div>
-
-
-<p>Perhaps unsurprisingly, even after compilation the result is still just <em>another object</em>:
-the <a href="docs.sqlalchemy.org/en/latest/core/internals.html#sqlalchemy.engine.interfaces.Compiled"><code>Compiled</code> one</a>.
-As you can see, however, the actual <span class="caps">SQL</span> text is just its <code>__str__</code><span class="quo">&#8216;</span>ing representation, which we can <code>print</code> directly
-or obtain with <code>str()</code> or <code>unicode()</code>.</p>
-<h4><code>Query.to_sql</code></h4>
-<p>But obviously, we don&#8217;t want to type the above incantations every time we need to take a peek at the generated <span class="caps">SQL</span>
-for an <span class="caps">ORM</span> query. Probably the best solution is to extend the <code>Query</code> class so that it offers this additional
-functionality under a new&nbsp;method:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">sqlalchemy.orm.query</span> <span class="kn">import</span> <span class="n">Query</span> <span class="k">as</span> <span class="n">_Query</span>
-
-
-<span class="k">class</span> <span class="nc">Query</span><span class="p">(</span><span class="n">_Query</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Custom, enhanced SQLALchemy Query class.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">to_sql</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Return a literal SQL representation of the query.&quot;&quot;&quot;</span>
-        <span class="n">dialect</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">bind</span><span class="o">.</span><span class="n">dialect</span>
-        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">statement</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">dialect</span><span class="o">=</span><span class="n">dialect</span><span class="p">))</span>
-</pre></div>
-
-
-<p>This new <code>Query</code> class needs then be passed as
-<a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.params.query_cls"><code>query_cls</code> argument</a>
-to the constructor of <code>Session</code>. Details may vary a little bit depending on how exactly your application is set up,
-but in most cases, it should be <a href="http://docs.sqlalchemy.org/en/latest/orm/contextual.html">easy enough to figure out</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>If you&#8217;re only interested in indiscriminate logging of all queries, setting the
-<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine.params.echo"><code>echo</code> parameter</a>
-in <a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#sqlalchemy.create_engine"><code>create_engine</code></a> may be sufficient.
-Another alternative is to look directly at the
-<a href="http://docs.sqlalchemy.org/en/latest/core/engines.html#configuring-logging">logging configuration options</a>
-for various parts of SQLAlchemy&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Continue reading</a>
   </div>
 </article>
 

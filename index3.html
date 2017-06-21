@@ -63,6 +63,160 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
+    <p>
+      Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/syntax.html">syntax</a>,      <a href="http://xion.io/tag/lambda.html">lambda</a>,      <a href="http://xion.io/tag/operators.html">operators</a>      &#8226; <a href="http://xion.io/post/code/python-or-lambda.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><em>a.k.a. Curious Facts about Python&nbsp;Syntax</em></p>
+<p>In Python 3.3,
+a new method has been <a href="https://docs.python.org/3/library/stdtypes.html#str.casefold">added</a> to the <code>str</code> type: <code>casefold</code>.
+Its purpose is to return a &#8220;sanitized&#8221; version of the string
+that&#8217;s suitable for case-insensitive comparison.
+For older versions of Python,
+an alternative way that&#8217;s <em>mostly</em> compatible is to use the <code>str.lower</code> method,
+which simply changes all letters in the string to&nbsp;lowercase.</p>
+<h4>Syntax is&nbsp;hard</h4>
+<p>Easy enough for a compatibility shim, right?
+That&#8217;s exactly what I thought when I came up with&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Let&#8217;s ignore for a moment
+the fact that for a correct handling of <code>unicode</code> objects in Python 2,
+a <a href="http://stackoverflow.com/a/32838944/434799">much more sophisticated approach</a> is necessary.
+What&#8217;s rather more pertinent is that this simple code <em>doesn&#8217;t parse</em>:</p>
+<div class="highlight"><pre>  File &quot;foo.py&quot;, line 42
+    getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower()
+                                      ^
+SyntaxError: invalid syntax
+</pre></div>
+
+
+<p>It&#8217;s not very often that you would produce a <code>SyntaxError</code> with code
+that looks perfectly valid to most pythonistas.
+The <a href="http://xion.org.pl/2012/04/16/the-infernal-comma/">last time I had it happen</a>,
+the explanation was rather surprising and not exactly trivial to come&nbsp;by.</p>
+<p>Fortunately, there is always one place
+where we can definitively resolve any syntactic confusion.
+That place is the <a href="https://docs.python.org/2/reference/grammar.html">full grammar specification</a>
+of the Python&nbsp;language.</p>
+<p>It may be a little intimidating at first,
+especially if you&#8217;re not familiar with the <a href="https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_Form"><span class="caps">ENBF</span> notation</a> it uses.
+All the Python&#8217;s language constructs are there, though,
+so the <code>SyntaxError</code> from above should be traceable to a some rule of the grammar<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>The&nbsp;culprit</h4>
+<p>And indeed, the offending bit is right&nbsp;here:</p>
+<div class="highlight"><pre>or_test: and_test (&#39;or&#39; and_test)*
+and_test: not_test (&#39;and&#39; not_test)*
+...
+</pre></div>
+
+
+<p>It says, essentially, that Python defines the <code>or</code> expression (<code>or_test</code>)
+as a sequence of <code>and</code> expressions (<code>and_test</code>).
+If you follow the syntax definition further, however,
+you will notice that <code>and_test</code> expands to
+comparisons (<code>a &lt; b</code>, etc.),
+arithmetic expressions (<code>x + y</code>, etc.),
+<code>list</code> <span class="amp">&amp;</span> <code>dict</code> constructors (<code>[foo, bar]</code>, etc.),
+and finally to <em>atoms</em> such as literal strings and&nbsp;numbers.</p>
+<p>What you <em>won&#8217;t</em> see along the way are lambda&nbsp;definitions:</p>
+<div class="highlight"><pre>lambdef: &#39;lambda&#39; [varargslist] &#39;:&#39; test
+</pre></div>
+
+
+<p>In fact, the branch to allow them is directly above the <code>or_test</code>:</p>
+<div class="highlight"><pre>test: or_test [&#39;if&#39; or_test &#39;else&#39; test] | lambdef
+</pre></div>
+
+
+<p>As you can see, the rule puts lambdas at the same syntactical level as conditional expressions
+(<code>x if a else b</code>), which is <em>very</em> high up.
+The only thing you can do with a <code>lambda</code> to make a larger expression
+is to add a <code>yield</code> keyword before it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>, or follow it with a comma to create a tuple<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>You cannot, however, pass it as an argument to a binary operator,
+even if it otherwise makes sense and even <em>looks</em> unambiguous.
+This is also why the nonsensical expressions such as this&nbsp;one:</p>
+<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span>
+</pre></div>
+
+
+<p>will fail not with <code>TypeError</code>, but also with <code>SyntaxError</code>,
+as they won&#8217;t even be&nbsp;evaluated.</p>
+<h4>More&nbsp;parentheses</h4>
+<p>Savvy readers may have noticed that this phenomenon is very much reminiscent
+of the issue of <em>operator precedence</em>.</p>
+<p>Indeed, in Python and in many other languages it is the grammar
+that ultimately specifies the order of operations.
+It does so simply by defining how expressions can be&nbsp;constructed.</p>
+<p>Addition, for example, will be of lower priority than multiplication
+simply because a <em>sum</em> is said to comprise of terms that are <em>products</em>:</p>
+<div class="highlight"><pre>arith_expr: term ((&#39;+&#39;|&#39;-&#39;) term)*
+term: factor ((&#39;*&#39;|&#39;/&#39;|&#39;%&#39;|&#39;//&#39;) factor)*
+</pre></div>
+
+
+<p>This makes operator precedence a syntactic feature,
+and its resolution is baked into the language parser and handled implicitly<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.</p>
+<p>We know, however, that precedence can be worked around where necessary
+by enclosing the operator and its arguments in a pair of parenthesis.
+On the syntax level, this means creating an entirely new, top-level&nbsp;expression:</p>
+<div class="highlight"><pre>atom: &#39;(&#39; [yield_expr|testlist_comp] &#39;)&#39; |  # parenthesized expression
+       &#39;[&#39; [listmaker] &#39;]&#39; |
+       &#39;{&#39; [dictorsetmaker] &#39;}&#39; |
+       &#39;`&#39; testlist1 &#39;`&#39; |
+       NAME | NUMBER | STRING+)
+</pre></div>
+
+
+<p>There, it is again possible to use even the highest-level constructs,
+including also the silly stuff such as trying to add a number to a&nbsp;function:</p>
+<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This expression will now parse correctly,
+ and produce <code>TypeError</code> as&nbsp;expected.</p>
+<p>In the end, the resolution of our initial dilemma is therefore rather&nbsp;simple:</p>
+<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+</pre></div>
+
+
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Such rules are sometimes called <em>productions</em> of the grammar,
+a <a href="https://en.wikipedia.org/wiki/Production_%28computer_science%29">term</a> from computational linguistics.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Yes, <code>yield foo</code> is an expression.
+Its result is the value sent <em>to</em> the generator by outer code via the <code>send</code> method.
+Since most generators are used as iterables, typically no values are passed this way
+so the result of a <code>yield</code> expression is <code>None</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>There are also a legacy corner cases of lambdas in <code>list</code>/<code>dict</code>/etc. comprehensions,
+but those only apply under Python 2.x.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>This saying, there are languages where the order is resolved at later stage,
+after the expressions have already been parsed. They usually allow the programmer
+to change the precedence of their own operators,
+as it&#8217;s the case in <a href="https://www.haskell.org/tutorial/functions.html#sect3.2.2">Haskell</a>.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-patterns-ref.html#rust-patterns-ref">& vs. ref in Rust&nbsp;patterns</a></h2>
     <p>
       Posted on Thu 02 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -963,92 +1117,6 @@ with a&nbsp;howitzer.</p>
 the merits of their particular flavors and implementation details &#8212;like whether it&#8217;s prudent to allow &#8220;delisting&#8221;
 of packages. As a whole, however, package managers deserve recognition as a crucial part of modern language tooling
 that we cannot really do&nbsp;without.</p>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/news/callee-intro.html#callee-intro">Introducing callee: matchers for&nbsp;unittest.mock</a></h2>
-    <p>
-      Posted on Sun 20 March 2016 in <a href="http://xion.io/category/news.html">News</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/testing.html">testing</a>,      <a href="http://xion.io/tag/mocking.html">mocking</a>,      <a href="http://xion.io/tag/argument-matchers.html">argument matchers</a>      &#8226; <a href="http://xion.io/post/news/callee-intro.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Combined with dynamic typing, the lax object model of Python makes it pretty easy to write unit tests that involve
-<em>mocking</em> some parts of the tested code. Still, there&#8217;s plenty of third party libraries &#8212; usually with &#8220;mock&#8221; somewhere
-in the name &#8212; which promise to make it even shorter and simpler. There&#8217;s evidently been a need here that the standard
-library didn&#8217;t address&nbsp;adequately.</p>
-<p>It changed, however, with Python 3.3. This version introduced a new
-<a href="https://docs.python.org/3/library/unittest.mock.html"><code>unittest.mock</code> module</a> which essentially obsoleted
-all the other, third party solutions. The module, available also as a <a href="https://pypi.python.org/pypi/mock">backport</a>
-for Python 2.6 and above, is flexible, easy to use, and offers most if not all of the requisite&nbsp;functionality.</p>
-<h4>Called it,&nbsp;maybe?</h4>
-<p>Well, with one notable exception. If we mock a function, or any other callable&nbsp;object:</p>
-<div class="highlight"><pre><span class="c"># (production code)</span>
-<span class="k">class</span> <span class="nc">ProductionClass</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">foo</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">florb</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-
-<span class="c"># (test code)</span>
-<span class="n">something</span> <span class="o">=</span> <span class="n">ProductionClass</span><span class="p">()</span>
-<span class="n">something</span><span class="o">.</span><span class="n">florb</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">()</span>
-</pre></div>
-
-
-<p>we have very limited capabilities when it comes to verifying <em>how</em> they were called. Sure, we can be extremely&nbsp;specific:</p>
-<div class="highlight"><pre><span class="n">something</span><span class="o">.</span><span class="n">florb</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="s">&#39;this particular string&#39;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>or very&nbsp;lenient:</p>
-<div class="highlight"><pre><span class="n">something</span><span class="o">.</span><span class="n">florb</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="n">mock</span><span class="o">.</span><span class="n">ANY</span><span class="p">)</span>  <span class="c"># works for _any_ argument</span>
-</pre></div>
-
-
-<p>but there is virtually nothing in between. Suppose we don&#8217;t care too much what <em>exact</em> string the method was called with,
-only that it was <em>some</em> string that&#8217;s long enough? Things get awkward <em>very</em> fast&nbsp;then:</p>
-<div class="highlight"><pre><span class="k">for</span> <span class="n">posargs</span><span class="p">,</span> <span class="n">kwargs</span> <span class="ow">in</span> <span class="n">something</span><span class="o">.</span><span class="n">florb</span><span class="o">.</span><span class="n">call_args_list</span><span class="p">:</span>
-    <span class="n">arg</span> <span class="o">=</span> <span class="n">posargs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">assertIsInstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">assertGreaterEqual</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">arg</span><span class="p">),</span> <span class="mi">16</span><span class="p">)</span>
-    <span class="k">break</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">fail</span><span class="p">(</span><span class="s">&#39;required call to </span><span class="si">%r</span><span class="s"> not found&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">something</span><span class="o">.</span><span class="n">florb</span><span class="p">,))</span>
-</pre></div>
-
-
-<p>Yes, this is what&#8217;s required: an actual loop through all the mock&#8217;s calls<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>; unpacking tuples of positional and keyword
-arguments; and manual assertions that won&#8217;t even emit useful error messages when they&nbsp;fail.</p>
-<p>Eww! Surely Python can do better than&nbsp;that?</p>
-<h4>Meet <code>callee</code></h4>
-<p>Why, of course it can! Today, I&#8217;m releasing <a href="https://callee.readthedocs.org"><em>callee</em></a>: a library of <strong>argument matchers</strong>
-compatible with <code>unittest.mock</code>. It enables you to write much simpler, more readable,
-and delightfully declarative&nbsp;assertions:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">callee</span> <span class="kn">import</span> <span class="n">String</span><span class="p">,</span> <span class="n">LongerOrEqual</span>
-<span class="n">something</span><span class="o">.</span><span class="n">florb</span><span class="o">.</span><span class="n">assert_called_with</span><span class="p">(</span><span class="n">String</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">LongerOrEqual</span><span class="p">(</span><span class="mi">16</span><span class="p">))</span>
-</pre></div>
-
-
-<p>The wide array of matchers offered by <em>callee</em> includes
-<a href="https://callee.readthedocs.org/en/latest/reference/numbers.html">numeric</a>,
-<a href="https://callee.readthedocs.org/en/latest/reference/strings.html">string</a>,
-and <a href="https://callee.readthedocs.org/en/latest/reference/collections.html">collection</a> ones.
-And if none suits your particular needs,
-it&#8217;s a trivial matter to <a href="https://callee.readthedocs.org/en/latest/guide/custom-matchers.html">implement a custom one</a>.</p>
-<p>Check the library&#8217;s documentation for <a href="https://callee.readthedocs.org/en/latest/guide/usage.html#example">more examples</a>,
-or jump right in to the <a href="https://callee.readthedocs.org/en/latest/guide/installing.html">installation guide</a>
-or a <a href="https://callee.readthedocs.org/#api-reference">full matcher reference</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>A loop is not necessary if we simulate <code>assert_called_once_with</code> rather than <code>assert_called_with</code>,
-but we still have to dig into <code>mock.call</code> objects to eke out the arguments.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
   </div>
 </article>
 

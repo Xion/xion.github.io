@@ -63,6 +63,185 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-all-wild-imports.html#python-all-wild-imports">__all__ and wild imports in&nbsp;Python</a></h2>
+    <p>
+      Posted on Mon 26 December 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/modules.html">modules</a>,      <a href="http://xion.io/tag/imports.html">imports</a>,      <a href="http://xion.io/tag/testing.html">testing</a>      &#8226; <a href="http://xion.io/post/code/python-all-wild-imports.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>An often misunderstood piece of Python import machinery is the <code>__all__</code> attribute.
+While it is completely <em>optional</em>,
+it&#8217;s common to see modules with the <code>__all__</code> list populated&nbsp;explicitly:</p>
+<div class="highlight"><pre><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;Foo&#39;</span><span class="p">,</span> <span class="s">&#39;bar&#39;</span><span class="p">]</span>
+
+<span class="k">class</span> <span class="nc">Foo</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+<span class="k">def</span> <span class="nf">bar</span><span class="p">():</span>
+    <span class="c"># ...</span>
+
+<span class="k">def</span> <span class="nf">baz</span><span class="p">():</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Before explaining what the real purpose of <code>__all__</code> is
+(and how it relates to the titular wild imports),
+let&#8217;s deconstruct some common misconceptions by highlighting what it <em>isn&#8217;t</em>:</p>
+<ul>
+<li>
+<p><code>__all__</code> doesn&#8217;t prevent any of the module symbols (functions, classes, etc.)
+from being <em>directly</em> imported.
+In our the example, the seemingly omitted <code>baz</code> function (which is not included in <code>__all__</code>),
+is still <em>perfectly importable</em> by writing <code>from module import baz</code>.</p>
+</li>
+<li>
+<p>Similarly, <code>__all__</code> doesn&#8217;t influence what symbols are included in the results of
+<code>dir(module)</code> or <code>vars(module)</code>. So in the case above, a <code>dir</code> call would result in a
+<code>['Foo', 'bar', 'baz']</code> list, even though <code>'baz'</code> does not occur in <code>__all__</code>.</p>
+</li>
+</ul>
+<p>In other words, the content of <code>__all__</code> is more of a convention
+rather than a strict limitation.
+Regardless of what you put there, every symbol defined in your module
+will still be accessible from the&nbsp;outside.</p>
+<p>This is a clear reflection of the common policy in Python:
+assume <a href="https://mail.python.org/pipermail/tutor/2003-October/025932.html">everyone is a consenting adult</a>,
+and that visibility controls are not necessary.
+Without an explicit <code>__all__</code> list,
+Python simply puts all of the module &#8220;public&#8221; symbols there anyway<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>The meaning of it <code>__all__</code></h4>
+<p>So, what does <code>__all__</code> actually&nbsp;effect?</p>
+<p>This is neatly summed up in this brief
+<a href="http://stackoverflow.com/a/2187636/434799">StackOverflow answer</a>.
+Simply speaking, its purpose is&nbsp;twofold:</p>
+<ul>
+<li>
+<p>It tells the readers of the source code &#8212; be it humans or automated tools &#8212;
+what&#8217;s the conventional <em>public <span class="caps">API</span></em> exposed by the&nbsp;module.</p>
+</li>
+<li>
+<p>It lists names to import when performing the so-called <em>wild import</em>:
+<code>from module import *</code>.</p>
+</li>
+</ul>
+<p>Because of the default content of <code>__all__</code> that I mentioned earlier,
+the public <span class="caps">API</span> of a module can also be defined implicitly.
+Some style guides (like the <a href="https://google.github.io/styleguide/pyguide.html">Google one</a>)
+are therefore relying on the <code>public</code> and <code>_private</code> naming exclusively.
+Nevertheless, an explicit <code>__all__</code> list is still a perfectly valid option,
+especially considering that no approach offers any form of <em>actual</em> access&nbsp;control.</p>
+<h4>Import&nbsp;star</h4>
+<p>The second point, however, has some real runtime&nbsp;significance.</p>
+<p>In Python, like in many other languages,
+it is recommended to be explicit about the exact functions and classes we&#8217;re importing.
+Commonly, the <code>import</code> statement will thus take one of the following&nbsp;forms:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">urllib.parse</span>
+<span class="kn">from</span> <span class="nn">random</span> <span class="kn">import</span> <span class="n">randint</span>
+<span class="kn">from</span> <span class="nn">logging</span> <span class="kn">import</span> <span class="n">fatal</span><span class="p">,</span> <span class="n">warning</span> <span class="k">as</span> <span class="n">warn</span>
+<span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">urlparse</span>
+<span class="c"># etc.</span>
+</pre></div>
+
+
+<p>In each case, it&#8217;s easy to see the relevant <em>name</em> being imported.
+Regardless of the exact syntax and the possible presence of aliasing (<code>as</code>),
+it&#8217;s always the last (qualified) name in the <code>import</code> statement,
+before a newline or&nbsp;comma.</p>
+<p>Contrast this with an <code>import</code> that ends with an&nbsp;asterisk:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="o">*</span>
+</pre></div>
+
+
+<p>This is called a <em>star</em> or <em>wild import</em>, and it isn&#8217;t so straightforward.
+This is also the reason why using it is <a href="http://stackoverflow.com/a/3615206/434799">generally discouraged</a>,
+except for some <a href="http://stackoverflow.com/a/3615238/434799">very specific situations</a>.</p>
+<p>Why? Because you cannot easily see what exact names are being imported here.
+For that you&#8217;d have to go to the module&#8217;s source and &#8212; you guessed it &#8212;
+look at the <code>__all__</code> list<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<h4>Taming the&nbsp;wild</h4>
+<p>Barring some less important details,
+the mechanics of <code>import *</code> could therefore be expressed in the following Python&nbsp;(pseudo)code:</p>
+<div class="highlight"><pre><span class="kn">import</span> <span class="nn">module</span> <span class="kn">as</span> <span class="nn">__temp</span>
+<span class="k">for</span> <span class="n">__name</span> <span class="ow">in</span> <span class="n">module</span><span class="p">:</span>
+    <span class="nb">globals</span><span class="p">()[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">__temp</span><span class="p">,</span> <span class="n">__name</span><span class="p">)</span>
+<span class="k">del</span> <span class="n">__temp</span>
+<span class="k">del</span> <span class="n">__name</span>
+</pre></div>
+
+
+<p>One interesting case to consider is
+what happens when <code>__all__</code> contains a <em>wrong</em>&nbsp;name.</p>
+<p>What if one of the strings there doesn&#8217;t correspond to any name within the&nbsp;module?&#8230;</p>
+<div class="highlight"><pre><span class="c"># foo.py</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;Foo&#39;</span><span class="p">]</span>
+
+<span class="k">def</span> <span class="nf">bar</span><span class="p">():</span>
+    <span class="k">pass</span>
+
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">foo</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">foo</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+  <span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
+<span class="ne">AttributeError</span><span class="p">:</span> <span class="s">&#39;module&#39;</span> <span class="nb">object</span> <span class="n">has</span> <span class="n">no</span> <span class="n">attribute</span> <span class="s">&#39;Foo&#39;</span>
+</pre></div>
+
+
+<p>Quite predictably, <code>import *</code> blows up.<br>
+Notice, however, that regular import <em>still works</em>.<br></p>
+<p>All in all (ahem), this hints at a cute little trick which is also very&nbsp;self-evident:</p>
+<div class="highlight"><pre><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;DO_NOT_WILD_IMPORT&#39;</span><span class="p">]</span>
+</pre></div>
+
+
+<p>Put this in a Python module, and no one will be able to <code>import *</code> from it!<br>
+Much more effective than any lint warning ;-)<br></p>
+<h4>Test <code>__all__</code> the&nbsp;things</h4>
+<p>Jokes aside, this phenomenon (<code>__all__</code> with an out-of-place name in it) can also backfire.
+Especially when
+<a href="https://github.com/Xion/callee/blob/277add8170bd0c758f3c4a3068127e8229d2e2d1/callee/__init__.py#L31">reexporting</a>,
+it&#8217;s relatively easy to introduce stray <code>'name'</code> into <code>__all__</code>:
+one which doesn&#8217;t correspond to any <code>name</code> that&#8217;s <em>actually present</em> in the&nbsp;namespace.</p>
+<p>If we commit such a mishap, we are inadvertently lying about the public <span class="caps">API</span> of our package.
+What&#8217;s worse is that this mistake can propagate through documentation generators,
+and ultimately mislead our&nbsp;users.</p>
+<p>While some linters may be able to catch this,
+a <a href="https://github.com/Xion/callee/blob/277add8170bd0c758f3c4a3068127e8229d2e2d1/tests/test_all.py#L10">simple test</a>
+like this&nbsp;one:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">test_all</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Test that __all__ contains only names that are actually exported.&quot;&quot;&quot;</span>
+    <span class="kn">import</span> <span class="nn">yourpackage</span>
+
+    <span class="n">missing</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">yourpackage</span><span class="o">.</span><span class="n">__all__</span>
+                  <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">yourpackage</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">assertEmpty</span><span class="p">(</span>
+        <span class="n">missing</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="s">&quot;__all__ contains unresolved names: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span>
+            <span class="s">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">missing</span><span class="p">),))</span>
+</pre></div>
+
+
+<p>is a quick <span class="amp">&amp;</span> easy way to ensure this never&nbsp;happens.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p><span class="dquo">&#8220;</span>Public&#8221; symbols have names that don&#8217;t begin with underscore (<code>_</code>).
+Of course, &#8220;non-public&#8221; ones are still accessible
+but are treated as implicitly unstable <span class="amp">&amp;</span> discouraged.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Or check what symbols there don&#8217;t have a leading underscore.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/rust-nightly-vs-stable.html#rust-nightly-vs-stable">A tale of two&nbsp;Rusts</a></h2>
     <p>
       Posted on Sat 24 December 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -1440,160 +1619,6 @@ but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
 
 
 <p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
-    <p>
-      Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/syntax.html">syntax</a>,      <a href="http://xion.io/tag/lambda.html">lambda</a>,      <a href="http://xion.io/tag/operators.html">operators</a>      &#8226; <a href="http://xion.io/post/code/python-or-lambda.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><em>a.k.a. Curious Facts about Python&nbsp;Syntax</em></p>
-<p>In Python 3.3,
-a new method has been <a href="https://docs.python.org/3/library/stdtypes.html#str.casefold">added</a> to the <code>str</code> type: <code>casefold</code>.
-Its purpose is to return a &#8220;sanitized&#8221; version of the string
-that&#8217;s suitable for case-insensitive comparison.
-For older versions of Python,
-an alternative way that&#8217;s <em>mostly</em> compatible is to use the <code>str.lower</code> method,
-which simply changes all letters in the string to&nbsp;lowercase.</p>
-<h4>Syntax is&nbsp;hard</h4>
-<p>Easy enough for a compatibility shim, right?
-That&#8217;s exactly what I thought when I came up with&nbsp;this:</p>
-<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-</pre></div>
-
-
-<p>Let&#8217;s ignore for a moment
-the fact that for a correct handling of <code>unicode</code> objects in Python 2,
-a <a href="http://stackoverflow.com/a/32838944/434799">much more sophisticated approach</a> is necessary.
-What&#8217;s rather more pertinent is that this simple code <em>doesn&#8217;t parse</em>:</p>
-<div class="highlight"><pre>  File &quot;foo.py&quot;, line 42
-    getattr(str, &#39;casefold&#39;, None) or lambda s: s.lower()
-                                      ^
-SyntaxError: invalid syntax
-</pre></div>
-
-
-<p>It&#8217;s not very often that you would produce a <code>SyntaxError</code> with code
-that looks perfectly valid to most pythonistas.
-The <a href="http://xion.org.pl/2012/04/16/the-infernal-comma/">last time I had it happen</a>,
-the explanation was rather surprising and not exactly trivial to come&nbsp;by.</p>
-<p>Fortunately, there is always one place
-where we can definitively resolve any syntactic confusion.
-That place is the <a href="https://docs.python.org/2/reference/grammar.html">full grammar specification</a>
-of the Python&nbsp;language.</p>
-<p>It may be a little intimidating at first,
-especially if you&#8217;re not familiar with the <a href="https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_Form"><span class="caps">ENBF</span> notation</a> it uses.
-All the Python&#8217;s language constructs are there, though,
-so the <code>SyntaxError</code> from above should be traceable to a some rule of the grammar<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<h4>The&nbsp;culprit</h4>
-<p>And indeed, the offending bit is right&nbsp;here:</p>
-<div class="highlight"><pre>or_test: and_test (&#39;or&#39; and_test)*
-and_test: not_test (&#39;and&#39; not_test)*
-...
-</pre></div>
-
-
-<p>It says, essentially, that Python defines the <code>or</code> expression (<code>or_test</code>)
-as a sequence of <code>and</code> expressions (<code>and_test</code>).
-If you follow the syntax definition further, however,
-you will notice that <code>and_test</code> expands to
-comparisons (<code>a &lt; b</code>, etc.),
-arithmetic expressions (<code>x + y</code>, etc.),
-<code>list</code> <span class="amp">&amp;</span> <code>dict</code> constructors (<code>[foo, bar]</code>, etc.),
-and finally to <em>atoms</em> such as literal strings and&nbsp;numbers.</p>
-<p>What you <em>won&#8217;t</em> see along the way are lambda&nbsp;definitions:</p>
-<div class="highlight"><pre>lambdef: &#39;lambda&#39; [varargslist] &#39;:&#39; test
-</pre></div>
-
-
-<p>In fact, the branch to allow them is directly above the <code>or_test</code>:</p>
-<div class="highlight"><pre>test: or_test [&#39;if&#39; or_test &#39;else&#39; test] | lambdef
-</pre></div>
-
-
-<p>As you can see, the rule puts lambdas at the same syntactical level as conditional expressions
-(<code>x if a else b</code>), which is <em>very</em> high up.
-The only thing you can do with a <code>lambda</code> to make a larger expression
-is to add a <code>yield</code> keyword before it<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>, or follow it with a comma to create a tuple<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
-<p>You cannot, however, pass it as an argument to a binary operator,
-even if it otherwise makes sense and even <em>looks</em> unambiguous.
-This is also why the nonsensical expressions such as this&nbsp;one:</p>
-<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span>
-</pre></div>
-
-
-<p>will fail not with <code>TypeError</code>, but also with <code>SyntaxError</code>,
-as they won&#8217;t even be&nbsp;evaluated.</p>
-<h4>More&nbsp;parentheses</h4>
-<p>Savvy readers may have noticed that this phenomenon is very much reminiscent
-of the issue of <em>operator precedence</em>.</p>
-<p>Indeed, in Python and in many other languages it is the grammar
-that ultimately specifies the order of operations.
-It does so simply by defining how expressions can be&nbsp;constructed.</p>
-<p>Addition, for example, will be of lower priority than multiplication
-simply because a <em>sum</em> is said to comprise of terms that are <em>products</em>:</p>
-<div class="highlight"><pre>arith_expr: term ((&#39;+&#39;|&#39;-&#39;) term)*
-term: factor ((&#39;*&#39;|&#39;/&#39;|&#39;%&#39;|&#39;//&#39;) factor)*
-</pre></div>
-
-
-<p>This makes operator precedence a syntactic feature,
-and its resolution is baked into the language parser and handled implicitly<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.</p>
-<p>We know, however, that precedence can be worked around where necessary
-by enclosing the operator and its arguments in a pair of parenthesis.
-On the syntax level, this means creating an entirely new, top-level&nbsp;expression:</p>
-<div class="highlight"><pre>atom: &#39;(&#39; [yield_expr|testlist_comp] &#39;)&#39; |  # parenthesized expression
-       &#39;[&#39; [listmaker] &#39;]&#39; |
-       &#39;{&#39; [dictorsetmaker] &#39;}&#39; |
-       &#39;`&#39; testlist1 &#39;`&#39; |
-       NAME | NUMBER | STRING+)
-</pre></div>
-
-
-<p>There, it is again possible to use even the highest-level constructs,
-including also the silly stuff such as trying to add a number to a&nbsp;function:</p>
-<div class="highlight"><pre><span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="k">lambda</span><span class="p">:</span> <span class="bp">None</span><span class="p">)</span>
-</pre></div>
-
-
-<p>This expression will now parse correctly,
- and produce <code>TypeError</code> as&nbsp;expected.</p>
-<p>In the end, the resolution of our initial dilemma is therefore rather&nbsp;simple:</p>
-<div class="highlight"><pre><span class="n">casefold</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="s">&#39;casefold&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">s</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
-</pre></div>
-
-
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Such rules are sometimes called <em>productions</em> of the grammar,
-a <a href="https://en.wikipedia.org/wiki/Production_%28computer_science%29">term</a> from computational linguistics.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Yes, <code>yield foo</code> is an expression.
-Its result is the value sent <em>to</em> the generator by outer code via the <code>send</code> method.
-Since most generators are used as iterables, typically no values are passed this way
-so the result of a <code>yield</code> expression is <code>None</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>There are also a legacy corner cases of lambdas in <code>list</code>/<code>dict</code>/etc. comprehensions,
-but those only apply under Python 2.x.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-<li id="fn:4">
-<p>This saying, there are languages where the order is resolved at later stage,
-after the expressions have already been parsed. They usually allow the programmer
-to change the precedence of their own operators,
-as it&#8217;s the case in <a href="https://www.haskell.org/tutorial/functions.html#sect3.2.2">Haskell</a>.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
   </div>
 </article>
 
