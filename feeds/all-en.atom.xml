@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-06-20T06:32:00+00:00</updated><entry><title>Extension traits in Rust</title><link href="http://xion.io/post/code/rust-extension-traits.html" rel="alternate"></link><updated>2017-06-20T06:32:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-20:post/code/rust-extension-traits.html</id><summary type="html">&lt;p&gt;In a few object-oriented languages,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-06-21T19:38:00+00:00</updated><entry><title>Extension traits in Rust</title><link href="http://xion.io/post/code/rust-extension-traits.html" rel="alternate"></link><updated>2017-06-21T19:38:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-20:post/code/rust-extension-traits.html</id><summary type="html">&lt;p&gt;In a few object-oriented languages,
 it is possible to add methods to a class &lt;em&gt;after&lt;/em&gt; it&amp;#8217;s already been&amp;nbsp;defined.&lt;/p&gt;
 &lt;p&gt;This feature arises quite naturally if the language has a dynamic type system
 that&amp;#8217;s modifiable at runtime.
@@ -43,7 +43,7 @@ Personally, I&amp;#8217;ve taken to calling it &lt;strong&gt;extension traits&lt
 that we don&amp;#8217;t otherwise control (or don&amp;#8217;t want to&amp;nbsp;modify).&lt;/p&gt;
 &lt;p&gt;Common cases&amp;nbsp;include:&lt;/p&gt;
 &lt;ul&gt;
-&lt;li&gt;Rust standard library types, like &lt;code&gt;Iterator&lt;/code&gt;, &lt;code&gt;String&lt;/code&gt;,
+&lt;li&gt;Rust standard library types, like &lt;code&gt;Result&lt;/code&gt;, &lt;code&gt;String&lt;/code&gt;,
   or anything else inside the &lt;code&gt;std&lt;/code&gt; namespace&lt;/li&gt;
 &lt;li&gt;types imported from &lt;a href="https://crates.io"&gt;third-party&amp;nbsp;libraries&lt;/a&gt;&lt;/li&gt;
 &lt;li&gt;types from the current crate if additional methods only make sense in certain scenarios
