@@ -63,6 +63,93 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Retry idiom for&nbsp;Python</a></h2>
+    <p>
+      Posted on Wed 27 January 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/exceptions.html">exceptions</a>,      <a href="http://xion.io/tag/else.html">else</a>      &#8226; <a href="http://xion.io/post/code/python-retry-idiom.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>A relatively little known feature of Python is the <code>else</code> block for control flow statements other than <code>if</code>.</p>
+<p>If you haven&#8217;t heard about it before, you can provide such a block for both <code>while</code> and <code>for</code> loops,
+as well as any variant of the <code>try</code> statement, Its functionality is roughly analogous in both&nbsp;cases:</p>
+<ul>
+<li>in loops, the <code>else</code> block is executed if the loop didn&#8217;t exit abnormally (i.e. with <code>break</code>)</li>
+<li>in <code>try</code> constructs, the <code>else</code> block runs if <em>no</em> exception&nbsp;happened</li>
+</ul>
+<p>Likely because of the unique semantics that don&#8217;t exist in other languages, neither of those constructs has been seen much
+in real world code. Recently, however, I&#8217;ve found they can be combined into a very pythonic pattern
+that&#8217;s also quite&nbsp;useful.</p>
+<h4>The&nbsp;trick</h4>
+<p>Say you have a task that won&#8217;t always succeed. Perhaps it&#8217;s a request made to a janky server, or other network operartion
+that&#8217;s prone to timeouts. Since failures are likely to be transient, you&#8217;d like to retry it several more times before
+giving up&nbsp;permanently.</p>
+<p>With <code>try</code>/<code>except</code> block, you can detect those half-expected failures. With a simple loop, you can repeat the attempt
+for as many times as you deem feasible. Combined, they can solve the problem rather&nbsp;neatly:</p>
+<div class="highlight"><pre><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">MAX_RETRIES</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># ... do stuff ...</span>
+    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
+        <span class="c"># ... log it, sleep, etc. ...</span>
+        <span class="k">continue</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">break</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
+</pre></div>
+
+
+<h4>But&nbsp;why?</h4>
+<p>What&#8217;s the deal with the <code>else</code>s here, though? Are they both&nbsp;necessary?</p>
+<p>The simple answer is of course no. <code>else</code> after either a loop or  <code>try</code>/<code>except</code> block is always a <em>syntactic sugar</em>.
+Any code that contains it can be transformed into an equivalent snippet that utilizes different techniques to achieve
+the same&nbsp;effect.</p>
+<p>But this view isn&#8217;t very useful, for many of the essential features in any programming languages can be dismissed
+as superfluous using this reasoning. The real question is whether the above idiom is more readable and understandable
+than the&nbsp;alternatives.</p>
+<p>To that, I posit, the answer is: <em>absolutely</em>.</p>
+<h4>Desugaring</h4>
+<p>Without the double <code>else</code>, this example would have to be written in a considerably more convoluted&nbsp;way:</p>
+<div class="highlight"><pre><span class="n">retries</span> <span class="o">=</span> <span class="n">MAX_RETRIES</span>
+<span class="k">while</span> <span class="n">retries</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c"># ... do stuff ...</span>
+        <span class="k">break</span>
+    <span class="k">except</span> <span class="n">SomeTransientError</span><span class="p">:</span>
+        <span class="c"># ... log it, sleep, etc. ...</span>
+        <span class="n">retries</span> <span class="o">-=</span> <span class="mi">1</span>
+<span class="k">if</span> <span class="n">retries</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="n">PermanentError</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Although at first glance the difference may be minuscule, this version adds significant extra busywork the programmer
+has to pay careful attention&nbsp;to:</p>
+<ul>
+<li>The <code>retries</code> variable now has to be explicit, because the final conditional statement must look at its&nbsp;value.</li>
+<li>We can&#8217;t use a <code>for</code> loop anymore (e.g. <code>for retries in range(MAX_RETRIES)</code>), because we wouldn&#8217;t distinguish the
+&#8220;success at last try&#8221; and &#8220;retry limit exceeded&#8221; cases: they&#8217;d both result in <code>retries</code> equal to <code>MAX_RETRIES - 1</code>
+after the loop<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</li>
+<li>As a result, we have to remember to decrement the counter ourselves upon an&nbsp;error.</li>
+</ul>
+<p>Additionally, the <code>break</code> is easy to miss amidst the actual logic within the <code>try</code> block, both for developer
+who writes the code and for any subsequent readers. An alternative is to move it outside of the <code>try</code>/<code>except</code> clause,
+but that in turn reintroduces <code>continue</code> into the <code>except</code> branch and further complicates the whole&nbsp;flow.</p>
+<p>In short, the desugared version is more error-prone (all those off-by-ones!) and also quite&nbsp;inscrutable.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Or to <code>1</code>, if we count from <code>MAX_RETRIES</code> down to zero.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/dont-interview-like-google.html#dont-interview-like-google">You Don&#8217;t Have to Interview like&nbsp;Google</a></h2>
     <p>
       Posted on Mon 28 December 2015 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -1093,201 +1180,6 @@ but details are outside of the scope of this article.&#160;<a class="footnote-ba
 <p>If you&#8217;re fine with the enum&#8217;s <code>value</code> being the <em>whole</em> tuple (everything after the <code>=</code> sign),
 you can override <code>__init__</code> instead of <code>__new__</code>
 (cf. <a href="https://docs.python.org/3/library/enum.html#planet">the planet example</a> from standard docs).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
-    <p>
-      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
-in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
-<code>div.content</code>, and other presentational elements are still a common fact of life.
-Unless you&#8217;re one of the cool kids who use <a href="http://webcomponents.org/">Web Components</a> with
-<a href="https://www.polymer-project.org">Polymer</a>, your main option for abstracting this boilerplate away
-is defining some more general <a href="http://jinja.pocoo.org/docs/dev/templates/#macros">template macros</a>.</p>
-<p>As with any kind of abstraction, it&#8217;s crucial to balance broad applicability with a potential for finely-tuned
-customization. In the case of wrapping <span class="caps">HTML</span> snippets in Jinja macros, an easy way to maintain flexibility is to allow
-the caller to specify some crucial attributes of the root&nbsp;element:</p>
-<div class="highlight"><pre><span class="c">{#</span>
-<span class="c">  Renders the markup for a &lt;button&gt; from Twitter Bootstrap.</span>
-<span class="c">#}</span><span class="x"></span>
-<span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;</span>
-<span class="x">        class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}{%</span> <span class="k">if</span> <span class="nv">class</span> <span class="cp">%}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">class</span> <span class="cp">}}{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x">&quot;</span>
-<span class="x">        </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
-<span class="x">    </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
-<span class="x">  &lt;/button&gt;</span>
-<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>An element <code>id</code> would be a good example, and in the above macro it&#8217;s handled implicility
-thanks to the <code>{{ kwargs|xmlattr }}</code> stanza.</p>
-<p><code>class</code>, however, is not that simple, because a macro like that usually needs to supply some <span class="caps">CSS</span> classes of its own.
-The operation of combining them with additional ones, passed by the caller, is awfully textual and error-prone.
-It&#8217;s easy, for example, to forget about the crucial space and run two class names&nbsp;together.</p>
-<p>As if <span class="caps">CSS</span> wasn&#8217;t difficult enough to debug&nbsp;already!</p>
-<h4>Let them have&nbsp;list</h4>
-<p>The root cause for any of those problems is working at a level that&#8217;s too low for the task.
-The value for a <code>class</code> attribute may be <em>encoded</em> as string, but it&#8217;s fundamentally a <em>list of tokens</em>.
-In the modern <span class="caps">DOM</span> <span class="caps">API</span>, for example, it is represented
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/classList">as exactly that</a>: a <code>DOMTokenList</code>.</p>
-<p>I&#8217;ve found it helpful to replicate a similar mechanism in Jinja templates. The result is a <code>ClassList</code> wrapper
-whose code I quote here in&nbsp;full:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42
-43</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">MutableSet</span>
-
-
-<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Data structure for holding, and ultimately returning as a single string,</span>
-<span class="sd">    a set of identifiers that should be managed like CSS classes.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Constructor.</span>
-<span class="sd">        :param arg: A single class name or an iterable thereof.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
-            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
-            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span>
-        <span class="k">elif</span> <span class="n">arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="s">&quot;expected a string or string iterable, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">))</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">classes</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">class_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span>
-
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">discard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">__html__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s">&#39;class=&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
-</pre></div>
-</td></tr></table>
-
-<p>To make it work with <a href="http://flask.pocoo.org">Flask</a>, adorn the class with
-<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.template_global"><code>Flask.template_global</code> decorator</a>:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">myflaskapp</span> <span class="kn">import</span> <span class="n">app</span>
-
-<span class="nd">@app.template_global</span><span class="p">(</span><span class="s">&#39;classlist&#39;</span><span class="p">)</span>
-<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>Otherwise, if you&#8217;re working with a raw <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment">Jinja <code>Environment</code></a>,
-simply add <code>ClassList</code> to its <a href="http://jinja.pocoo.org/docs/dev/api/#global-namespace">global namespace</a>&nbsp;directly:</p>
-<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">globals</span><span class="p">[</span><span class="s">&#39;classlist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ClassList</span>
-</pre></div>
-
-
-<p>In either case, I recommend following the apparent Jinja convention of naming template symbols
-as <code>lowercasewithoutspaces</code>.</p>
-<h4>Becoming&nbsp;classy</h4>
-<p>Usage of this new <code>classlist</code> helper is relatively straightforward. Since it accepts both a space-separated string
-or an iterable of <span class="caps">CSS</span> class names, a macro can wrap anything the caller would pass it as a value for <code>class</code> attribute:</p>
-<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  </span><span class="cp">{%</span> <span class="k">set</span> <span class="nv">classes</span> <span class="o">=</span> <span class="nv">classlist</span><span class="o">(</span><span class="nv">class</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  </span><span class="c">{# ... #}</span><span class="x"></span>
-</pre></div>
-
-
-<p>The <code>classlist</code> is capable of producing the complete <code>class</code> attribute syntax (i.e. <code>class="..."</code>), or omit it entirely
-if it would be empty. All we need to do is evaluate it using the normal Jinja expression&nbsp;syntax:</p>
-<div class="highlight"><pre><span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot; </span><span class="cp">{{</span> <span class="nv">classes</span> <span class="cp">}}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
-</pre></div>
-
-
-<p>Before that, though, we may want to include some additional classes that are specific to our macro.
-The <code>button</code> macro, for example, needs to add the <a href="http://getbootstrap.com/css/#buttons">Bootstrap-specific</a>
-<code>btn</code> and <code>btn-$STYLE</code> classes to the <code>&lt;button&gt;</code> element it produces<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre><span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">classes.add</span><span class="o">(</span><span class="s1">&#39;btn&#39;</span><span class="o">,</span> <span class="s1">&#39;btn-&#39;</span> <span class="o">+</span> <span class="nv">style</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>After executing this statement, the final <code>class</code> attribute contains both the caller-provided classes,
-as well those two that were added&nbsp;explicitly.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Believe it or not, we can finally
-<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content">center the content vertically</a>
-without much of an issue!&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>The <code>{% do %}</code> block in Jinja allows to execute statements (such as function calls) without evaluating values
-they return. It is not exposed by default,
-but <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment.add_extension">adding</a> a standard
-<a href="http://jinja.pocoo.org/docs/dev/extensions/#expression-statement"><code>jinja2.ext.do</code> extension</a> to the <code>Environment</code>
-makes it available.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

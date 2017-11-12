@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:type" content="blog"/>
+<meta property="og:title" content="Karol Kuczmarski's Blog"/>
+<meta property="og:description" content=""/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+
+  <title>Karol Kuczmarski's Blog &ndash; Tag: partial application</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/programming/currying-api-design.html#currying-api-design">Currying and <span class="caps">API</span>&nbsp;design</a></h2>
+    <p>
+      Posted on Sun 12 November 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/functional-programming.html">functional programming</a>,      <a href="http://xion.io/tag/currying.html">currying</a>,      <a href="http://xion.io/tag/partial-application.html">partial application</a>,      <a href="http://xion.io/tag/haskell.html">Haskell</a>,      <a href="http://xion.io/tag/api.html">API</a>,      <a href="http://xion.io/tag/abstraction.html">abstraction</a>      &#8226; <a href="http://xion.io/post/programming/currying-api-design.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In functional programming, <em>currying</em> is one of the concepts
+that contribute greatly to its expressive power.
+Its importance could be compared to something as ubiquitous
+as chaining method calls (<code>foo.bar().baz()</code>) in imperative, object-oriented&nbsp;languages.</p>
+<p>Although a simple idea on the surface,
+it has significant consequences for the way functional APIs are designed.
+This post is an overview of various techniques
+that help utilize currying effectively when writing your functions.
+While the examples are written in Haskell syntax,
+I believe it should be useful for developers working in other functional languages,&nbsp;too.</p>
+<h4>The&nbsp;basics</h4>
+<p>Let&#8217;s start with a short&nbsp;recap.</p>
+<p>Intuitively, we say that an <em>N</em>-argument function is <em>curried</em>
+if you can invoke it with a single argument and get back an (<em>N</em>-1)-argument function.
+Repeat this <em>N</em> times,
+and it&#8217;ll be equivalent to supplying all <em>N</em> arguments at&nbsp;once.</p>
+<p>Here&#8217;s an example: the <code>Data.Text</code> module in Haskell
+contains the following function called <code>splitOn</code>:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOn</span> <span class="n">sep</span> <span class="n">text</span> <span class="ow">=</span> <span class="o">...</span>
+</pre></div>
+
+
+<p>It&#8217;s a fairly standard string splitting function,
+taking a separator as its first argument,
+with the second one being a string to perform the splitting&nbsp;on:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="s">&quot;,&quot;</span> <span class="s">&quot;1,2,3&quot;</span>  <span class="c1">-- produces [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]</span>
+</pre></div>
+
+
+<p>Both arguments are of type <code>Text</code> (Haskell strings),
+while the return type is <code>[Text]</code> &#8212; a <em>list</em> of strings.
+This add up to the signature (type) of <code>splitOn</code>,
+written above as <code>Text -&gt; Text -&gt; [Text]</code>.</p>
+<p>Like all functions in Haskell, however, <code>splitOn</code> is <em>curried</em>.
+We don&#8217;t have to provide it with both arguments at once;
+instead, we can stop at one in order to obtain <em>another function</em>:</p>
+<div class="highlight"><pre><span class="nf">splitOnComma</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOnComma</span> <span class="ow">=</span> <span class="n">splitOn</span> <span class="s">&quot;,&quot;</span>
+</pre></div>
+
+
+<p>This new function is a <em>partially applied</em> version of <code>splitOn</code>,
+with its first argument (the separator) already filled in.
+To complete the call, all you need to do now is provide the text to&nbsp;split:</p>
+<div class="highlight"><pre><span class="nf">splitOnComma</span> <span class="s">&quot;1,2,3&quot;</span>  <span class="c1">-- also produces [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]</span>
+</pre></div>
+
+
+<p>and, unsurprisingly, you&#8217;ll get the exact same&nbsp;result.</p>
+<p>Compare now the type signatures of both <code>splitOn</code> and <code>splitOnComma</code>:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOnComma</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+</pre></div>
+
+
+<p>It may be puzzling at first why the same arrow symbol (<code>-&gt;</code>) is used
+for what seems like two distinct meanings: the &#8220;argument separator&#8221;,
+and the return type&nbsp;indicator.</p>
+<p>But for curried functions, both of those meanings are in fact <em>identical</em>!</p>
+<p>Indeed, we can make it more explicit by defining <code>splitOn</code> as:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">])</span>
+</pre></div>
+
+
+<p>or&nbsp;even:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">TypeOf</span> <span class="n">splitOnComma</span> <span class="c1">-- (not a real Haskell syntax)</span>
+</pre></div>
+
+
+<p>From this perspective, what <code>splitOn</code> actually returns is not <code>[Text]</code>
+but a <em>function</em>  from <code>Text</code> to <code>[Text]</code> (<code>Text -&gt; [Text]</code>).
+And conversely, a call with two&nbsp;arguments:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="s">&quot;,&quot;</span> <span class="s">&quot;1,2,3&quot;</span>
+</pre></div>
+
+
+<p>is instead <em>two function calls</em>, each taking just <em>one argument</em>:</p>
+<div class="highlight"><pre><span class="p">(</span><span class="n">splitOn</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="s">&quot;1,2,3&quot;</span>
+</pre></div>
+
+
+<p>This is why the <code>-&gt;</code> arrow isn&#8217;t actually ambiguous:
+it always signifies the <em>mapping</em> of an argument type to a result type.
+And it&#8217;s always just one argument, too,&nbsp;because:</p>
+<blockquote>
+<p>Currying makes all functions take only one&nbsp;argument.</p>
+</blockquote>
+<p>It&#8217;s just that sometimes, what those single-argument functions return
+will be yet another&nbsp;function.</p>
+<h4>Least used arguments go <em>first</em></h4>
+<p>Now that we have a firmer grasp on the idea of currying,
+we can see how it influences <span class="caps">API</span>&nbsp;design.</p>
+<p>There is one thing in particular you will notice almost immediately,
+especially if you are coming from imperative languages
+that support default argument values and/or function overloading.
+It&#8217;s the particular <em>order of arguments</em>
+that a well designed, functional <span class="caps">API</span> will almost certainly&nbsp;follow.</p>
+<p>See the <code>splitOn</code> function&nbsp;again:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOn</span> <span class="n">sep</span> <span class="n">text</span> <span class="ow">=</span> <span class="o">...</span>
+</pre></div>
+
+
+<p>It is no accident that it puts the <code>sep</code>arator as its first argument.
+This choice &#8212; as opposed to the alternative where <code>text</code> goes first &#8212;
+produces much more useful results when the function is applied partially
+through&nbsp;currying.</p>
+<p>Say, for instance, that you want to splice a list of strings
+where the individual pieces can be&nbsp;comma-separated:</p>
+<div class="highlight"><pre><span class="nf">spliceOnComma</span> <span class="ow">::</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">spliceOnComma</span> <span class="p">[</span><span class="s">&quot;1&quot;</span><span class="p">,</span> <span class="s">&quot;2,3&quot;</span><span class="p">,</span> <span class="s">&quot;4,5,6&quot;</span><span class="p">,</span> <span class="s">&quot;7&quot;</span><span class="p">]</span>
+<span class="c1">-- ^ This should produce [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;, &quot;4&quot;, &quot;5&quot;, &quot;6&quot;, &quot;7&quot;]</span>
+</pre></div>
+
+
+<p>Because the separator appears first in a <code>splitOn</code> call,
+you can do it easily through a direct use of&nbsp;currying:</p>
+<div class="highlight"><pre><span class="nf">spliceOnComma</span> <span class="n">xs</span> <span class="ow">=</span> <span class="n">concat</span> <span class="o">$</span> <span class="n">map</span> <span class="p">(</span><span class="n">splitOn</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="n">xs</span>
+
+<span class="c1">-- or equivalently, in a terser point-free style:</span>
+<span class="c1">-- spliceOnComma = concatMap $ splitOn &quot;,&quot;</span>
+</pre></div>
+
+
+<p>What we do here is apply the split to every string in the list <code>xs</code>
+(with <code>map</code>), followed by flattening the result &#8212; a list of lists, <code>[[Text]]</code> &#8212;
+back to a regular <code>[Text]</code> with <code>concat</code>.</p>
+<p>If we had the alternative version of <code>splitOn</code>,
+one where the order of arguments is&nbsp;reversed:</p>
+<div class="highlight"><pre><span class="nf">splitOn&#39;</span> <span class="n">text</span> <span class="n">sep</span> <span class="ow">=</span> <span class="o">...</span>
+</pre></div>
+
+
+<p>we&#8217;d have no choice but to &#8220;fix it&#8221;, with either a lambda function
+or <a href="http://hackage.haskell.org/package/base-4.10.0.0/docs/Prelude.html#v:flip">the <code>flip</code> combinator</a>:</p>
+<div class="highlight"><pre><span class="nf">spliceOnComma&#39;</span> <span class="n">xs</span> <span class="ow">=</span> <span class="n">concat</span> <span class="o">$</span> <span class="n">map</span> <span class="p">(</span><span class="nf">\</span><span class="n">x</span> <span class="ow">-&gt;</span> <span class="n">splitOn&#39;</span> <span class="n">x</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="n">xs</span>
+<span class="nf">spliceOnComma&#39;</span> <span class="n">xs</span> <span class="ow">=</span> <span class="n">concat</span> <span class="o">$</span> <span class="n">map</span> <span class="p">(</span><span class="n">flip</span> <span class="n">splitOn&#39;</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="n">xs</span>
+</pre></div>
+
+
+<p>Putting the delimiter first is simply more convenient.
+It is much more likely you&#8217;ll be splitting multiple strings on the same separator,
+as opposed to a single string and multiple separators.
+The argument order of <code>splitOn</code> is making the common use case slightly easier
+by moving the more &#8220;stable&#8221; parameter to the&nbsp;front.</p>
+<p>This practice generalizes to all curried functions,
+forming a simple&nbsp;rule:</p>
+<blockquote>
+<p>The more likely it is for an argument to remain <em>constant</em> between calls,
+the sooner it should appear in the function&nbsp;signature.</p>
+</blockquote>
+<p>Note how this is different compared to any language
+where functions may take variable number of arguments.
+In Python, for example, the equivalent of <code>splitOn</code> is defined&nbsp;as:</p>
+<div class="highlight"><pre><span class="nb">str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">sep</span><span class="p">)</span>
+</pre></div>
+
+
+<p>and the implicit default value for <code>sep</code> is essentially &#8220;any whitespace character&#8221;.
+In many cases, this is exactly what we want,
+making the following calls possible<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="nb">str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;Alice has a cat&quot;</span><span class="p">)</span>
+<span class="p">[</span><span class="s">&quot;Alice&quot;</span><span class="p">,</span> <span class="s">&quot;has&quot;</span><span class="p">,</span> <span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;cat&quot;</span><span class="p">]</span>
+</pre></div>
+
+
+<p>So, as a less-used argument, <code>sep</code> actually goes last in <code>str.split</code>,
+as it is often desirable to omit it altogether.
+Under the currying regime, however, we put it <em>first</em>,
+so that we can fix it to a chosen value and obtain a more specialized version of the&nbsp;function.</p>
+<h4>The fewer arguments, the&nbsp;better</h4>
+<p>Another thing you&#8217;d encounter in languages with flexible function definitions
+is the proliferation of optional&nbsp;arguments:</p>
+<div class="highlight"><pre><span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;http://example.com/foo&quot;</span><span class="p">,</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;arg&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">},</span>
+                        <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;field&#39;</span><span class="p">:</span> <span class="s">&#39;value&#39;</span><span class="p">},</span>
+                        <span class="n">auth</span><span class="o">=</span><span class="p">(</span><span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;pass&#39;</span><span class="p">),</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;User-Agent&#39;</span><span class="p">:</span> <span class="s">&quot;My Amazing App&quot;</span><span class="p">},</span>
+                        <span class="n">cookies</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;c_is&#39;</span><span class="p">:</span> <span class="s">&#39;for_cookie&#39;</span><span class="p">},</span>
+                        <span class="n">files</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;attachment.txt&#39;</span><span class="p">:</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;file.txt&#39;</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)},</span>
+                        <span class="n">allow_redirects</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                        <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Trying to translate this directly to a functional paradigm
+would result in extremely unreadable function calls &#8212;
+doubly so when you don&#8217;t actually need all those arguments
+and have to provide some canned&nbsp;defaults:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="kt">Requests</span><span class="o">.</span><span class="n">get</span>
+    <span class="s">&quot;http://example.com/foo&quot;</span> <span class="p">[(</span><span class="n">&#39;arg&#39;</span><span class="p">,</span> <span class="mi">42</span><span class="p">)]</span>
+    <span class="kt">[]</span> <span class="kt">Nothing</span> <span class="kt">[]</span> <span class="kt">[]</span> <span class="kt">[]</span> <span class="kt">True</span> <span class="kt">Nothing</span>
+</pre></div>
+
+
+<p>What does that <code>True</code> mean, for example?
+Or what exactly does each empty list signify?
+It&#8217;s impossible to know just by looking at the function call&nbsp;alone.</p>
+<p>Long argument lists are thus detrimental to the quality of functional APIs.
+It&#8217;s much harder to correctly apply the previous rule (least used arguments first)
+when there are so many possible&nbsp;permutations.</p>
+<p>What should we do then?&#8230;
+In some cases, including the above example of an <span class="caps">HTTP</span> library,
+we cannot simply cut out features in the name of elegance.
+The necessary information needs to go <em>somewhere</em>,
+meaning we need to find at least somewhat acceptable place for&nbsp;it.</p>
+<p>Fortunately, we have a couple of options
+that should help us with solving this&nbsp;problem.</p>
+<h5>Combinators /&nbsp;builders</h5>
+<p>Looking back at the last example in Python,
+we can see why the function call remains readable
+even if it sprouts a dozen or so additional&nbsp;arguments.</p>
+<p>The obvious reason is that
+each one has been uniquely identified by a <em>name</em>.</p>
+<p>In order to emulate some form of what&#8217;s called keyword arguments,
+we can split the single function call into multiple stages.
+Each one would then supply one piece of data,
+with a matching function name serving as a readability&nbsp;cue:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+            <span class="n">withHeaders</span> <span class="p">[(</span><span class="s">&quot;User-Agent&quot;</span><span class="p">,</span> <span class="s">&quot;My Amazing App&quot;</span><span class="p">)]</span> <span class="o">$</span>
+            <span class="n">withBasicAuth</span> <span class="s">&quot;user&quot;</span> <span class="s">&quot;pass&quot;</span> <span class="o">$</span>
+            <span class="n">withData</span> <span class="p">[(</span><span class="s">&quot;field&quot;</span><span class="p">,</span> <span class="s">&quot;value&quot;</span><span class="p">)]</span> <span class="o">$</span>
+                <span class="n">get</span> <span class="s">&quot;http://example.com/foo&quot;</span>
+</pre></div>
+
+
+<p>If we follow this approach,
+the caller would only invoke those intermediate functions
+that fit his particular use case.
+The <span class="caps">API</span> above could still offer <code>withCookies</code>, <code>withFiles</code>,
+or any of the other combinators,
+but their usage shall be completely&nbsp;optional.</p>
+<p>Pretty neat,&nbsp;right?</p>
+<p>Thing is, the implementation would be a little involved here.
+We would clearly need to carry some data between the various <code>withFoo</code> calls,
+which requires some additional data types in addition to plain functions.
+At minimum, we need something to represent the <code>Request</code>,
+as it is created by the <code>get</code> function:</p>
+<div class="highlight"><pre><span class="nf">get</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+</pre></div>
+
+
+<p>and then &#8220;piped&#8221; through <code>withFoo</code> transformers like this&nbsp;one:</p>
+<div class="highlight"><pre><span class="nf">withBasicAuth</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Request</span> <span class="ow">-&gt;</span> <span class="kt">Request</span><span class="p">)</span>
+</pre></div>
+
+
+<p>so that it can we can finally send&nbsp;it:</p>
+<div class="highlight"><pre><span class="nf">sendRequest</span> <span class="ow">::</span> <span class="kt">Request</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="kt">Response</span>
+</pre></div>
+
+
+<p>Such <code>Request</code> type needs to keep track of all the additional parameters
+that may have been tacked onto&nbsp;it:</p>
+<div class="highlight"><pre><span class="kr">type</span> <span class="kt">Request</span> <span class="ow">=</span> <span class="p">(</span><span class="kt">Text</span><span class="p">,</span> <span class="p">[</span><span class="kt">Param</span><span class="p">])</span>  <span class="c1">-- Text is the URL</span>
+
+<span class="kr">data</span> <span class="kt">Param</span> <span class="ow">=</span> <span class="kt">Header</span> <span class="kt">Text</span> <span class="kt">Text</span>
+           <span class="o">|</span> <span class="kt">BasicAuth</span> <span class="kt">Text</span> <span class="kt">Text</span>
+           <span class="o">|</span> <span class="kt">Data</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span>
+           <span class="c1">-- and so on</span>
+
+<span class="c1">-- example</span>
+<span class="nf">withBasicAuth</span> <span class="n">user</span> <span class="n">pass</span> <span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span> <span class="ow">=</span>
+    <span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">params</span> <span class="o">++</span> <span class="p">[</span><span class="kt">BasicAuth</span> <span class="n">user</span> <span class="n">pass</span><span class="p">])</span>
+</pre></div>
+
+
+<p>All of a sudden, what would be a single function explodes into a collection of data types
+and associated&nbsp;combinators.</p>
+<p>In Haskell at least,
+we can forgo some of the boilerplate by automatically deriving an instance
+of <a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Monoid.html"><code>Monoid</code></a>
+(or perhaps a <a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Semigroup.html"><code>Semigroup</code></a>).
+Rather than invoking a series of combinators,
+clients would then build their requests through repeated <code>mappend</code>s<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span> <span class="n">get</span> <span class="s">&quot;http://example.com/foo&quot;</span>
+                          <span class="o">&lt;&gt;</span> <span class="n">header</span> <span class="s">&quot;User-Agent&quot;</span> <span class="s">&quot;My Awesome App&quot;</span>
+                          <span class="o">&lt;&gt;</span> <span class="n">basicAuth</span> <span class="s">&quot;user&quot;</span> <span class="s">&quot;pass&quot;</span>
+                          <span class="o">&lt;&gt;</span> <span class="n">body</span> <span class="p">[(</span><span class="s">&quot;field&quot;</span><span class="p">,</span> <span class="s">&quot;value&quot;</span><span class="p">)]</span>
+</pre></div>
+
+
+<p>This mini-<a href="https://en.wikipedia.org/wiki/Domain-specific_language"><span class="caps">DSL</span></a>
+looks very similar to keyword arguments in Python,
+as well as the equivalent Builder pattern from Java, Rust, and others.
+What&#8217;s disappointing, however,
+is that it doesn&#8217;t easily beat those solutions in terms of compile-time safety.
+Unless you invest into some tricky type-level hacks,
+there is nothing to prevent the users from building invalid requests at&nbsp;runtime:</p>
+<div class="highlight"><pre><span class="kr">let</span> <span class="n">reqParams</span> <span class="ow">=</span> <span class="n">get</span> <span class="s">&quot;http://example.com/foo&quot;</span>
+<span class="c1">--</span>
+<span class="c1">-- ... lots of code in between ...</span>
+<span class="c1">--</span>
+<span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+            <span class="n">reqParams</span> <span class="o">&lt;&gt;</span> <span class="n">get</span> <span class="s">&quot;http://example.com/bar&quot;</span> <span class="c1">-- woops!</span>
+</pre></div>
+
+
+<p>Compared to a plain function (with however many arguments),
+we have actually lost some measure of correctness&nbsp;here.</p>
+<h5>Record&nbsp;types</h5>
+<p>In many cases, fortunately,
+there is another way to keep our calls both flexible and safe against runtime errors.
+We just need to change the representation of the input type (here, <code>Request</code>)
+into a <em>record</em>.</p>
+<p>Record is simply a user-defined type that&#8217;s a collection of <em>named fields</em>.</p>
+<p>Most languages (especially imperative ones: C, C++, Go, Rust, &#8230;) call those <em>structures</em>,
+and use the <code>struct</code> keyword to signify a record definition.
+In functional programming parlance, they are also referred to as <em>product types</em>;
+this is because the joint record type is a Cartesian product of its individual field types<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Going back to our example,
+it shouldn&#8217;t be difficult to define a record representing an <span class="caps">HTTP</span> <code>Request</code>:</p>
+<div class="highlight"><pre><span class="kr">data</span> <span class="kt">Request</span> <span class="ow">=</span> <span class="kt">Request</span> <span class="p">{</span> <span class="n">reqURL</span> <span class="ow">::</span> <span class="kt">URL</span>
+                       <span class="p">,</span> <span class="n">reqMethod</span> <span class="ow">::</span> <span class="kt">Method</span>
+                       <span class="p">,</span> <span class="n">reqHeaders</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span>
+                       <span class="p">,</span> <span class="n">reqPostData</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span>
+                       <span class="p">}</span>
+</pre></div>
+
+
+<p>In fact, I suspect most programmers would naturally reach for this notation&nbsp;first.</p>
+<p>Having this definition,
+calls to <code>sendRequest</code> can be rewritten to take a record instance
+that we construct on the spot<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+    <span class="kt">Request</span> <span class="p">{</span> <span class="n">reqURL</span> <span class="ow">=</span> <span class="s">&quot;http://example.com/bar&quot;</span>
+            <span class="p">,</span> <span class="n">reqMethod</span> <span class="ow">=</span> <span class="kt">GET</span>
+            <span class="p">,</span> <span class="n">reqHeaders</span> <span class="ow">=</span> <span class="p">[(</span><span class="s">&quot;User-Agent&quot;</span><span class="p">,</span> <span class="s">&quot;My Awesome App&quot;</span><span class="p">)]</span>
+            <span class="p">,</span> <span class="n">reqPostData</span> <span class="ow">=</span> <span class="kt">[]</span>
+            <span class="p">}</span>
+</pre></div>
+
+
+<p>Compare this snippet to the Python example from the beginning of this section.
+It comes remarkably close, right?
+The <code>Request</code> record and its fields can indeed work quite nicely
+as substitutes for keyword&nbsp;arguments.</p>
+<p>But besides the readability boon of having &#8220;argument&#8221; names at the call site.
+we&#8217;ve also gained stronger correctness checks.
+For example, there is no way anymore to accidentally supply the <span class="caps">URL</span> field&nbsp;twice.</p>
+<h4>Different functions for different&nbsp;things</h4>
+<p>Astute readers may have noticed at least two things about the previous&nbsp;solutions.</p>
+<p>First, they are not mutually incompatible.
+Quite the opposite, actually: they compose very neatly, allowing us to combine
+builder functions with the <em>record update</em> syntax in the final <span class="caps">API</span>:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+    <span class="p">(</span><span class="n">get</span> <span class="s">&quot;http://example.com/baz&quot;</span><span class="p">)</span>
+    <span class="p">{</span> <span class="n">reqHeaders</span> <span class="ow">=</span> <span class="p">[(</span><span class="s">&quot;User-Agent&quot;</span><span class="p">,</span> <span class="s">&quot;My Awesome App&quot;</span><span class="p">)]</span> <span class="p">}</span>
+</pre></div>
+
+
+<p>This cuts out basically all the boilerplate of record-based calls,
+leaving only the parts that actually differ from the defaults<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.</p>
+<p>But on the second and more important note:
+we don&#8217;t seem to be talking about <em>currying</em> anymore.
+Does it mean it loses its usefulness
+once we go beyond certain threshold of&nbsp;complexity?&#8230;</p>
+<p>Thankfully, the answer is no.
+While some APIs may require more advanced techniques
+to access the full breadth of their functionality,
+it is always possible to expose some carefully constructed facade
+that is conducive to partial&nbsp;application.</p>
+<p>Consider, for example, the functionality exposed by this set of <span class="caps">HTTP</span>&nbsp;wrappers:</p>
+<div class="highlight"><pre><span class="nf">head</span> <span class="ow">::</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">headWith</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">get</span> <span class="ow">::</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">getWith</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">postForm</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">postFormWith</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">toURL</span> <span class="ow">::</span> <span class="kt">Method</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+</pre></div>
+
+
+<p>Each one is obviously curry-friendly<sup id="fnref:6"><a class="footnote-ref" href="#fn:6" rel="footnote">6</a></sup>.
+Combined, they also offer a pretty comprehensive <span class="caps">API</span> surface.
+And should they prove insufficient,
+you&#8217;d still have the builder pattern and/or record updates to fall back on &#8212;
+either for specialized one-off cases, or for writing your own&nbsp;wrappers.</p>
+<p>Naturally, this technique of layered <span class="caps">API</span> design &#8212;
+with simple wrappers hiding a progressively more advanced core &#8212;
+isn&#8217;t limited to just functional programming.
+In some way, it is what <em>good</em> <span class="caps">API</span> design looks like in general.
+But in <span class="caps">FP</span> languages, it becomes especially important,
+because the expressive benefits of partial application are so paramount&nbsp;there</p>
+<p>Fortunately, these principles seem to be followed pretty consistently,
+at least within the Haskell ecosystem.
+You can see it in the design of
+<a href="https://www.stackage.org/haddock/lts-9.12/http-client-0.5.7.0/Network-HTTP-Client.html">the <code>http-client</code> package</a>,
+which is the real world extension of the <span class="caps">HTTP</span> interface outlined here.
+More evidently, it can be observed in any of the numerous packages
+the expose both a basic <code>foo</code> and a more customizable <code>fooWith</code> functions;
+popular examples include
+<a href="https://www.stackage.org/haddock/lts-9.12/async-2.1.1.1/Control-Concurrent-Async.html#v:cancelWith">the <code>async</code> package</a>,
+<a href="https://hackage.haskell.org/package/zlib-0.6.1.2/docs/Codec-Compression-Zlib.html#g:2">the <code>zlib</code> library</a>,
+and <a href="https://www.stackage.org/haddock/lts-9.12/regex-compat-tdfa-0.95.1.4/Text-Regex.html">the <code>Text.Regex</code> module</a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It&#8217;d be more common in Python to write this as <code>"Alice has a cat".split()</code>,
+but this form would make it less obvious how the arguments are passed.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>A great example of this pattern can be found
+in the <a href="http://hackage.haskell.org/package/optparse-applicative"><em>optparse-applicative</em> package</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Tuples (like <code>(Int, String)</code>) are also product types.
+They can be thought of as ad-hoc records where field indices serve as rudimentary &#8220;names&#8221;.
+In fact, some languages even use the dotted notation to access fields
+of both records/structs (<code>x.foo</code>) and tuples (<code>y.0</code>).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>For simplicity, I&#8217;m gonna assume the <code>URL</code> and <code>Header</code> types
+can be &#8220;magically&#8221; constructed from string literals
+through the <span class="caps">GHC</span>&#8217;s <code>OverloadedStrings</code> extension.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>In many languages,
+we can specify more formally what the &#8220;default&#8221; means for a compound-type like <code>Request</code>,
+and sometimes even <em>derive</em> it automatically.
+Examples include
+<a href="https://hackage.haskell.org/package/data-default-0.7.1.1/docs/Data-Default.html#t:Default">the <code>Default</code> typeclass</a> in Haskell,
+<a href="https://doc.rust-lang.org/std/default/trait.Default.html">the <code>Default</code> trait</a> in Rust,
+and the default/argumentless/trivial constructors in C++ <em>et al</em>.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+<li id="fn:6">
+<p>Haskell programmers may especially notice how the last function is designed specifically
+for infix application: <code>response &lt;- sendRequest $ POST `toUrl` url</code>.&#160;<a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/programming/currying-api-design.html#currying-api-design">Continue reading</a>
+  </div>
+</article>
+
+  <div class="pagination">
+  </div>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " Karol Kuczmarski's Blog ",
+  "url" : "http://xion.io",
+  "image": "http://xion.io/logo.jpeg",
+  "description": ""
+}
+</script><script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>

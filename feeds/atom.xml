@@ -1,5 +1,437 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-10-31T15:21:00+00:00</updated><entry><title>Small Rust crates I (almost) always use</title><link href="http://xion.io/post/code/rust-little-crates.html" rel="alternate"></link><updated>2017-10-31T15:21:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-10-31:post/code/rust-little-crates.html</id><summary type="html">&lt;p&gt;Alternative clickbait title: &lt;em&gt;My Little Crates: Rust is Magic&lt;/em&gt;&amp;nbsp;:-)&lt;/p&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-11-12T14:07:00+00:00</updated><entry><title>Currying and API design</title><link href="http://xion.io/post/programming/currying-api-design.html" rel="alternate"></link><updated>2017-11-12T14:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-11-12:post/programming/currying-api-design.html</id><summary type="html">&lt;p&gt;In functional programming, &lt;em&gt;currying&lt;/em&gt; is one of the concepts
+that contribute greatly to its expressive power.
+Its importance could be compared to something as ubiquitous
+as chaining method calls (&lt;code&gt;foo.bar().baz()&lt;/code&gt;) in imperative, object-oriented&amp;nbsp;languages.&lt;/p&gt;
+&lt;p&gt;Although a simple idea on the surface,
+it has significant consequences for the way functional APIs are designed.
+This post is an overview of various techniques
+that help utilize currying effectively when writing your functions.
+While the examples are written in Haskell syntax,
+I believe it should be useful for developers working in other functional languages,&amp;nbsp;too.&lt;/p&gt;
+&lt;h4&gt;The&amp;nbsp;basics&lt;/h4&gt;
+&lt;p&gt;Let&amp;#8217;s start with a short&amp;nbsp;recap.&lt;/p&gt;
+&lt;p&gt;Intuitively, we say that an &lt;em&gt;N&lt;/em&gt;-argument function is &lt;em&gt;curried&lt;/em&gt;
+if you can invoke it with a single argument and get back an (&lt;em&gt;N&lt;/em&gt;-1)-argument function.
+Repeat this &lt;em&gt;N&lt;/em&gt; times,
+and it&amp;#8217;ll be equivalent to supplying all &lt;em&gt;N&lt;/em&gt; arguments at&amp;nbsp;once.&lt;/p&gt;
+&lt;p&gt;Here&amp;#8217;s an example: the &lt;code&gt;Data.Text&lt;/code&gt; module in Haskell
+contains the following function called &lt;code&gt;splitOn&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt; &lt;span class="n"&gt;text&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;It&amp;#8217;s a fairly standard string splitting function,
+taking a separator as its first argument,
+with the second one being a string to perform the splitting&amp;nbsp;on:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;  &lt;span class="c1"&gt;-- produces [&amp;quot;1&amp;quot;, &amp;quot;2&amp;quot;, &amp;quot;3&amp;quot;]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Both arguments are of type &lt;code&gt;Text&lt;/code&gt; (Haskell strings),
+while the return type is &lt;code&gt;[Text]&lt;/code&gt; &amp;#8212; a &lt;em&gt;list&lt;/em&gt; of strings.
+This add up to the signature (type) of &lt;code&gt;splitOn&lt;/code&gt;,
+written above as &lt;code&gt;Text -&amp;gt; Text -&amp;gt; [Text]&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Like all functions in Haskell, however, &lt;code&gt;splitOn&lt;/code&gt; is &lt;em&gt;curried&lt;/em&gt;.
+We don&amp;#8217;t have to provide it with both arguments at once;
+instead, we can stop at one in order to obtain &lt;em&gt;another function&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This new function is a &lt;em&gt;partially applied&lt;/em&gt; version of &lt;code&gt;splitOn&lt;/code&gt;,
+with its first argument (the separator) already filled in.
+To complete the call, all you need to do now is provide the text to&amp;nbsp;split:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;  &lt;span class="c1"&gt;-- also produces [&amp;quot;1&amp;quot;, &amp;quot;2&amp;quot;, &amp;quot;3&amp;quot;]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and, unsurprisingly, you&amp;#8217;ll get the exact same&amp;nbsp;result.&lt;/p&gt;
+&lt;p&gt;Compare now the type signatures of both &lt;code&gt;splitOn&lt;/code&gt; and &lt;code&gt;splitOnComma&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;It may be puzzling at first why the same arrow symbol (&lt;code&gt;-&amp;gt;&lt;/code&gt;) is used
+for what seems like two distinct meanings: the &amp;#8220;argument separator&amp;#8221;,
+and the return type&amp;nbsp;indicator.&lt;/p&gt;
+&lt;p&gt;But for curried functions, both of those meanings are in fact &lt;em&gt;identical&lt;/em&gt;!&lt;/p&gt;
+&lt;p&gt;Indeed, we can make it more explicit by defining &lt;code&gt;splitOn&lt;/code&gt; as:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;or&amp;nbsp;even:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;TypeOf&lt;/span&gt; &lt;span class="n"&gt;splitOnComma&lt;/span&gt; &lt;span class="c1"&gt;-- (not a real Haskell syntax)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;From this perspective, what &lt;code&gt;splitOn&lt;/code&gt; actually returns is not &lt;code&gt;[Text]&lt;/code&gt;
+but a &lt;em&gt;function&lt;/em&gt;  from &lt;code&gt;Text&lt;/code&gt; to &lt;code&gt;[Text]&lt;/code&gt; (&lt;code&gt;Text -&amp;gt; [Text]&lt;/code&gt;).
+And conversely, a call with two&amp;nbsp;arguments:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;is instead &lt;em&gt;two function calls&lt;/em&gt;, each taking just &lt;em&gt;one argument&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This is why the &lt;code&gt;-&amp;gt;&lt;/code&gt; arrow isn&amp;#8217;t actually ambiguous:
+it always signifies the &lt;em&gt;mapping&lt;/em&gt; of an argument type to a result type.
+And it&amp;#8217;s always just one argument, too,&amp;nbsp;because:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Currying makes all functions take only one&amp;nbsp;argument.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;It&amp;#8217;s just that sometimes, what those single-argument functions return
+will be yet another&amp;nbsp;function.&lt;/p&gt;
+&lt;h4&gt;Least used arguments go &lt;em&gt;first&lt;/em&gt;&lt;/h4&gt;
+&lt;p&gt;Now that we have a firmer grasp on the idea of currying,
+we can see how it influences &lt;span class="caps"&gt;API&lt;/span&gt;&amp;nbsp;design.&lt;/p&gt;
+&lt;p&gt;There is one thing in particular you will notice almost immediately,
+especially if you are coming from imperative languages
+that support default argument values and/or function overloading.
+It&amp;#8217;s the particular &lt;em&gt;order of arguments&lt;/em&gt;
+that a well designed, functional &lt;span class="caps"&gt;API&lt;/span&gt; will almost certainly&amp;nbsp;follow.&lt;/p&gt;
+&lt;p&gt;See the &lt;code&gt;splitOn&lt;/code&gt; function&amp;nbsp;again:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt; &lt;span class="n"&gt;text&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;It is no accident that it puts the &lt;code&gt;sep&lt;/code&gt;arator as its first argument.
+This choice &amp;#8212; as opposed to the alternative where &lt;code&gt;text&lt;/code&gt; goes first &amp;#8212;
+produces much more useful results when the function is applied partially
+through&amp;nbsp;currying.&lt;/p&gt;
+&lt;p&gt;Say, for instance, that you want to splice a list of strings
+where the individual pieces can be&amp;nbsp;comma-separated:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;spliceOnComma&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="nf"&gt;spliceOnComma&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;1&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;2,3&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;4,5,6&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;7&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="c1"&gt;-- ^ This should produce [&amp;quot;1&amp;quot;, &amp;quot;2&amp;quot;, &amp;quot;3&amp;quot;, &amp;quot;4&amp;quot;, &amp;quot;5&amp;quot;, &amp;quot;6&amp;quot;, &amp;quot;7&amp;quot;]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Because the separator appears first in a &lt;code&gt;splitOn&lt;/code&gt; call,
+you can do it easily through a direct use of&amp;nbsp;currying:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;spliceOnComma&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concat&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- or equivalently, in a terser point-free style:&lt;/span&gt;
+&lt;span class="c1"&gt;-- spliceOnComma = concatMap $ splitOn &amp;quot;,&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;What we do here is apply the split to every string in the list &lt;code&gt;xs&lt;/code&gt;
+(with &lt;code&gt;map&lt;/code&gt;), followed by flattening the result &amp;#8212; a list of lists, &lt;code&gt;[[Text]]&lt;/code&gt; &amp;#8212;
+back to a regular &lt;code&gt;[Text]&lt;/code&gt; with &lt;code&gt;concat&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;If we had the alternative version of &lt;code&gt;splitOn&lt;/code&gt;,
+one where the order of arguments is&amp;nbsp;reversed:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;text&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;we&amp;#8217;d have no choice but to &amp;#8220;fix it&amp;#8221;, with either a lambda function
+or &lt;a href="http://hackage.haskell.org/package/base-4.10.0.0/docs/Prelude.html#v:flip"&gt;the &lt;code&gt;flip&lt;/code&gt; combinator&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;spliceOnComma&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concat&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nf"&gt;\&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;splitOn&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt;
+&lt;span class="nf"&gt;spliceOnComma&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concat&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;flip&lt;/span&gt; &lt;span class="n"&gt;splitOn&amp;#39;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Putting the delimiter first is simply more convenient.
+It is much more likely you&amp;#8217;ll be splitting multiple strings on the same separator,
+as opposed to a single string and multiple separators.
+The argument order of &lt;code&gt;splitOn&lt;/code&gt; is making the common use case slightly easier
+by moving the more &amp;#8220;stable&amp;#8221; parameter to the&amp;nbsp;front.&lt;/p&gt;
+&lt;p&gt;This practice generalizes to all curried functions,
+forming a simple&amp;nbsp;rule:&lt;/p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;The more likely it is for an argument to remain &lt;em&gt;constant&lt;/em&gt; between calls,
+the sooner it should appear in the function&amp;nbsp;signature.&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;Note how this is different compared to any language
+where functions may take variable number of arguments.
+In Python, for example, the equivalent of &lt;code&gt;splitOn&lt;/code&gt; is defined&amp;nbsp;as:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;split&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and the implicit default value for &lt;code&gt;sep&lt;/code&gt; is essentially &amp;#8220;any whitespace character&amp;#8221;.
+In many cases, this is exactly what we want,
+making the following calls possible&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;split&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Alice has a cat&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Alice&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;has&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;a&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;cat&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;So, as a less-used argument, &lt;code&gt;sep&lt;/code&gt; actually goes last in &lt;code&gt;str.split&lt;/code&gt;,
+as it is often desirable to omit it altogether.
+Under the currying regime, however, we put it &lt;em&gt;first&lt;/em&gt;,
+so that we can fix it to a chosen value and obtain a more specialized version of the&amp;nbsp;function.&lt;/p&gt;
+&lt;h4&gt;The fewer arguments, the&amp;nbsp;better&lt;/h4&gt;
+&lt;p&gt;Another thing you&amp;#8217;d encounter in languages with flexible function definitions
+is the proliferation of optional&amp;nbsp;arguments:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;response&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+                        &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;arg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
+                        &lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;field&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;value&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
+                        &lt;span class="n"&gt;auth&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;user&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;pass&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
+                        &lt;span class="n"&gt;headers&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;User-Agent&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Amazing App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
+                        &lt;span class="n"&gt;cookies&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;c_is&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;for_cookie&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
+                        &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;attachment.txt&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;file.txt&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)},&lt;/span&gt;
+                        &lt;span class="n"&gt;allow_redirects&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="bp"&gt;False&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
+                        &lt;span class="n"&gt;timeout&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mf"&gt;5.0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Trying to translate this directly to a functional paradigm
+would result in extremely unreadable function calls &amp;#8212;
+doubly so when you don&amp;#8217;t actually need all those arguments
+and have to provide some canned&amp;nbsp;defaults:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="kt"&gt;Requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;
+    &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="n"&gt;&amp;#39;arg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+    &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;Nothing&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;True&lt;/span&gt; &lt;span class="kt"&gt;Nothing&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;What does that &lt;code&gt;True&lt;/code&gt; mean, for example?
+Or what exactly does each empty list signify?
+It&amp;#8217;s impossible to know just by looking at the function call&amp;nbsp;alone.&lt;/p&gt;
+&lt;p&gt;Long argument lists are thus detrimental to the quality of functional APIs.
+It&amp;#8217;s much harder to correctly apply the previous rule (least used arguments first)
+when there are so many possible&amp;nbsp;permutations.&lt;/p&gt;
+&lt;p&gt;What should we do then?&amp;#8230;
+In some cases, including the above example of an &lt;span class="caps"&gt;HTTP&lt;/span&gt; library,
+we cannot simply cut out features in the name of elegance.
+The necessary information needs to go &lt;em&gt;somewhere&lt;/em&gt;,
+meaning we need to find at least somewhat acceptable place for&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;Fortunately, we have a couple of options
+that should help us with solving this&amp;nbsp;problem.&lt;/p&gt;
+&lt;h5&gt;Combinators /&amp;nbsp;builders&lt;/h5&gt;
+&lt;p&gt;Looking back at the last example in Python,
+we can see why the function call remains readable
+even if it sprouts a dozen or so additional&amp;nbsp;arguments.&lt;/p&gt;
+&lt;p&gt;The obvious reason is that
+each one has been uniquely identified by a &lt;em&gt;name&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;In order to emulate some form of what&amp;#8217;s called keyword arguments,
+we can split the single function call into multiple stages.
+Each one would then supply one piece of data,
+with a matching function name serving as a readability&amp;nbsp;cue:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
+            &lt;span class="n"&gt;withHeaders&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Amazing App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
+            &lt;span class="n"&gt;withBasicAuth&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;user&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;pass&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
+            &lt;span class="n"&gt;withData&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;field&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;value&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
+                &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;If we follow this approach,
+the caller would only invoke those intermediate functions
+that fit his particular use case.
+The &lt;span class="caps"&gt;API&lt;/span&gt; above could still offer &lt;code&gt;withCookies&lt;/code&gt;, &lt;code&gt;withFiles&lt;/code&gt;,
+or any of the other combinators,
+but their usage shall be completely&amp;nbsp;optional.&lt;/p&gt;
+&lt;p&gt;Pretty neat,&amp;nbsp;right?&lt;/p&gt;
+&lt;p&gt;Thing is, the implementation would be a little involved here.
+We would clearly need to carry some data between the various &lt;code&gt;withFoo&lt;/code&gt; calls,
+which requires some additional data types in addition to plain functions.
+At minimum, we need something to represent the &lt;code&gt;Request&lt;/code&gt;,
+as it is created by the &lt;code&gt;get&lt;/code&gt; function:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;get&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and then &amp;#8220;piped&amp;#8221; through &lt;code&gt;withFoo&lt;/code&gt; transformers like this&amp;nbsp;one:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;withBasicAuth&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;so that it can we can finally send&amp;nbsp;it:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;sendRequest&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="kt"&gt;Response&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Such &lt;code&gt;Request&lt;/code&gt; type needs to keep track of all the additional parameters
+that may have been tacked onto&amp;nbsp;it:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;type&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Param&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;  &lt;span class="c1"&gt;-- Text is the URL&lt;/span&gt;
+
+&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Param&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Header&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
+           &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kt"&gt;BasicAuth&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
+           &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kt"&gt;Data&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+           &lt;span class="c1"&gt;-- and so on&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- example&lt;/span&gt;
+&lt;span class="nf"&gt;withBasicAuth&lt;/span&gt; &lt;span class="n"&gt;user&lt;/span&gt; &lt;span class="n"&gt;pass&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt;
+    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;params&lt;/span&gt; &lt;span class="o"&gt;++&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;BasicAuth&lt;/span&gt; &lt;span class="n"&gt;user&lt;/span&gt; &lt;span class="n"&gt;pass&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;All of a sudden, what would be a single function explodes into a collection of data types
+and associated&amp;nbsp;combinators.&lt;/p&gt;
+&lt;p&gt;In Haskell at least,
+we can forgo some of the boilerplate by automatically deriving an instance
+of &lt;a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Monoid.html"&gt;&lt;code&gt;Monoid&lt;/code&gt;&lt;/a&gt;
+(or perhaps a &lt;a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Semigroup.html"&gt;&lt;code&gt;Semigroup&lt;/code&gt;&lt;/a&gt;).
+Rather than invoking a series of combinators,
+clients would then build their requests through repeated &lt;code&gt;mappend&lt;/code&gt;s&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;
+                          &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;header&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Awesome App&amp;quot;&lt;/span&gt;
+                          &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;basicAuth&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;user&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;pass&amp;quot;&lt;/span&gt;
+                          &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;body&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;field&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;value&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This mini-&lt;a href="https://en.wikipedia.org/wiki/Domain-specific_language"&gt;&lt;span class="caps"&gt;DSL&lt;/span&gt;&lt;/a&gt;
+looks very similar to keyword arguments in Python,
+as well as the equivalent Builder pattern from Java, Rust, and others.
+What&amp;#8217;s disappointing, however,
+is that it doesn&amp;#8217;t easily beat those solutions in terms of compile-time safety.
+Unless you invest into some tricky type-level hacks,
+there is nothing to prevent the users from building invalid requests at&amp;nbsp;runtime:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;let&lt;/span&gt; &lt;span class="n"&gt;reqParams&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;
+&lt;span class="c1"&gt;--&lt;/span&gt;
+&lt;span class="c1"&gt;-- ... lots of code in between ...&lt;/span&gt;
+&lt;span class="c1"&gt;--&lt;/span&gt;
+&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
+            &lt;span class="n"&gt;reqParams&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/bar&amp;quot;&lt;/span&gt; &lt;span class="c1"&gt;-- woops!&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Compared to a plain function (with however many arguments),
+we have actually lost some measure of correctness&amp;nbsp;here.&lt;/p&gt;
+&lt;h5&gt;Record&amp;nbsp;types&lt;/h5&gt;
+&lt;p&gt;In many cases, fortunately,
+there is another way to keep our calls both flexible and safe against runtime errors.
+We just need to change the representation of the input type (here, &lt;code&gt;Request&lt;/code&gt;)
+into a &lt;em&gt;record&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Record is simply a user-defined type that&amp;#8217;s a collection of &lt;em&gt;named fields&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Most languages (especially imperative ones: C, C++, Go, Rust, &amp;#8230;) call those &lt;em&gt;structures&lt;/em&gt;,
+and use the &lt;code&gt;struct&lt;/code&gt; keyword to signify a record definition.
+In functional programming parlance, they are also referred to as &lt;em&gt;product types&lt;/em&gt;;
+this is because the joint record type is a Cartesian product of its individual field types&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Going back to our example,
+it shouldn&amp;#8217;t be difficult to define a record representing an &lt;span class="caps"&gt;HTTP&lt;/span&gt; &lt;code&gt;Request&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;reqURL&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt;
+                       &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqMethod&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Method&lt;/span&gt;
+                       &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqHeaders&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+                       &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqPostData&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+                       &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;In fact, I suspect most programmers would naturally reach for this notation&amp;nbsp;first.&lt;/p&gt;
+&lt;p&gt;Having this definition,
+calls to &lt;code&gt;sendRequest&lt;/code&gt; can be rewritten to take a record instance
+that we construct on the spot&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
+    &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;reqURL&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/bar&amp;quot;&lt;/span&gt;
+            &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqMethod&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;GET&lt;/span&gt;
+            &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqHeaders&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Awesome App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
+            &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqPostData&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt;
+            &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Compare this snippet to the Python example from the beginning of this section.
+It comes remarkably close, right?
+The &lt;code&gt;Request&lt;/code&gt; record and its fields can indeed work quite nicely
+as substitutes for keyword&amp;nbsp;arguments.&lt;/p&gt;
+&lt;p&gt;But besides the readability boon of having &amp;#8220;argument&amp;#8221; names at the call site.
+we&amp;#8217;ve also gained stronger correctness checks.
+For example, there is no way anymore to accidentally supply the &lt;span class="caps"&gt;URL&lt;/span&gt; field&amp;nbsp;twice.&lt;/p&gt;
+&lt;h4&gt;Different functions for different&amp;nbsp;things&lt;/h4&gt;
+&lt;p&gt;Astute readers may have noticed at least two things about the previous&amp;nbsp;solutions.&lt;/p&gt;
+&lt;p&gt;First, they are not mutually incompatible.
+Quite the opposite, actually: they compose very neatly, allowing us to combine
+builder functions with the &lt;em&gt;record update&lt;/em&gt; syntax in the final &lt;span class="caps"&gt;API&lt;/span&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
+    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/baz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;reqHeaders&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Awesome App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This cuts out basically all the boilerplate of record-based calls,
+leaving only the parts that actually differ from the defaults&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;But on the second and more important note:
+we don&amp;#8217;t seem to be talking about &lt;em&gt;currying&lt;/em&gt; anymore.
+Does it mean it loses its usefulness
+once we go beyond certain threshold of&amp;nbsp;complexity?&amp;#8230;&lt;/p&gt;
+&lt;p&gt;Thankfully, the answer is no.
+While some APIs may require more advanced techniques
+to access the full breadth of their functionality,
+it is always possible to expose some carefully constructed facade
+that is conducive to partial&amp;nbsp;application.&lt;/p&gt;
+&lt;p&gt;Consider, for example, the functionality exposed by this set of &lt;span class="caps"&gt;HTTP&lt;/span&gt;&amp;nbsp;wrappers:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;head&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;span class="nf"&gt;headWith&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;span class="nf"&gt;get&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;span class="nf"&gt;getWith&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;span class="nf"&gt;postForm&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;span class="nf"&gt;postFormWith&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;span class="nf"&gt;toURL&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Method&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Each one is obviously curry-friendly&lt;sup id="fnref:6"&gt;&lt;a class="footnote-ref" href="#fn:6" rel="footnote"&gt;6&lt;/a&gt;&lt;/sup&gt;.
+Combined, they also offer a pretty comprehensive &lt;span class="caps"&gt;API&lt;/span&gt; surface.
+And should they prove insufficient,
+you&amp;#8217;d still have the builder pattern and/or record updates to fall back on &amp;#8212;
+either for specialized one-off cases, or for writing your own&amp;nbsp;wrappers.&lt;/p&gt;
+&lt;p&gt;Naturally, this technique of layered &lt;span class="caps"&gt;API&lt;/span&gt; design &amp;#8212;
+with simple wrappers hiding a progressively more advanced core &amp;#8212;
+isn&amp;#8217;t limited to just functional programming.
+In some way, it is what &lt;em&gt;good&lt;/em&gt; &lt;span class="caps"&gt;API&lt;/span&gt; design looks like in general.
+But in &lt;span class="caps"&gt;FP&lt;/span&gt; languages, it becomes especially important,
+because the expressive benefits of partial application are so paramount&amp;nbsp;there&lt;/p&gt;
+&lt;p&gt;Fortunately, these principles seem to be followed pretty consistently,
+at least within the Haskell ecosystem.
+You can see it in the design of
+&lt;a href="https://www.stackage.org/haddock/lts-9.12/http-client-0.5.7.0/Network-HTTP-Client.html"&gt;the &lt;code&gt;http-client&lt;/code&gt; package&lt;/a&gt;,
+which is the real world extension of the &lt;span class="caps"&gt;HTTP&lt;/span&gt; interface outlined here.
+More evidently, it can be observed in any of the numerous packages
+the expose both a basic &lt;code&gt;foo&lt;/code&gt; and a more customizable &lt;code&gt;fooWith&lt;/code&gt; functions;
+popular examples include
+&lt;a href="https://www.stackage.org/haddock/lts-9.12/async-2.1.1.1/Control-Concurrent-Async.html#v:cancelWith"&gt;the &lt;code&gt;async&lt;/code&gt; package&lt;/a&gt;,
+&lt;a href="https://hackage.haskell.org/package/zlib-0.6.1.2/docs/Codec-Compression-Zlib.html#g:2"&gt;the &lt;code&gt;zlib&lt;/code&gt; library&lt;/a&gt;,
+and &lt;a href="https://www.stackage.org/haddock/lts-9.12/regex-compat-tdfa-0.95.1.4/Text-Regex.html"&gt;the &lt;code&gt;Text.Regex&lt;/code&gt; module&lt;/a&gt;.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;It&amp;#8217;d be more common in Python to write this as &lt;code&gt;"Alice has a cat".split()&lt;/code&gt;,
+but this form would make it less obvious how the arguments are passed.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;A great example of this pattern can be found
+in the &lt;a href="http://hackage.haskell.org/package/optparse-applicative"&gt;&lt;em&gt;optparse-applicative&lt;/em&gt; package&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;Tuples (like &lt;code&gt;(Int, String)&lt;/code&gt;) are also product types.
+They can be thought of as ad-hoc records where field indices serve as rudimentary &amp;#8220;names&amp;#8221;.
+In fact, some languages even use the dotted notation to access fields
+of both records/structs (&lt;code&gt;x.foo&lt;/code&gt;) and tuples (&lt;code&gt;y.0&lt;/code&gt;).&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;For simplicity, I&amp;#8217;m gonna assume the &lt;code&gt;URL&lt;/code&gt; and &lt;code&gt;Header&lt;/code&gt; types
+can be &amp;#8220;magically&amp;#8221; constructed from string literals
+through the &lt;span class="caps"&gt;GHC&lt;/span&gt;&amp;#8217;s &lt;code&gt;OverloadedStrings&lt;/code&gt; extension.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:5"&gt;
+&lt;p&gt;In many languages,
+we can specify more formally what the &amp;#8220;default&amp;#8221; means for a compound-type like &lt;code&gt;Request&lt;/code&gt;,
+and sometimes even &lt;em&gt;derive&lt;/em&gt; it automatically.
+Examples include
+&lt;a href="https://hackage.haskell.org/package/data-default-0.7.1.1/docs/Data-Default.html#t:Default"&gt;the &lt;code&gt;Default&lt;/code&gt; typeclass&lt;/a&gt; in Haskell,
+&lt;a href="https://doc.rust-lang.org/std/default/trait.Default.html"&gt;the &lt;code&gt;Default&lt;/code&gt; trait&lt;/a&gt; in Rust,
+and the default/argumentless/trivial constructors in C++ &lt;em&gt;et al&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:6"&gt;
+&lt;p&gt;Haskell programmers may especially notice how the last function is designed specifically
+for infix application: &lt;code&gt;response &amp;lt;- sendRequest $ POST `toUrl` url&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="functional programming"></category><category term="currying"></category><category term="partial application"></category><category term="Haskell"></category><category term="API"></category><category term="abstraction"></category></entry><entry><title>Small Rust crates I (almost) always use</title><link href="http://xion.io/post/code/rust-little-crates.html" rel="alternate"></link><updated>2017-10-31T15:21:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-10-31:post/code/rust-little-crates.html</id><summary type="html">&lt;p&gt;Alternative clickbait title: &lt;em&gt;My Little Crates: Rust is Magic&lt;/em&gt;&amp;nbsp;:-)&lt;/p&gt;
 &lt;hr /&gt;
 &lt;p&gt;Due to its relatively scant standard library,
 programming in Rust inevitably involves pulling in a good number of third-party&amp;nbsp;dependencies.&lt;/p&gt;
@@ -1359,402 +1791,4 @@ what language works best for us, our team, and our&amp;nbsp;projects.&lt;/p&gt;
 &lt;p&gt;Sometimes it&amp;#8217;ll be Go, Java, Rust, or even Haskell.&lt;br&gt;
 A different situation may be best handled by Python, Ruby, or even&amp;nbsp;JavaScript.&lt;/p&gt;
 &lt;p&gt;As the old adage goes, there is no silver bullet.
-We should not try to polish static typing into&amp;nbsp;one.&lt;/p&gt;</summary><category term="Python"></category><category term="Rust"></category><category term="dynamic languages"></category><category term="dynamic typing"></category><category term="static typing"></category></entry><entry><title>Asynchronous Rust for fun &amp; profit</title><link href="http://xion.io/post/programming/rust-async-closer-look.html" rel="alternate"></link><updated>2017-05-20T14:33:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-28:post/programming/rust-async-closer-look.html</id><summary type="html">&lt;p&gt;&lt;em&gt;&amp;#8230;or: Is Rust&amp;nbsp;webscale?&lt;/em&gt;&lt;/p&gt;
-&lt;p&gt;In this day and age, no language can really make an impact anymore
-unless it enables its programmers to harness the power of the Internet.
-&lt;a href="https://www.rust-lang.org/en-US/"&gt;Rust&lt;/a&gt; is no different here.
-Despite posing as a true systems language
-(as opposed to those &lt;a href="http://golang.org/"&gt;only marketed as such&lt;/a&gt;),
-it includes &lt;a href="https://github.com/aturon/rfcs/blob/roadmap-2017/text/0000-roadmap-2017.md#rust-should-be-well-equipped-for-writing-robust-high-scale-servers"&gt;highly scalable servers&lt;/a&gt;
-as a prominent objective in its 2017&amp;nbsp;agenda.&lt;/p&gt;
-&lt;p&gt;Presumably to satisfy this very objective,
-the Rust ecosystem has recently seen some major developments
-in the space of &lt;em&gt;asynchronous I/O&lt;/em&gt;.
-Given the pace of those improvements,
-it may seem that production quality async services are quite possible&amp;nbsp;already.&lt;/p&gt;
-&lt;p&gt;But is that so?
-How exactly do you write async Rust servers in the early to mid&amp;nbsp;2017?&lt;/p&gt;
-&lt;p&gt;To find out, I set to code up a toy application.
-Said program was a small intermediary/&lt;span class="caps"&gt;API&lt;/span&gt; server (a &amp;#8220;microservice&amp;#8221;, if you will)
-that tries to hit many of the typical requirements that arise in such projects.
-The main objective was to test the limits of asynchronous Rust,
-and see how easily (or difficult) they can be&amp;nbsp;pushed.&lt;/p&gt;
-&lt;p&gt;This post is a summary of all the lessons I&amp;#8217;ve learned from&amp;nbsp;that.&lt;/p&gt;
-&lt;p&gt;It is necessarily quite long,
-so if you look for some &lt;span class="caps"&gt;TL&lt;/span&gt;;&lt;span class="caps"&gt;DR&lt;/span&gt;, scroll down straight to &lt;em&gt;Conclusions&lt;/em&gt;.&lt;/p&gt;
-&lt;p align="center"&gt;&lt;img src="http://xion.io/images/jump-to-conclusions-mat.jpeg"&gt;&lt;/p&gt;
-
-&lt;h4&gt;Asynchro-what?&lt;/h4&gt;
-&lt;p&gt;Before we dive in, I have to clarify what &amp;#8220;asynchronous&amp;#8221; means in this context.
-Those familiar with async concepts can freely skip this&amp;nbsp;section.&lt;/p&gt;
-&lt;h5&gt;Pulling some&amp;nbsp;threads&lt;/h5&gt;
-&lt;p&gt;Asynchronous processing (or &lt;em&gt;async&lt;/em&gt; for short) is brought up most often
-in the context of I/O operations: disk reads, network calls, database queries,
-and so&amp;nbsp;on.&lt;/p&gt;
-&lt;p&gt;Relatively speaking, all those tasks tend to be &lt;em&gt;slow&lt;/em&gt;:
-they take orders of magnitude longer than just executing code or even accessing &lt;span class="caps"&gt;RAM&lt;/span&gt;.
-The &amp;#8220;traditional&amp;#8221; (synchronous) approach to dealing with them
-is to relegate those tasks to separate &lt;em&gt;threads&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;When one thread has to wait for a lengthy I/O operation to complete,
-the operating system (its &lt;em&gt;scheduler&lt;/em&gt;, to be precise) can suspend that thread.
-This lets others execute their code in the mean time and not waste &lt;span class="caps"&gt;CPU&lt;/span&gt;&amp;nbsp;cycles.&lt;/p&gt;
-&lt;p&gt;This is the essence of &lt;em&gt;concurrency&lt;/em&gt;&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h5&gt;Schedule&amp;nbsp;yourself&lt;/h5&gt;
-&lt;p&gt;But threads are not the only option when dealing with many things (i.e. requests) at&amp;nbsp;once.&lt;/p&gt;
-&lt;p&gt;The alternative approach is one where no threads are automatically suspended or resumed
-by the &lt;span class="caps"&gt;OS&lt;/span&gt;. Instead, a special version of I/O subroutines
-allows the program to continue execution immediately after issuing an I/O call.
-While the operation happens in the background&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;,
-the code is given an opaque handle &amp;#8212; usually called a promise, a &lt;em&gt;future&lt;/em&gt;,
-or an async result &amp;#8212; that will eventually resolve to the actual return&amp;nbsp;value.&lt;/p&gt;
-&lt;p&gt;The program can wait for the handle synchronously,
-but it would typically hand it over to an &lt;em&gt;event loop&lt;/em&gt;,
-an abstraction provided by a dedicated async framework.
-Such a framework (among which node.js is probably the best known example)
-maintains a list of all I/O &amp;#8220;descriptors&amp;#8221; (fds in Unix)
-that are associated with pending I/O&amp;nbsp;operations.&lt;/p&gt;
-&lt;p&gt;Then, in the loop, it simply waits on &lt;em&gt;all&lt;/em&gt; of them,
-usually via the &lt;a href="https://en.wikipedia.org/wiki/Epoll"&gt;&lt;code&gt;epoll&lt;/code&gt; system call&lt;/a&gt;.
-Whenever an I/O task completes, the loop would execute a &lt;em&gt;callback&lt;/em&gt; associated
-with its result (or promise, or future).
-Through this callback, the application is able to process&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;In a sense, we can treat the event loop as a dedicated scheduler for its&amp;nbsp;program.&lt;/p&gt;
-&lt;h5&gt;But&amp;nbsp;why?&lt;/h5&gt;
-&lt;p&gt;So, what exactly the benefit of asynchronous I/O?
-If anything, it definitely sounds more complicated for the programmer. (Spoiler alert: it&amp;nbsp;is).&lt;/p&gt;
-&lt;p&gt;The impetus for the development of async techniques most likely came from
-the &lt;a href="http://www.kegel.com/c10k.html"&gt;&lt;span class="caps"&gt;C10K&lt;/span&gt; problem&lt;/a&gt;.
-The short version of it is that computers are nowadays very fast
-and should therefore be able to serve thousands of requests simultaneously.
-(especially when those requests are mostly I/O, which translate to waiting time for the &lt;span class="caps"&gt;CPU&lt;/span&gt;).&lt;/p&gt;
-&lt;p&gt;And if &amp;#8220;serving&amp;#8221; queries is indeed almost all waiting,
-then handling thousands of clients should be very&amp;nbsp;possible.&lt;/p&gt;
-&lt;p&gt;In some cases, however, it was found that when the &lt;span class="caps"&gt;OS&lt;/span&gt; is scheduling the threads,
-it introduces too much overhead on the frequent pause/resume state changes (&lt;em&gt;context switching&lt;/em&gt;).
-Like I mentioned above, the asynchronous alternative does away with all that,
-and indeed lets the &lt;span class="caps"&gt;CPU&lt;/span&gt; just wait (on &lt;code&gt;epoll&lt;/code&gt;) until something interesting happens.
-Once it does, the application can deal with it quickly,
-issue another I/O call, and let the server go back to&amp;nbsp;waiting.&lt;/p&gt;
-&lt;p&gt;With today&amp;#8217;s processing power we can theoretically handle
-&lt;em&gt;a lot&lt;/em&gt; of concurrent clients this way: up to hundreds of thousands or even&amp;nbsp;millions.&lt;/p&gt;
-&lt;h5&gt;Reality&amp;nbsp;check&lt;/h5&gt;
-&lt;p&gt;Well, ain&amp;#8217;t that grand? No wonder everyone is writing everything in node.js&amp;nbsp;now!&lt;/p&gt;
-&lt;p&gt;Jokes aside, the &lt;em&gt;actual&lt;/em&gt; benefits of asynchronous I/O
-(especially when weighed against its inconvenience for developers)
-are a bit harder to quantify.
-For one, they rely heavily on the assumption of fast code &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; slow I/O being valid in all&amp;nbsp;situations.&lt;/p&gt;
-&lt;p&gt;But this isn&amp;#8217;t really self-evident, and becomes increasingly dubious as time goes on
-and code complexity grows.
-It should be obvious, for example, that a Python web frontend
-talking mostly to in-memory caches in the same datacenter will have radically different
-performance characteristics than a C++ proxy server calling &lt;span class="caps"&gt;HTTP&lt;/span&gt; APIs over public Internet.
-Those nuances are often lost in translation between simplistic benchmarks
-and exaggerated blog posts&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;Upon a closer look, however, these details point quite clearly in favor of asynchronous Rust.
-Being a language that compiles to native code, it should usually run faster
-than interpreted (Python, Ruby) or even JITed (&lt;span class="caps"&gt;JVM&lt;/span&gt; &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; .&lt;span class="caps"&gt;NET&lt;/span&gt;) languages,
-very close to what is typically referred to as &amp;#8220;bare metal&amp;#8221; speed.
-For async I/O, it means the event loop won&amp;#8217;t be disturbed for a (relatively) long time
-to do some trivial processing, leading to higher potential throughput of&amp;nbsp;requests.&lt;/p&gt;
-&lt;p&gt;All in all, it would seem that Rust is one of the few languages
-where async actually &lt;em&gt;makes sense&lt;/em&gt;.&lt;/p&gt;
-&lt;h4&gt;Rust: the story so&amp;nbsp;far&lt;/h4&gt;
-&lt;p&gt;Obviously, this means it&amp;#8217;s been built into the language right from the start&amp;#8230;&amp;nbsp;right?&lt;/p&gt;
-&lt;p&gt;Well, not really.
-It was always possible to use native &lt;code&gt;epoll&lt;/code&gt; through &lt;a href="https://doc.rust-lang.org/book/ffi.html"&gt;&lt;span class="caps"&gt;FFI&lt;/span&gt;&lt;/a&gt;,
-of course, but that&amp;#8217;s not exactly the level of abstraction we&amp;#8217;d like to work with.
-Still, the upper layers of the async I/O stack have been steadily growing at least since Rust&amp;nbsp;1.0.&lt;/p&gt;
-&lt;p&gt;The major milestones here include &lt;a href="https://docs.rs/mio"&gt;&lt;em&gt;mio&lt;/em&gt;&lt;/a&gt;,
-a comparatively basic building block that provides an asynchronous version of &lt;span class="caps"&gt;TCP&lt;/span&gt;/&lt;span class="caps"&gt;IP&lt;/span&gt;.
-It also offers idiomatic wrappers over &lt;code&gt;epoll&lt;/code&gt;, allowing us to write our own event&amp;nbsp;loop.&lt;/p&gt;
-&lt;p&gt;On the application side, &lt;a href="https://docs.rs/futures"&gt;the &lt;em&gt;futures&lt;/em&gt; crate&lt;/a&gt; abstracts the notion
-of a potentially incomplete operation into, well, a &lt;em&gt;future&lt;/em&gt;.
-Manipulating those futures is how one can now write asynchronous code in&amp;nbsp;Rust.&lt;/p&gt;
-&lt;p&gt;More recently, &lt;a href="http://tokio.rs"&gt;Tokio&lt;/a&gt; has been emerging as
-&lt;a href="https://blog.mozilla.org/blog/2017/04/10/mozilla-awards-365000-to-open-source-projects-as-part-of-moss/"&gt;&lt;em&gt;defacto&lt;/em&gt; framework&lt;/a&gt;
-for async I/O in Rust. It essentially combines the two previously mentioned crates,
-and provides additional abstractions specifically for network clients and&amp;nbsp;servers.&lt;/p&gt;
-&lt;p&gt;And finally, the popular &lt;span class="caps"&gt;HTTP&lt;/span&gt; framework &lt;a href="http://hyper.rs"&gt;Hyper&lt;/a&gt; is now also supporting
-asynchronous request handling via Tokio.
-What this means is that bread-and-butter of the Internet&amp;#8217;s application layer &amp;#8212;
-&lt;span class="caps"&gt;API&lt;/span&gt; servers talking &lt;span class="caps"&gt;JSON&lt;/span&gt; over &lt;span class="caps"&gt;HTTP&lt;/span&gt; &amp;#8212; should now be fully supported by the ecosystem
-of asynchronous&amp;nbsp;Rust.&lt;/p&gt;
-&lt;p&gt;Let&amp;#8217;s take it for a spin then, shall&amp;nbsp;we?&lt;/p&gt;
-&lt;h4&gt;The Grand&amp;nbsp;Project&lt;/h4&gt;
-&lt;p&gt;Earlier on, we have established that the main use case for asynchronous I/O
-is intermediate microservices.
-They often sit somewhere between a standard web frontend and a storage server or a database.
-Because of their typical role within a bigger system,
-these kinds of projects don&amp;#8217;t tend to be particularly exciting on their&amp;nbsp;own.&lt;/p&gt;
-&lt;p&gt;But perhaps we can liven them up a&amp;nbsp;little.&lt;/p&gt;
-&lt;p&gt;In the end, it is all about the Internet that we&amp;#8217;re talking here,
-and everything on the Internet can usually be improved by one simple&amp;nbsp;addition.&lt;/p&gt;
-&lt;p align="center"&gt;
-    &lt;img src="http://xion.io/images/smoothie.jpeg"&gt;
-    &lt;br/&gt;
-    &lt;small style="text-side: xx-small"&gt;
-        &lt;a href="http://www.boredpanda.com/beautiful-fluffy-cat-british-longhair/"&gt;
-            Image source
-        &lt;/a&gt;
-    &lt;/small&gt;
-&lt;/p&gt;
-
-&lt;p&gt;&amp;#8230;Okay, &lt;em&gt;two&lt;/em&gt; possible additions &amp;#8212; the other one&amp;nbsp;being:&lt;/p&gt;
-&lt;p align="center"&gt;&lt;img src="http://xion.io/images/oprah-memes.png" alt="Memes!"&gt;&lt;/p&gt;
-
-&lt;p&gt;If you&amp;#8217;re really pedantic, you may call them &lt;em&gt;image macros&lt;/em&gt;.
-But regardless of the name, the important part is putting text on pictures,
-preferably in a funny&amp;nbsp;way.&lt;/p&gt;
-&lt;p&gt;&lt;a href="https://github.com/Xion/rofld"&gt;The microservice I wrote&lt;/a&gt; is doing just that.
-Thought it won&amp;#8217;t ensure your memes are sufficiently hilarious,
-it will try to deliver them exactly to
-&lt;a href="https://github.com/Xion/rofld/blob/e25e9d01bdd7e85452e6a5922770dae941d5b61c/src/caption/mod.rs#L32"&gt;your specifications&lt;/a&gt;.
-You may thus think of it as possible backend for
-&lt;a href="http://www.quickmeme.com/caption"&gt;an image site like this one&lt;/a&gt;.&lt;/p&gt;
-&lt;h5&gt;Flimsy excuses &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; post-hoc&amp;nbsp;justifications&lt;/h5&gt;
-&lt;p&gt;It is, of course, a &lt;em&gt;complete&lt;/em&gt; coincidence,
-lacking &lt;em&gt;any&lt;/em&gt; premeditation on my part,
-that when it comes to evaluating an async platform,
-a service like this fits the bill &lt;em&gt;very well&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;And especially when said platform is async &lt;em&gt;Rust&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Why, though, is it such a happy, er,&amp;nbsp;accident?&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;p&gt;&lt;strong&gt;It&amp;#8217;s a simple, well-defined application&lt;/strong&gt;.
-  There is basically a &lt;a href="https://github.com/Xion/rofld/blob/e25e9d01bdd7e85452e6a5922770dae941d5b61c/src/service.rs#L33"&gt;single endpoint&lt;/a&gt;,
-  accepting simple input (&lt;span class="caps"&gt;JSON&lt;/span&gt; or query string) and producing a straightforward result (an image).
-  No need to persist any state made creating
-  &lt;a href="https://github.com/Xion/rofld/blob/8026eab34ea54c4ba1b814c1114b3f5d87020233/src/main.rs"&gt;an &lt;span class="caps"&gt;MVP&lt;/span&gt;&lt;/a&gt;
-  significantly&amp;nbsp;easier.&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;&lt;strong&gt;Caching can be used for meme templates and fonts.&lt;/strong&gt;
-  Besides being an inherent part of most network services,
-  a cache also represents a point of contention for Rust programs.
-  The language is widely known for its alergy to global mutable state,
-  which is exactly what programmatic caches boil down&amp;nbsp;to.&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;&lt;strong&gt;Image captioning is a &lt;span class="caps"&gt;CPU&lt;/span&gt;-intensive operation.&lt;/strong&gt;
-  While the &amp;#8220;async&amp;#8221; part of async I/O may sometimes go all the way down,
-  many practical services either evolve some important &lt;span class="caps"&gt;CPU&lt;/span&gt;-bound code,
-  or require it right from the start.
-  For this reason, I wanted to check if &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; how async Rust can mix
-  with threaded&amp;nbsp;concurrency.&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;&lt;strong&gt;Configuration knobs can be added.&lt;/strong&gt;
-  Unlike trivial experiments in the vein of an echo or &amp;#8220;Hello world&amp;#8221; server,
-  this kind of service warrants some flags that the user could tweak,
-  like the number of image captioning threads, or the size of the template cache.
-  We can see how easy (or how hard) it is to make them applicable across
-  all future-based&amp;nbsp;requests.&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;All in all, and despite its frivolous subject matter,
-a meme server is actually hitting quite a few notable spots in the microservice&amp;nbsp;domain.&lt;/p&gt;
-&lt;p align="center"&gt;
-    &lt;img src="http://xion.io/images/meme-shocked.png" alt=""&gt;
-&lt;/p&gt;
-
-&lt;h4&gt;Learnings&lt;/h4&gt;
-&lt;p&gt;As you may glean from its &lt;a href="https://github.com/Xion/rofld"&gt;GitHub repo&lt;/a&gt;,
-it would seem that the experiment was successful.
-Sure, you could implement some features in the captioning department
-(supporting animated GIFs comes to mind),
-but none of these are pertinent to the async mechanics of the&amp;nbsp;server.&lt;/p&gt;
-&lt;p&gt;And since it&amp;#8217;s the async (I/O) in Rust that we&amp;#8217;re interested in,
-let me now present you with an assorted collection of practical experiences with&amp;nbsp;it.&lt;/p&gt;
-&lt;h5&gt;&amp;gt;0-cost&amp;nbsp;futures&lt;/h5&gt;
-&lt;p&gt;If you read the docs&amp;#8217; preamble to &lt;a href="https://docs.rs/futures"&gt;the &lt;code&gt;futures&lt;/code&gt; crate&lt;/a&gt;,
-you will see it mentioning the &amp;#8220;zero-cost&amp;#8221; aspect of the library.
-Consistent with the philosophy behind Rust,
-it proclaims to deliver its abstractions without any&amp;nbsp;overhead.&lt;/p&gt;
-&lt;p&gt;Thing is, I&amp;#8217;m not sure how this promise can be delivered on in&amp;nbsp;practice.&lt;/p&gt;
-&lt;p&gt;Flip through &lt;a href="https://tokio.rs/docs/getting-started/simple-server/"&gt;the introductory tutorial to Tokio&lt;/a&gt;,
-for example, and you will already find plenty of compromises.
-Without the crucial (but nightly-only)
-&lt;a href="https://github.com/rust-lang/rfcs/blob/master/text/1522-conservative-impl-trait.md"&gt;&lt;code&gt;impl Trait&lt;/code&gt; feature&lt;/a&gt;,
-you are basically required to put all your futures in a &lt;code&gt;Box&lt;/code&gt;&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.
-They even encourage it themselves, offering a convenient
-&lt;a href="https://docs.rs/futures/0.1.13/futures/future/trait.Future.html#method.boxed"&gt;&lt;code&gt;Future::boxed&lt;/code&gt; method&lt;/a&gt;
-exactly for this purpose, as well the matching
-&lt;a href="https://docs.rs/futures/0.1.13/futures/future/type.BoxFuture.html"&gt;&lt;code&gt;BoxFuture&lt;/code&gt; typedef&lt;/a&gt;
-right in the&amp;nbsp;crate.&lt;/p&gt;
-&lt;p&gt;But hey, you can always just use nightly Rust, right?
-&lt;code&gt;impl Trait&lt;/code&gt; will stabilize eventually, so your code should be, ahem, &lt;em&gt;future-proof&lt;/em&gt; either&amp;nbsp;way.&lt;/p&gt;
-&lt;p&gt;Unfortunately, this assumes all the futures that you&amp;#8217;re building your request handlers from
-shall never cross any thread boundaries.
-(&lt;code&gt;BoxFuture&lt;/code&gt;, for example, automatically constrains them to be &lt;code&gt;Send&lt;/code&gt;).
-As you&amp;#8217;ve likely guessed, this doesn&amp;#8217;t jive very well with computationally intensive tasks
-which are best relegated to a separate&amp;nbsp;thread.&lt;/p&gt;
-&lt;p&gt;To deal with them properly, you&amp;#8217;re going to need a thread pool-based executor,
-which is currently implemented in the &lt;a href="https://docs.rs/futures-cpupool"&gt;&lt;code&gt;futures_cpupool&lt;/code&gt; crate&lt;/a&gt;.
-Using it requires a lot of care, though,
-and a deep understanding of &lt;em&gt;both&lt;/em&gt; types of concurrency&amp;nbsp;involved.&lt;/p&gt;
-&lt;p&gt;Evidently, this was something that I lacked at the time,
-which is why I encountered problems ensuring that my futures are properly &lt;code&gt;Send&lt;/code&gt;.
-In the end, I settled on &lt;em&gt;making&lt;/em&gt; them &lt;code&gt;Send&lt;/code&gt; in the most straightforward
-(and completely &lt;a href="https://github.com/Xion/rofld/commit/19d37cef4bb2e917e54c862ef138c7da4378d03e"&gt;unnecessary&lt;/a&gt;) manner:
-by &lt;a href="https://github.com/Xion/rofld/blob/7e7d3b160594689d2e4c80b7328f90f34546b955/src/ext.rs#L39"&gt;wrapping them in &lt;code&gt;Arc&lt;/code&gt;/&lt;code&gt;Mutex&lt;/code&gt;&lt;/a&gt;.
-That in itself wasn&amp;#8217;t
-&lt;a href="https://github.com/Xion/rofld/commit/15bcd60f76a97badb9b90721179daa0845b139dd#diff-126a37e2b594610dd09c3f228d9d1717L52"&gt;without its perils&lt;/a&gt;,
-but at least allowed me to move&amp;nbsp;forward.&lt;/p&gt;
-&lt;p&gt;Ironically, this also shows an important, pragmatic property of the futures&amp;#8217; system:
-sub-par hacks around it &lt;em&gt;are&lt;/em&gt; possible &amp;#8212;
-a fact you&amp;#8217;ll be glad to know about on the proverbial day before a&amp;nbsp;deadline.&lt;/p&gt;
-&lt;h5&gt;Templates-worthy error&amp;nbsp;messages&lt;/h5&gt;
-&lt;p&gt;Other significant properties of the futures&amp;#8217; abstraction shall include
-telling the programmer what&amp;#8217;s wrong with his code in the simplest,
-most straightforward, and concise manner&amp;nbsp;possible.&lt;/p&gt;
-&lt;p&gt;Here, let me show you an&amp;nbsp;example:&lt;/p&gt;
-&lt;p align="center"&gt;
-    &lt;img src="http://xion.io/images/rust-futures-error.png"&gt;&lt;br&gt;
-    &lt;small&gt;
-        &amp;#8230;which you can also behold in its
-        &lt;a href="https://gist.github.com/Xion/df1fb7fffa1afb4bfbf2838b9c3fc4c1"&gt;
-            gist form
-        &lt;/a&gt;.
-    &lt;/small&gt;
-&lt;/p&gt;
-
-&lt;p&gt;The reason you will encounter such incomprehensible messages
-stems from the very building blocks of async&amp;nbsp;code.&lt;/p&gt;
-&lt;p&gt;Right now, each chained operation on a future &amp;#8212; &lt;code&gt;map&lt;/code&gt;, &lt;code&gt;and_then&lt;/code&gt;, &lt;code&gt;or_else&lt;/code&gt;, and so on &amp;#8212;
-produces a &lt;em&gt;nested type&lt;/em&gt;.
-Every subsequent application of those methods
-&amp;#8220;contains&amp;#8221; (in terms of the type system) &lt;em&gt;all the previous ones&lt;/em&gt;.
-Keep going, and it will eventually balloon into one big onion of &lt;code&gt;Chain&amp;lt;Map&amp;lt;OrElse&amp;lt;Chain&amp;lt;Map&amp;lt;...etc...&amp;gt;&amp;gt;&amp;gt;&amp;gt;&amp;gt;&lt;/code&gt;.&lt;/p&gt;
-&lt;p align="center"&gt;
-    &lt;img src="http://xion.io/images/meme-yo-dawg.jpeg"&gt;&lt;br&gt;
-    &lt;small&gt;Futures are like ogres.&lt;/small&gt;
-&lt;/p&gt;
-
-&lt;p&gt;I haven&amp;#8217;t personally hit any compiler limits in this regard,
-but I&amp;#8217;m sure it is plausible for a complicated, real-world&amp;nbsp;program.&lt;/p&gt;
-&lt;p&gt;It also gets &lt;em&gt;worse&lt;/em&gt; if you use nightly Rust with &lt;code&gt;impl Trait&lt;/code&gt;.
-In this case, function boundaries no longer &amp;#8220;break&amp;#8221; type stacking
-via &lt;code&gt;Box&lt;/code&gt;ing the results into trait objects.
-Indeed, you can very well end up with some truly gigantic constructs
-as the compiler tries represent the return types of your most complex&amp;nbsp;handlers.&lt;/p&gt;
-&lt;p&gt;But even if rustc is up to snuff and can deal with those fractals just fine,
-it doesn&amp;#8217;t necessarily mean the &lt;em&gt;programmer&lt;/em&gt; can.
-Looking at those error messages,
-I had vivid flashbacks from hacking on C++ templates with ancient compilers like &lt;span class="caps"&gt;VS2005&lt;/span&gt;.
-The difference is, of course, that we&amp;#8217;re not trying any arcane metaprogramming here;
-we just want to do some relatively mundane&amp;nbsp;I/O.&lt;/p&gt;
-&lt;p&gt;I have no doubt the messaging will eventually improve,
-and the mile-long types will at least get pretty-printed.
-At the moment, however, prepare for some serious squinting and&amp;nbsp;bracket-counting.&lt;/p&gt;
-&lt;h5&gt;Where is my (language)&amp;nbsp;support?&lt;/h5&gt;
-&lt;p&gt;Sadly, those long, cryptic error messages are not the only way
-in which the Rust compiler disappoints&amp;nbsp;us.&lt;/p&gt;
-&lt;p&gt;I keep mentioning &lt;code&gt;impl Trait&lt;/code&gt; as a generally desirable language feature
-for writers of asynchronous code.
-This improvement is still a relatively long way from getting precisely
-&lt;a href="https://github.com/aturon/rfcs/blob/expand-impl-trait/text/0000-expand-impl-trait.md"&gt;&lt;em&gt;defined&lt;/em&gt;&lt;/a&gt;,
-much less stabilized.
-And it is only a somewhat minor improvement in the async&amp;nbsp;ergonomics.&lt;/p&gt;
-&lt;p&gt;The wishlist is vastly longer and even more&amp;nbsp;inchoate.&lt;/p&gt;
-&lt;p&gt;Saying it bluntly, right now Rust doesn&amp;#8217;t really support the async style &lt;em&gt;at all&lt;/em&gt;.
-All the combined &lt;span class="caps"&gt;API&lt;/span&gt; surface of futures/Tokio/Hyper/etc. is a clever,
-but ultimately contrived design,
-and it has no intentional backing in the Rust language&amp;nbsp;itself.&lt;/p&gt;
-&lt;p&gt;This is a stark contrast with numerous other languages.
-They often support asynchronous I/O as something of a first class feature.
-The list includes at least
-&lt;a href="https://msdn.microsoft.com/en-us/library/mt674882.aspx"&gt;C#&lt;/a&gt;,
-&lt;a href="https://docs.python.org/3/library/asyncio-task.html"&gt;Python 3.5+&lt;/a&gt;,
-&lt;a href="https://docs.hhvm.com/hack/async/awaitables"&gt;Hack/&lt;span class="caps"&gt;PHP&lt;/span&gt;&lt;/a&gt;,
-&lt;a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function"&gt;&lt;span class="caps"&gt;ES8&lt;/span&gt; / JavaScript&lt;/a&gt;,
-and basically all the functional languages.
-They all have dedicated &lt;code&gt;async&lt;/code&gt;, &lt;code&gt;await&lt;/code&gt;, or equivalent constructs
-that make the callback-based nature of asynchronous code essentially&amp;nbsp;transparent.&lt;/p&gt;
-&lt;p&gt;The absence of similar support puts Rust in the same bucket as frontend JavaScript circa 2010,
-where &lt;code&gt;.then&lt;/code&gt;-chaining of promises reigned supreme.
-This is of course better than the callback hell of early Node,
-but I wouldn&amp;#8217;t think that&amp;#8217;s a particularly high bar.
-In this regard, Rust leaves plenty to be&amp;nbsp;desired.&lt;/p&gt;
-&lt;p&gt;There are &lt;a href="https://github.com/vadimcn/rfcs/blob/coroutines2/text/0000-coroutines.md"&gt;proposals&lt;/a&gt;,
-obviously, to bring async coroutines into Rust.
-There is an even broader wish to make the language cross the &lt;span class="caps"&gt;OOP&lt;/span&gt;/&lt;span class="caps"&gt;FP&lt;/span&gt; fence already
-and commit to the functional way; this would mean adding an equivalent of Haskell&amp;#8217;s &lt;code&gt;do&lt;/code&gt; notation.&lt;/p&gt;
-&lt;p&gt;Either development could be sufficient.
-Both, however, require significant amount of design and implementation work.
-If solved now, this would easily be the most significant addition to the language
-since its 1.0 release &amp;#8212; but the solution is currently in the &lt;span class="caps"&gt;RFC&lt;/span&gt; stages &lt;em&gt;at best&lt;/em&gt;.&lt;/p&gt;
-&lt;h5&gt;Future&amp;lt;Ecosystem&amp;gt;&lt;/h5&gt;
-&lt;p&gt;While the core language support is lacking,
-the great as usual Rust community has been picking up some of the slack
-by establishing and cultivating a steadily growing&amp;nbsp;ecosystem.&lt;/p&gt;
-&lt;p&gt;The constellation of async-related crates clusters mostly around the two core libraries:
-&lt;code&gt;futures&lt;/code&gt; crate itself and Tokio.
-Any functionality you may need while writing asynchronous should likely be found
-quite easily by searching for one of those two keywords (plus Rust, of course).
-Another way of finding what you need is to look at
-&lt;a href="https://tokio.rs/docs/going-deeper-tokio/third-party/"&gt;the list of Tokio-related crates&lt;/a&gt;&amp;nbsp;directly.&lt;/p&gt;
-&lt;p&gt;To be fair, I can&amp;#8217;t really say much about the completeness of this ecosystem.
-The project didn&amp;#8217;t really require too many external dependencies &amp;#8212;
-the only relevant ones&amp;nbsp;were:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;&lt;code&gt;futures_cpupool&lt;/code&gt; mentioned&amp;nbsp;before&lt;/li&gt;
-&lt;li&gt;&lt;code&gt;tokio-timer&lt;/code&gt; for imposing a timeout on caption&amp;nbsp;requests&lt;/li&gt;
-&lt;li&gt;&lt;code&gt;tokio-signal&lt;/code&gt; which handles &lt;span class="caps"&gt;SIGINT&lt;/span&gt;/Ctrl+C  and allows for a graceful&amp;nbsp;shutdown&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;Normally, you&amp;#8217;d also want to research the async database drivers
-for your storage system of choice.
-I would not expect anything resembling the &lt;a href="http://diesel.rs"&gt;Diesel&lt;/a&gt; &lt;span class="caps"&gt;ORM&lt;/span&gt; crate, though,
-nor a web framework comparable to &lt;a href="http://ironframework.io/"&gt;Iron&lt;/a&gt;,
-&lt;a href="https://fengsp.github.io/pencil/pencil/"&gt;Pencil&lt;/a&gt;,
-or &lt;a href="https://rocket.rs/"&gt;Rocket&lt;/a&gt;.&lt;/p&gt;
-&lt;h4&gt;Conclusions&lt;/h4&gt;
-&lt;p&gt;Alright, so what can we get from this overall&amp;nbsp;analysis?&lt;/p&gt;
-&lt;p&gt;Given the rapid development of async Rust ecosystem so far,
-it is clear the technology is very promising.
-If the community maintains its usual enthusiasm and keeps funneling it into Tokio et al.,
-it won&amp;#8217;t be long before it matures into something&amp;nbsp;remarkable.&lt;/p&gt;
-&lt;p&gt;Right now, however, it exposes way too many rough edges to fully bet on it.
-Still, there may be some applications
-where you could get away with an async Rust backend even in production.
-But personally, I wouldn&amp;#8217;t recommend it outside of non-essential services,
-or tools internal to your&amp;nbsp;organization.&lt;/p&gt;
-&lt;p&gt;If you do use async Rust for microservices,
-I&amp;#8217;d also advise to take steps to ensure they remain &amp;#8220;micro&amp;#8221;.
-Like I&amp;#8217;ve elaborated in the earlier sections,
-there are several issues that make future-based Rust code scale poorly
-with respect to maintainability.
-Keeping it simple is therefore&amp;nbsp;essential.&lt;/p&gt;
-&lt;p&gt;To sum up, async Rust is currently an option only for the adventurous and/or small.
-Others should stick to a tried &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; tested solution:
-something like Java (with &lt;a href="http://docs.paralleluniverse.co/quasar/"&gt;Quasar&lt;/a&gt;),
-.&lt;span class="caps"&gt;NET&lt;/span&gt;, Go, or perhaps node.js at the very&amp;nbsp;least.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;It is also the crux of parallelism,
-but &lt;a href="https://www.youtube.com/watch?v=cN_DpYBzKso"&gt;that&amp;#8217;s different&lt;/a&gt; and is not the focus here.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Background&amp;#8221; here refers to the low level, innate concurrency of the &lt;span class="caps"&gt;OS&lt;/span&gt; kernel
-(mediated with hardware interrupts), not the &lt;code&gt;epoll&lt;/code&gt;-based event loops on the application side.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;There is a great parallel to be drawn between a trivial echo/Hello world server,
-and a 3D graphics program that only redraws an empty screen.
-Both may start at some very high performance numbers (requests/frames per second)
-but once you start adding practical stuff, those metrics must drop &lt;em&gt;hyperbolically&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:4"&gt;
-&lt;p&gt;&lt;em&gt;Technically&lt;/em&gt;, you are not, but the alternative is extremely cumbersome.&lt;br&gt;
-In short, you&amp;#8217;d have to follow an approach similar to custom &lt;code&gt;Iterator&lt;/code&gt;s:
-define a new struct for each individual case
-(possibly just &lt;a href="https://doc.rust-lang.org/book/structs.html#tuple-structs"&gt;newtype&lt;/a&gt;&amp;#8216;ing an existing one),
-and then implement the necessary trait for it.&lt;br&gt;
-For iterators, this works reasonably well,
-and you don&amp;#8217;t need custom ones that often anyway.
-But futures, by their very nature, are meant to encapsulate &lt;em&gt;any&lt;/em&gt; computation.
-For them, &amp;#8220;each individual case&amp;#8221; is literally &lt;em&gt;every asynchronous function&lt;/em&gt; in your code.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="async"></category><category term="Tokio"></category><category term="futures"></category><category term="HTTP"></category></entry></feed>
+We should not try to polish static typing into&amp;nbsp;one.&lt;/p&gt;</summary><category term="Python"></category><category term="Rust"></category><category term="dynamic languages"></category><category term="dynamic typing"></category><category term="static typing"></category></entry></feed>

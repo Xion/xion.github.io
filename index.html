@@ -63,6 +63,452 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/programming/currying-api-design.html#currying-api-design">Currying and <span class="caps">API</span>&nbsp;design</a></h2>
+    <p>
+      Posted on Sun 12 November 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/functional-programming.html">functional programming</a>,      <a href="http://xion.io/tag/currying.html">currying</a>,      <a href="http://xion.io/tag/partial-application.html">partial application</a>,      <a href="http://xion.io/tag/haskell.html">Haskell</a>,      <a href="http://xion.io/tag/api.html">API</a>,      <a href="http://xion.io/tag/abstraction.html">abstraction</a>      &#8226; <a href="http://xion.io/post/programming/currying-api-design.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In functional programming, <em>currying</em> is one of the concepts
+that contribute greatly to its expressive power.
+Its importance could be compared to something as ubiquitous
+as chaining method calls (<code>foo.bar().baz()</code>) in imperative, object-oriented&nbsp;languages.</p>
+<p>Although a simple idea on the surface,
+it has significant consequences for the way functional APIs are designed.
+This post is an overview of various techniques
+that help utilize currying effectively when writing your functions.
+While the examples are written in Haskell syntax,
+I believe it should be useful for developers working in other functional languages,&nbsp;too.</p>
+<h4>The&nbsp;basics</h4>
+<p>Let&#8217;s start with a short&nbsp;recap.</p>
+<p>Intuitively, we say that an <em>N</em>-argument function is <em>curried</em>
+if you can invoke it with a single argument and get back an (<em>N</em>-1)-argument function.
+Repeat this <em>N</em> times,
+and it&#8217;ll be equivalent to supplying all <em>N</em> arguments at&nbsp;once.</p>
+<p>Here&#8217;s an example: the <code>Data.Text</code> module in Haskell
+contains the following function called <code>splitOn</code>:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOn</span> <span class="n">sep</span> <span class="n">text</span> <span class="ow">=</span> <span class="o">...</span>
+</pre></div>
+
+
+<p>It&#8217;s a fairly standard string splitting function,
+taking a separator as its first argument,
+with the second one being a string to perform the splitting&nbsp;on:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="s">&quot;,&quot;</span> <span class="s">&quot;1,2,3&quot;</span>  <span class="c1">-- produces [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]</span>
+</pre></div>
+
+
+<p>Both arguments are of type <code>Text</code> (Haskell strings),
+while the return type is <code>[Text]</code> &#8212; a <em>list</em> of strings.
+This add up to the signature (type) of <code>splitOn</code>,
+written above as <code>Text -&gt; Text -&gt; [Text]</code>.</p>
+<p>Like all functions in Haskell, however, <code>splitOn</code> is <em>curried</em>.
+We don&#8217;t have to provide it with both arguments at once;
+instead, we can stop at one in order to obtain <em>another function</em>:</p>
+<div class="highlight"><pre><span class="nf">splitOnComma</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOnComma</span> <span class="ow">=</span> <span class="n">splitOn</span> <span class="s">&quot;,&quot;</span>
+</pre></div>
+
+
+<p>This new function is a <em>partially applied</em> version of <code>splitOn</code>,
+with its first argument (the separator) already filled in.
+To complete the call, all you need to do now is provide the text to&nbsp;split:</p>
+<div class="highlight"><pre><span class="nf">splitOnComma</span> <span class="s">&quot;1,2,3&quot;</span>  <span class="c1">-- also produces [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;]</span>
+</pre></div>
+
+
+<p>and, unsurprisingly, you&#8217;ll get the exact same&nbsp;result.</p>
+<p>Compare now the type signatures of both <code>splitOn</code> and <code>splitOnComma</code>:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOnComma</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+</pre></div>
+
+
+<p>It may be puzzling at first why the same arrow symbol (<code>-&gt;</code>) is used
+for what seems like two distinct meanings: the &#8220;argument separator&#8221;,
+and the return type&nbsp;indicator.</p>
+<p>But for curried functions, both of those meanings are in fact <em>identical</em>!</p>
+<p>Indeed, we can make it more explicit by defining <code>splitOn</code> as:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">])</span>
+</pre></div>
+
+
+<p>or&nbsp;even:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">TypeOf</span> <span class="n">splitOnComma</span> <span class="c1">-- (not a real Haskell syntax)</span>
+</pre></div>
+
+
+<p>From this perspective, what <code>splitOn</code> actually returns is not <code>[Text]</code>
+but a <em>function</em>  from <code>Text</code> to <code>[Text]</code> (<code>Text -&gt; [Text]</code>).
+And conversely, a call with two&nbsp;arguments:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="s">&quot;,&quot;</span> <span class="s">&quot;1,2,3&quot;</span>
+</pre></div>
+
+
+<p>is instead <em>two function calls</em>, each taking just <em>one argument</em>:</p>
+<div class="highlight"><pre><span class="p">(</span><span class="n">splitOn</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="s">&quot;1,2,3&quot;</span>
+</pre></div>
+
+
+<p>This is why the <code>-&gt;</code> arrow isn&#8217;t actually ambiguous:
+it always signifies the <em>mapping</em> of an argument type to a result type.
+And it&#8217;s always just one argument, too,&nbsp;because:</p>
+<blockquote>
+<p>Currying makes all functions take only one&nbsp;argument.</p>
+</blockquote>
+<p>It&#8217;s just that sometimes, what those single-argument functions return
+will be yet another&nbsp;function.</p>
+<h4>Least used arguments go <em>first</em></h4>
+<p>Now that we have a firmer grasp on the idea of currying,
+we can see how it influences <span class="caps">API</span>&nbsp;design.</p>
+<p>There is one thing in particular you will notice almost immediately,
+especially if you are coming from imperative languages
+that support default argument values and/or function overloading.
+It&#8217;s the particular <em>order of arguments</em>
+that a well designed, functional <span class="caps">API</span> will almost certainly&nbsp;follow.</p>
+<p>See the <code>splitOn</code> function&nbsp;again:</p>
+<div class="highlight"><pre><span class="nf">splitOn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">splitOn</span> <span class="n">sep</span> <span class="n">text</span> <span class="ow">=</span> <span class="o">...</span>
+</pre></div>
+
+
+<p>It is no accident that it puts the <code>sep</code>arator as its first argument.
+This choice &#8212; as opposed to the alternative where <code>text</code> goes first &#8212;
+produces much more useful results when the function is applied partially
+through&nbsp;currying.</p>
+<p>Say, for instance, that you want to splice a list of strings
+where the individual pieces can be&nbsp;comma-separated:</p>
+<div class="highlight"><pre><span class="nf">spliceOnComma</span> <span class="ow">::</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="kt">Text</span><span class="p">]</span>
+<span class="nf">spliceOnComma</span> <span class="p">[</span><span class="s">&quot;1&quot;</span><span class="p">,</span> <span class="s">&quot;2,3&quot;</span><span class="p">,</span> <span class="s">&quot;4,5,6&quot;</span><span class="p">,</span> <span class="s">&quot;7&quot;</span><span class="p">]</span>
+<span class="c1">-- ^ This should produce [&quot;1&quot;, &quot;2&quot;, &quot;3&quot;, &quot;4&quot;, &quot;5&quot;, &quot;6&quot;, &quot;7&quot;]</span>
+</pre></div>
+
+
+<p>Because the separator appears first in a <code>splitOn</code> call,
+you can do it easily through a direct use of&nbsp;currying:</p>
+<div class="highlight"><pre><span class="nf">spliceOnComma</span> <span class="n">xs</span> <span class="ow">=</span> <span class="n">concat</span> <span class="o">$</span> <span class="n">map</span> <span class="p">(</span><span class="n">splitOn</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="n">xs</span>
+
+<span class="c1">-- or equivalently, in a terser point-free style:</span>
+<span class="c1">-- spliceOnComma = concatMap $ splitOn &quot;,&quot;</span>
+</pre></div>
+
+
+<p>What we do here is apply the split to every string in the list <code>xs</code>
+(with <code>map</code>), followed by flattening the result &#8212; a list of lists, <code>[[Text]]</code> &#8212;
+back to a regular <code>[Text]</code> with <code>concat</code>.</p>
+<p>If we had the alternative version of <code>splitOn</code>,
+one where the order of arguments is&nbsp;reversed:</p>
+<div class="highlight"><pre><span class="nf">splitOn&#39;</span> <span class="n">text</span> <span class="n">sep</span> <span class="ow">=</span> <span class="o">...</span>
+</pre></div>
+
+
+<p>we&#8217;d have no choice but to &#8220;fix it&#8221;, with either a lambda function
+or <a href="http://hackage.haskell.org/package/base-4.10.0.0/docs/Prelude.html#v:flip">the <code>flip</code> combinator</a>:</p>
+<div class="highlight"><pre><span class="nf">spliceOnComma&#39;</span> <span class="n">xs</span> <span class="ow">=</span> <span class="n">concat</span> <span class="o">$</span> <span class="n">map</span> <span class="p">(</span><span class="nf">\</span><span class="n">x</span> <span class="ow">-&gt;</span> <span class="n">splitOn&#39;</span> <span class="n">x</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="n">xs</span>
+<span class="nf">spliceOnComma&#39;</span> <span class="n">xs</span> <span class="ow">=</span> <span class="n">concat</span> <span class="o">$</span> <span class="n">map</span> <span class="p">(</span><span class="n">flip</span> <span class="n">splitOn&#39;</span> <span class="s">&quot;,&quot;</span><span class="p">)</span> <span class="n">xs</span>
+</pre></div>
+
+
+<p>Putting the delimiter first is simply more convenient.
+It is much more likely you&#8217;ll be splitting multiple strings on the same separator,
+as opposed to a single string and multiple separators.
+The argument order of <code>splitOn</code> is making the common use case slightly easier
+by moving the more &#8220;stable&#8221; parameter to the&nbsp;front.</p>
+<p>This practice generalizes to all curried functions,
+forming a simple&nbsp;rule:</p>
+<blockquote>
+<p>The more likely it is for an argument to remain <em>constant</em> between calls,
+the sooner it should appear in the function&nbsp;signature.</p>
+</blockquote>
+<p>Note how this is different compared to any language
+where functions may take variable number of arguments.
+In Python, for example, the equivalent of <code>splitOn</code> is defined&nbsp;as:</p>
+<div class="highlight"><pre><span class="nb">str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">sep</span><span class="p">)</span>
+</pre></div>
+
+
+<p>and the implicit default value for <code>sep</code> is essentially &#8220;any whitespace character&#8221;.
+In many cases, this is exactly what we want,
+making the following calls possible<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="nb">str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&quot;Alice has a cat&quot;</span><span class="p">)</span>
+<span class="p">[</span><span class="s">&quot;Alice&quot;</span><span class="p">,</span> <span class="s">&quot;has&quot;</span><span class="p">,</span> <span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;cat&quot;</span><span class="p">]</span>
+</pre></div>
+
+
+<p>So, as a less-used argument, <code>sep</code> actually goes last in <code>str.split</code>,
+as it is often desirable to omit it altogether.
+Under the currying regime, however, we put it <em>first</em>,
+so that we can fix it to a chosen value and obtain a more specialized version of the&nbsp;function.</p>
+<h4>The fewer arguments, the&nbsp;better</h4>
+<p>Another thing you&#8217;d encounter in languages with flexible function definitions
+is the proliferation of optional&nbsp;arguments:</p>
+<div class="highlight"><pre><span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;http://example.com/foo&quot;</span><span class="p">,</span>
+                        <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;arg&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">},</span>
+                        <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;field&#39;</span><span class="p">:</span> <span class="s">&#39;value&#39;</span><span class="p">},</span>
+                        <span class="n">auth</span><span class="o">=</span><span class="p">(</span><span class="s">&#39;user&#39;</span><span class="p">,</span> <span class="s">&#39;pass&#39;</span><span class="p">),</span>
+                        <span class="n">headers</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;User-Agent&#39;</span><span class="p">:</span> <span class="s">&quot;My Amazing App&quot;</span><span class="p">},</span>
+                        <span class="n">cookies</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;c_is&#39;</span><span class="p">:</span> <span class="s">&#39;for_cookie&#39;</span><span class="p">},</span>
+                        <span class="n">files</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;attachment.txt&#39;</span><span class="p">:</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;file.txt&#39;</span><span class="p">,</span> <span class="s">&#39;rb&#39;</span><span class="p">)},</span>
+                        <span class="n">allow_redirects</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                        <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Trying to translate this directly to a functional paradigm
+would result in extremely unreadable function calls &#8212;
+doubly so when you don&#8217;t actually need all those arguments
+and have to provide some canned&nbsp;defaults:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="kt">Requests</span><span class="o">.</span><span class="n">get</span>
+    <span class="s">&quot;http://example.com/foo&quot;</span> <span class="p">[(</span><span class="n">&#39;arg&#39;</span><span class="p">,</span> <span class="mi">42</span><span class="p">)]</span>
+    <span class="kt">[]</span> <span class="kt">Nothing</span> <span class="kt">[]</span> <span class="kt">[]</span> <span class="kt">[]</span> <span class="kt">True</span> <span class="kt">Nothing</span>
+</pre></div>
+
+
+<p>What does that <code>True</code> mean, for example?
+Or what exactly does each empty list signify?
+It&#8217;s impossible to know just by looking at the function call&nbsp;alone.</p>
+<p>Long argument lists are thus detrimental to the quality of functional APIs.
+It&#8217;s much harder to correctly apply the previous rule (least used arguments first)
+when there are so many possible&nbsp;permutations.</p>
+<p>What should we do then?&#8230;
+In some cases, including the above example of an <span class="caps">HTTP</span> library,
+we cannot simply cut out features in the name of elegance.
+The necessary information needs to go <em>somewhere</em>,
+meaning we need to find at least somewhat acceptable place for&nbsp;it.</p>
+<p>Fortunately, we have a couple of options
+that should help us with solving this&nbsp;problem.</p>
+<h5>Combinators /&nbsp;builders</h5>
+<p>Looking back at the last example in Python,
+we can see why the function call remains readable
+even if it sprouts a dozen or so additional&nbsp;arguments.</p>
+<p>The obvious reason is that
+each one has been uniquely identified by a <em>name</em>.</p>
+<p>In order to emulate some form of what&#8217;s called keyword arguments,
+we can split the single function call into multiple stages.
+Each one would then supply one piece of data,
+with a matching function name serving as a readability&nbsp;cue:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+            <span class="n">withHeaders</span> <span class="p">[(</span><span class="s">&quot;User-Agent&quot;</span><span class="p">,</span> <span class="s">&quot;My Amazing App&quot;</span><span class="p">)]</span> <span class="o">$</span>
+            <span class="n">withBasicAuth</span> <span class="s">&quot;user&quot;</span> <span class="s">&quot;pass&quot;</span> <span class="o">$</span>
+            <span class="n">withData</span> <span class="p">[(</span><span class="s">&quot;field&quot;</span><span class="p">,</span> <span class="s">&quot;value&quot;</span><span class="p">)]</span> <span class="o">$</span>
+                <span class="n">get</span> <span class="s">&quot;http://example.com/foo&quot;</span>
+</pre></div>
+
+
+<p>If we follow this approach,
+the caller would only invoke those intermediate functions
+that fit his particular use case.
+The <span class="caps">API</span> above could still offer <code>withCookies</code>, <code>withFiles</code>,
+or any of the other combinators,
+but their usage shall be completely&nbsp;optional.</p>
+<p>Pretty neat,&nbsp;right?</p>
+<p>Thing is, the implementation would be a little involved here.
+We would clearly need to carry some data between the various <code>withFoo</code> calls,
+which requires some additional data types in addition to plain functions.
+At minimum, we need something to represent the <code>Request</code>,
+as it is created by the <code>get</code> function:</p>
+<div class="highlight"><pre><span class="nf">get</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+</pre></div>
+
+
+<p>and then &#8220;piped&#8221; through <code>withFoo</code> transformers like this&nbsp;one:</p>
+<div class="highlight"><pre><span class="nf">withBasicAuth</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="kt">Request</span> <span class="ow">-&gt;</span> <span class="kt">Request</span><span class="p">)</span>
+</pre></div>
+
+
+<p>so that it can we can finally send&nbsp;it:</p>
+<div class="highlight"><pre><span class="nf">sendRequest</span> <span class="ow">::</span> <span class="kt">Request</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="kt">Response</span>
+</pre></div>
+
+
+<p>Such <code>Request</code> type needs to keep track of all the additional parameters
+that may have been tacked onto&nbsp;it:</p>
+<div class="highlight"><pre><span class="kr">type</span> <span class="kt">Request</span> <span class="ow">=</span> <span class="p">(</span><span class="kt">Text</span><span class="p">,</span> <span class="p">[</span><span class="kt">Param</span><span class="p">])</span>  <span class="c1">-- Text is the URL</span>
+
+<span class="kr">data</span> <span class="kt">Param</span> <span class="ow">=</span> <span class="kt">Header</span> <span class="kt">Text</span> <span class="kt">Text</span>
+           <span class="o">|</span> <span class="kt">BasicAuth</span> <span class="kt">Text</span> <span class="kt">Text</span>
+           <span class="o">|</span> <span class="kt">Data</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span>
+           <span class="c1">-- and so on</span>
+
+<span class="c1">-- example</span>
+<span class="nf">withBasicAuth</span> <span class="n">user</span> <span class="n">pass</span> <span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span> <span class="ow">=</span>
+    <span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">params</span> <span class="o">++</span> <span class="p">[</span><span class="kt">BasicAuth</span> <span class="n">user</span> <span class="n">pass</span><span class="p">])</span>
+</pre></div>
+
+
+<p>All of a sudden, what would be a single function explodes into a collection of data types
+and associated&nbsp;combinators.</p>
+<p>In Haskell at least,
+we can forgo some of the boilerplate by automatically deriving an instance
+of <a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Monoid.html"><code>Monoid</code></a>
+(or perhaps a <a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Semigroup.html"><code>Semigroup</code></a>).
+Rather than invoking a series of combinators,
+clients would then build their requests through repeated <code>mappend</code>s<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span> <span class="n">get</span> <span class="s">&quot;http://example.com/foo&quot;</span>
+                          <span class="o">&lt;&gt;</span> <span class="n">header</span> <span class="s">&quot;User-Agent&quot;</span> <span class="s">&quot;My Awesome App&quot;</span>
+                          <span class="o">&lt;&gt;</span> <span class="n">basicAuth</span> <span class="s">&quot;user&quot;</span> <span class="s">&quot;pass&quot;</span>
+                          <span class="o">&lt;&gt;</span> <span class="n">body</span> <span class="p">[(</span><span class="s">&quot;field&quot;</span><span class="p">,</span> <span class="s">&quot;value&quot;</span><span class="p">)]</span>
+</pre></div>
+
+
+<p>This mini-<a href="https://en.wikipedia.org/wiki/Domain-specific_language"><span class="caps">DSL</span></a>
+looks very similar to keyword arguments in Python,
+as well as the equivalent Builder pattern from Java, Rust, and others.
+What&#8217;s disappointing, however,
+is that it doesn&#8217;t easily beat those solutions in terms of compile-time safety.
+Unless you invest into some tricky type-level hacks,
+there is nothing to prevent the users from building invalid requests at&nbsp;runtime:</p>
+<div class="highlight"><pre><span class="kr">let</span> <span class="n">reqParams</span> <span class="ow">=</span> <span class="n">get</span> <span class="s">&quot;http://example.com/foo&quot;</span>
+<span class="c1">--</span>
+<span class="c1">-- ... lots of code in between ...</span>
+<span class="c1">--</span>
+<span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+            <span class="n">reqParams</span> <span class="o">&lt;&gt;</span> <span class="n">get</span> <span class="s">&quot;http://example.com/bar&quot;</span> <span class="c1">-- woops!</span>
+</pre></div>
+
+
+<p>Compared to a plain function (with however many arguments),
+we have actually lost some measure of correctness&nbsp;here.</p>
+<h5>Record&nbsp;types</h5>
+<p>In many cases, fortunately,
+there is another way to keep our calls both flexible and safe against runtime errors.
+We just need to change the representation of the input type (here, <code>Request</code>)
+into a <em>record</em>.</p>
+<p>Record is simply a user-defined type that&#8217;s a collection of <em>named fields</em>.</p>
+<p>Most languages (especially imperative ones: C, C++, Go, Rust, &#8230;) call those <em>structures</em>,
+and use the <code>struct</code> keyword to signify a record definition.
+In functional programming parlance, they are also referred to as <em>product types</em>;
+this is because the joint record type is a Cartesian product of its individual field types<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Going back to our example,
+it shouldn&#8217;t be difficult to define a record representing an <span class="caps">HTTP</span> <code>Request</code>:</p>
+<div class="highlight"><pre><span class="kr">data</span> <span class="kt">Request</span> <span class="ow">=</span> <span class="kt">Request</span> <span class="p">{</span> <span class="n">reqURL</span> <span class="ow">::</span> <span class="kt">URL</span>
+                       <span class="p">,</span> <span class="n">reqMethod</span> <span class="ow">::</span> <span class="kt">Method</span>
+                       <span class="p">,</span> <span class="n">reqHeaders</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span>
+                       <span class="p">,</span> <span class="n">reqPostData</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span>
+                       <span class="p">}</span>
+</pre></div>
+
+
+<p>In fact, I suspect most programmers would naturally reach for this notation&nbsp;first.</p>
+<p>Having this definition,
+calls to <code>sendRequest</code> can be rewritten to take a record instance
+that we construct on the spot<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+    <span class="kt">Request</span> <span class="p">{</span> <span class="n">reqURL</span> <span class="ow">=</span> <span class="s">&quot;http://example.com/bar&quot;</span>
+            <span class="p">,</span> <span class="n">reqMethod</span> <span class="ow">=</span> <span class="kt">GET</span>
+            <span class="p">,</span> <span class="n">reqHeaders</span> <span class="ow">=</span> <span class="p">[(</span><span class="s">&quot;User-Agent&quot;</span><span class="p">,</span> <span class="s">&quot;My Awesome App&quot;</span><span class="p">)]</span>
+            <span class="p">,</span> <span class="n">reqPostData</span> <span class="ow">=</span> <span class="kt">[]</span>
+            <span class="p">}</span>
+</pre></div>
+
+
+<p>Compare this snippet to the Python example from the beginning of this section.
+It comes remarkably close, right?
+The <code>Request</code> record and its fields can indeed work quite nicely
+as substitutes for keyword&nbsp;arguments.</p>
+<p>But besides the readability boon of having &#8220;argument&#8221; names at the call site.
+we&#8217;ve also gained stronger correctness checks.
+For example, there is no way anymore to accidentally supply the <span class="caps">URL</span> field&nbsp;twice.</p>
+<h4>Different functions for different&nbsp;things</h4>
+<p>Astute readers may have noticed at least two things about the previous&nbsp;solutions.</p>
+<p>First, they are not mutually incompatible.
+Quite the opposite, actually: they compose very neatly, allowing us to combine
+builder functions with the <em>record update</em> syntax in the final <span class="caps">API</span>:</p>
+<div class="highlight"><pre><span class="nf">response</span> <span class="ow">&lt;-</span> <span class="n">sendRequest</span> <span class="o">$</span>
+    <span class="p">(</span><span class="n">get</span> <span class="s">&quot;http://example.com/baz&quot;</span><span class="p">)</span>
+    <span class="p">{</span> <span class="n">reqHeaders</span> <span class="ow">=</span> <span class="p">[(</span><span class="s">&quot;User-Agent&quot;</span><span class="p">,</span> <span class="s">&quot;My Awesome App&quot;</span><span class="p">)]</span> <span class="p">}</span>
+</pre></div>
+
+
+<p>This cuts out basically all the boilerplate of record-based calls,
+leaving only the parts that actually differ from the defaults<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.</p>
+<p>But on the second and more important note:
+we don&#8217;t seem to be talking about <em>currying</em> anymore.
+Does it mean it loses its usefulness
+once we go beyond certain threshold of&nbsp;complexity?&#8230;</p>
+<p>Thankfully, the answer is no.
+While some APIs may require more advanced techniques
+to access the full breadth of their functionality,
+it is always possible to expose some carefully constructed facade
+that is conducive to partial&nbsp;application.</p>
+<p>Consider, for example, the functionality exposed by this set of <span class="caps">HTTP</span>&nbsp;wrappers:</p>
+<div class="highlight"><pre><span class="nf">head</span> <span class="ow">::</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">headWith</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">get</span> <span class="ow">::</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">getWith</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">postForm</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">postFormWith</span> <span class="ow">::</span> <span class="p">[(</span><span class="kt">Header</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="p">[(</span><span class="kt">Text</span><span class="p">,</span> <span class="kt">Text</span><span class="p">)]</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+<span class="nf">toURL</span> <span class="ow">::</span> <span class="kt">Method</span> <span class="ow">-&gt;</span> <span class="kt">URL</span> <span class="ow">-&gt;</span> <span class="kt">Request</span>
+</pre></div>
+
+
+<p>Each one is obviously curry-friendly<sup id="fnref:6"><a class="footnote-ref" href="#fn:6" rel="footnote">6</a></sup>.
+Combined, they also offer a pretty comprehensive <span class="caps">API</span> surface.
+And should they prove insufficient,
+you&#8217;d still have the builder pattern and/or record updates to fall back on &#8212;
+either for specialized one-off cases, or for writing your own&nbsp;wrappers.</p>
+<p>Naturally, this technique of layered <span class="caps">API</span> design &#8212;
+with simple wrappers hiding a progressively more advanced core &#8212;
+isn&#8217;t limited to just functional programming.
+In some way, it is what <em>good</em> <span class="caps">API</span> design looks like in general.
+But in <span class="caps">FP</span> languages, it becomes especially important,
+because the expressive benefits of partial application are so paramount&nbsp;there</p>
+<p>Fortunately, these principles seem to be followed pretty consistently,
+at least within the Haskell ecosystem.
+You can see it in the design of
+<a href="https://www.stackage.org/haddock/lts-9.12/http-client-0.5.7.0/Network-HTTP-Client.html">the <code>http-client</code> package</a>,
+which is the real world extension of the <span class="caps">HTTP</span> interface outlined here.
+More evidently, it can be observed in any of the numerous packages
+the expose both a basic <code>foo</code> and a more customizable <code>fooWith</code> functions;
+popular examples include
+<a href="https://www.stackage.org/haddock/lts-9.12/async-2.1.1.1/Control-Concurrent-Async.html#v:cancelWith">the <code>async</code> package</a>,
+<a href="https://hackage.haskell.org/package/zlib-0.6.1.2/docs/Codec-Compression-Zlib.html#g:2">the <code>zlib</code> library</a>,
+and <a href="https://www.stackage.org/haddock/lts-9.12/regex-compat-tdfa-0.95.1.4/Text-Regex.html">the <code>Text.Regex</code> module</a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It&#8217;d be more common in Python to write this as <code>"Alice has a cat".split()</code>,
+but this form would make it less obvious how the arguments are passed.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>A great example of this pattern can be found
+in the <a href="http://hackage.haskell.org/package/optparse-applicative"><em>optparse-applicative</em> package</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Tuples (like <code>(Int, String)</code>) are also product types.
+They can be thought of as ad-hoc records where field indices serve as rudimentary &#8220;names&#8221;.
+In fact, some languages even use the dotted notation to access fields
+of both records/structs (<code>x.foo</code>) and tuples (<code>y.0</code>).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>For simplicity, I&#8217;m gonna assume the <code>URL</code> and <code>Header</code> types
+can be &#8220;magically&#8221; constructed from string literals
+through the <span class="caps">GHC</span>&#8217;s <code>OverloadedStrings</code> extension.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>In many languages,
+we can specify more formally what the &#8220;default&#8221; means for a compound-type like <code>Request</code>,
+and sometimes even <em>derive</em> it automatically.
+Examples include
+<a href="https://hackage.haskell.org/package/data-default-0.7.1.1/docs/Data-Default.html#t:Default">the <code>Default</code> typeclass</a> in Haskell,
+<a href="https://doc.rust-lang.org/std/default/trait.Default.html">the <code>Default</code> trait</a> in Rust,
+and the default/argumentless/trivial constructors in C++ <em>et al</em>.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+<li id="fn:6">
+<p>Haskell programmers may especially notice how the last function is designed specifically
+for infix application: <code>response &lt;- sendRequest $ POST `toUrl` url</code>.&#160;<a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-little-crates.html#rust-little-crates">Small Rust crates I (almost) always&nbsp;use</a></h2>
     <p>
       Posted on Tue 31 October 2017 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1911,216 +2357,6 @@ For iterators, this works reasonably well,
 and you don&#8217;t need custom ones that often anyway.
 But futures, by their very nature, are meant to encapsulate <em>any</em> computation.
 For them, &#8220;each individual case&#8221; is literally <em>every asynchronous function</em> in your code.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-iter-patterns.html#rust-iter-patterns">Iteration patterns for Result <span class="amp">&amp;</span>&nbsp;Option</a></h2>
-    <p>
-      Posted on Mon 10 April 2017 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/iterators.html">iterators</a>      &#8226; <a href="http://xion.io/post/code/rust-iter-patterns.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Towards the end of <a href="http://xion.io/post/code/rust-for-loop.html">my previous post about <code>for</code> loops in Rust</a>,
-I mentioned how those loops can often be expressed in a more declarative way.
-This alternative approach involves chaining methods of
-<a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html">the <code>Iterator</code> trait</a>
-to create specialized transformation&nbsp;pipelines:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">odds_squared</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mf">1.</span><span class="p">.</span><span class="mi">100</span><span class="p">)</span><span class="w"></span>
-<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"></span>
-<span class="w">    </span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">x</span><span class="p">)</span><span class="w"></span>
-<span class="w">    </span><span class="p">.</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p><small><a href="https://is.gd/q4lXew">Playground link</a></small></p>
-<p>Code like this isn&#8217;t unique to Rust, of course.
-Similar patterns are prevalent in functional languages such as
-<a href="https://msdn.microsoft.com/en-us/visualfsharpdocs/conceptual/operators.%5b-h%5d-%5d%5b't1%2c'u%5d-function-%5bfsharp%5d">F#</a>,
-and can also be found in
-Java (<a href="https://dzone.com/articles/understanding-java-8-streams-1">Streams</a>),
-imperative .<span class="caps">NET</span> (<a href="https://msdn.microsoft.com/en-us/library/bb308959.aspx#linqoverview_topic3"><span class="caps">LINQ</span></a>),
-JavaScript (<a href="https://lodash.com/docs/4.17.4#chain">LoDash</a>)
-and&nbsp;elsewhere.</p>
-<p>This saying, Rust also has its fair share of unique iteration idioms.
-In this post, we&#8217;re going to explore those arising on the intersection of iterators
-and the most common Rust enums: <code>Result</code> and <code>Option</code>.</p>
-<h4>filter_map()</h4>
-<p>When working with iterators,
-we&#8217;re almost always interested in selecting elements that match some criterion
-or passing them through a transformation function.
-It&#8217;s not even uncommon to want <em>both</em> of those things,
-as demonstrated by the initial example in this&nbsp;post.</p>
-<p>You can, of course, accomplish those two tasks independently:
-Rust&#8217;s <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"><code>filter</code></a>
-and <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"><code>map</code></a> methods
-work just fine for this purpose.
-But there exists an alternative, and in some cases it fits the problem <em>amazingly</em>&nbsp;well.</p>
-<p>Meet <code>filter_map</code>.
-Here&#8217;s what <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter_map">the official docs</a>
-have to say about&nbsp;it:</p>
-<blockquote>
-<p>Creates an iterator that both filters and&nbsp;maps.</p>
-</blockquote>
-<p>Well, <em>duh</em>.</p>
-<p>On a more serious note, the common pattern that <code>filter_map</code> simplifies
-is unwrapping a series of <code>Option</code>s.
-If you have a sequence of maybe-values,
-and you want to retain only those that are actually there,
-<code>filter_map</code> can do it in a single&nbsp;step:</p>
-<div class="highlight"><pre><span class="c1">// Get the sequence of all files matching a glob pattern via the glob crate.</span>
-<span class="kd">let</span><span class="w"> </span><span class="n">some_files</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">glob</span><span class="o">::</span><span class="n">glob</span><span class="p">(</span><span class="s">&quot;foo.*&quot;</span><span class="p">).</span><span class="n">unwrap</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="p">.</span><span class="n">unwrap</span><span class="p">());</span><span class="w"></span>
-<span class="c1">// Retain only their extensions, e.g. &quot;.txt&quot; or &quot;.md&quot;.</span>
-<span class="kd">let</span><span class="w"> </span><span class="n">file_extensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_files</span><span class="p">.</span><span class="n">filter_map</span><span class="p">(</span><span class="o">|</span><span class="n">p</span><span class="o">|</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">extension</span><span class="p">());</span><span class="w"></span>
-</pre></div>
-
-
-<p>The equivalent that doesn&#8217;t use <code>filter_map</code>
-would have to split the checking <span class="amp">&amp;</span> unwrapping of <code>Option</code>s into separate&nbsp;steps:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">file_extensions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_files</span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">p</span><span class="o">|</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">extension</span><span class="p">())</span><span class="w"></span>
-<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">is_some</span><span class="p">()).</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">e</span><span class="p">.</span><span class="n">unwrap</span><span class="p">());</span><span class="w"></span>
-</pre></div>
-
-
-<p>Because of this check <span class="amp">&amp;</span> unwrap logic,
-<code>filter_map</code> can be useful even with a no-op predicate (<code>.filter_map(|x| x)</code>)
-if we already have the <code>Option</code> objects handy.
-Otherwise, it&#8217;s often very easy to obtain them,
-which is exactly the case for the <code>Result</code> type:</p>
-<div class="highlight"><pre><span class="c1">// Read all text lines from a file:</span>
-<span class="kd">let</span><span class="w"> </span><span class="n">lines</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">BufReader</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="n">fs</span><span class="o">::</span><span class="n">File</span><span class="o">::</span><span class="n">open</span><span class="p">(</span><span class="s">&quot;file.ext&quot;</span><span class="p">)</span><span class="o">?</span><span class="p">)</span><span class="w"></span>
-<span class="w">    </span><span class="p">.</span><span class="n">lines</span><span class="p">().</span><span class="n">filter_map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">ok</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>With a simple <code>.filter_map(Result::ok)</code>, like above,
-we can pass through a sequence of <code>Result</code>s and yield only the &#8220;successful&#8221; values.
-I find this particular idiom to be extremely useful in practice,
-as long as you remember that <code>Err</code>ors will be discarded by it<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>As a final note on <code>filter_map</code>,
-you need to keep in mind that regardless of how great it often is,
-not all combinations of <code>filter</code> and <code>map</code> should be replaced by it.
-When deciding whether it&#8217;s appropriate in your case,
-it is helpful to consider the equivalence of these two&nbsp;expressions:</p>
-<div class="highlight"><pre><span class="n">iter</span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="n">f</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="n">m</span><span class="p">)</span><span class="w"></span>
-<span class="n">iter</span><span class="p">.</span><span class="n">filter_map</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">f</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">m</span><span class="p">(</span><span class="n">x</span><span class="p">))</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">None</span><span class="w"> </span><span class="p">})</span><span class="w"></span>
-</pre></div>
-
-
-<p>Simply put, if you find yourself writing conditions like this inside <code>filter_map</code>,
-you&#8217;re probably better off with two separate processing&nbsp;steps.</p>
-<h4>collect()</h4>
-<p>Let&#8217;s go back to the last example with a sequence of <code>Result</code>s.
-Since the final sequence won&#8217;t include any <code>Err</code>oneous values,
-you may be wondering if there is a way to preserve&nbsp;them.</p>
-<p>In more formal terms, the question is about turning a vector of results
-(<code>Vec&lt;Result&lt;T, E&gt;&gt;</code>) into a result with a vector (<code>Result&lt;Vec&lt;T&gt;, E&gt;</code>).
-We&#8217;d like for this aggregated result to only be <code>Ok</code>
-if <em>all</em> original results were <code>Ok</code>.
-Otherwise, we should just get the first <code>Err</code>or.</p>
-<p>Believe it or not, but this is probably <em>the</em> most common Rust problem!<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup></p>
-<p>Of course, that doesn&#8217;t necessarily mean the problem is particularly hard.
-Possible solutions exist in both an iterator&nbsp;version:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">fold</span><span class="p">(</span><span class="nb">Ok</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[]),</span><span class="w"> </span><span class="o">|</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">as_mut</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">v</span><span class="o">|</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">x</span><span class="p">));</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
-<span class="w">    </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">),</span><span class="w"></span>
-<span class="p">});</span><span class="w"></span>
-</pre></div>
-
-
-<p>and in a loop&nbsp;form:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[]);</span><span class="w"></span>
-<span class="k">for</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">results</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">result</span><span class="p">.</span><span class="n">as_mut</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="n">v</span><span class="o">|</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">x</span><span class="p">)),</span><span class="w"></span>
-<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">);</span><span class="w"> </span><span class="k">break</span><span class="p">;</span><span class="w"> </span><span class="p">},</span><span class="w"></span>
-<span class="w">    </span><span class="p">};</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>but I suspect not many people would call them clear and readable,
-let alone pretty<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
-<p>Fortunately, you don&#8217;t need to pollute your codebase with any of those workarounds.
-Rust offers an out-of-the-box solution which solves this particular problem,
-and its only flaw is one that I hope to address through this very&nbsp;post.</p>
-<p>So, here it&nbsp;goes:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>Yep, that&#8217;s all of&nbsp;it.</p>
-<p>The background story is that <code>Result&lt;Vec&lt;T&gt;, E&gt;</code> simply &#8220;knows&#8221;
-how to construct itself from a sequence of <code>Result</code>s.
-Unfortunately, this <span class="caps">API</span> is hidden behind Rust&#8217;s iterator abstraction,
-and specifically the fact that
-<code>Result</code> implements <a href="https://doc.rust-lang.org/1.2.0/std/iter/trait.FromIterator.html"><code>FromIterator</code></a>
-in this particular manner.
-The way
-<a href="https://doc.rust-lang.org/std/result/enum.Result.html">the documentation page for <code>Result</code></a>
-is structured, however &#8212; with trait implementations at the very end &#8212;
-ensures this useful fact remains virtually&nbsp;undiscoverable.</p>
-<p>Because let&#8217;s be honest: no one scrolls that&nbsp;far.</p>
-<p>Incidentally, <code>Option</code> offers analogous functionally:
-a sequence of <code>Option&lt;T&gt;</code> can be <code>collect</code>ed into <code>Option&lt;Vec&lt;T&gt;&gt;</code>,
-which will be <code>None</code> if any of the input elements were.
-As you may suspect, this fact is equally hard to find in the relevant&nbsp;docs.</p>
-<p>But the good news is: you know about all this now! :)
-And perhaps thanks to this post,
-those handy tricks become a little better in a wider Rust&nbsp;community.</p>
-<h4>partition()</h4>
-<p>The last technique I wanted to present here follows naturally
-from the other idioms that apply to <code>Result</code>s.
-Instead of extracting just the <code>Ok</code> values with <code>flat_map</code>,
-or keeping only the first error through <code>collect</code>,
-we will now learn how to retain all the errors <em>and</em> all the values,
-both neatly&nbsp;separated.</p>
-<p>The <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.partition"><code>partition</code> method</a>,
-as this is what the section is about,
-is essentially a more powerful variant of <code>filter</code>.
-While the latter only returns items that <em>do</em> match a predicate,
-<code>partition</code> will also give us the ones which <em>don&#8217;t</em>.</p>
-<p>Using it to slice an iterable of <code>Result</code>s is&nbsp;straightforward:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">oks</span><span class="p">,</span><span class="w"> </span><span class="n">fails</span><span class="p">)</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">results</span><span class="p">.</span><span class="n">partition</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">is_ok</span><span class="p">);</span><span class="w"></span>
-</pre></div>
-
-
-<p>The only thing that remains cumbersome is
-the fact that both parts of the resulting tuple still contain just <code>Result</code>s.
-Ideally, we would like them to be already unwrapped into values and errors,
-but unfortunately we need to do this&nbsp;ourselves:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">values</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">oks</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">unwrap</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-<span class="kd">let</span><span class="w"> </span><span class="n">errors</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fails</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">map</span><span class="p">(</span><span class="nb">Result</span><span class="o">::</span><span class="n">unwrap_err</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>As an alternative,
-<a href="https://docs.rs/itertools/0.6.0/itertools/trait.Itertools.html#method.partition_map">the <code>partition_map</code> method</a>
-from the <a href="https://crates.io/crates/itertools"><code>itertools</code> crate</a>
-can accomplish the same thing in a single step,
-albeit a more verbose&nbsp;one.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>A symmetrical technique is to use <code>.filter_map(Result::err)</code> to get just
-the <code>Err</code>or objects, but that&#8217;s probably much less useful
-as it drops all the successful values.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Based on my completely unsystematic and anecdotal observations,
-someone asks about this on the #rust-beginners <span class="caps">IRC</span> approximately <em>every other day</em>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>The <code>fold</code> variant is also rife with type inference traps,
-often requiring explicit type annotations, a &#8220;no-op&#8221; <code>Err</code> arm in <code>match</code>,
-or both.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

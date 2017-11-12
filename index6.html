@@ -63,6 +63,201 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
+    <p>
+      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
+in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
+<code>div.content</code>, and other presentational elements are still a common fact of life.
+Unless you&#8217;re one of the cool kids who use <a href="http://webcomponents.org/">Web Components</a> with
+<a href="https://www.polymer-project.org">Polymer</a>, your main option for abstracting this boilerplate away
+is defining some more general <a href="http://jinja.pocoo.org/docs/dev/templates/#macros">template macros</a>.</p>
+<p>As with any kind of abstraction, it&#8217;s crucial to balance broad applicability with a potential for finely-tuned
+customization. In the case of wrapping <span class="caps">HTML</span> snippets in Jinja macros, an easy way to maintain flexibility is to allow
+the caller to specify some crucial attributes of the root&nbsp;element:</p>
+<div class="highlight"><pre><span class="c">{#</span>
+<span class="c">  Renders the markup for a &lt;button&gt; from Twitter Bootstrap.</span>
+<span class="c">#}</span><span class="x"></span>
+<span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">        class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}{%</span> <span class="k">if</span> <span class="nv">class</span> <span class="cp">%}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">class</span> <span class="cp">}}{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x">&quot;</span>
+<span class="x">        </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+<span class="x">    </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
+<span class="x">  &lt;/button&gt;</span>
+<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>An element <code>id</code> would be a good example, and in the above macro it&#8217;s handled implicility
+thanks to the <code>{{ kwargs|xmlattr }}</code> stanza.</p>
+<p><code>class</code>, however, is not that simple, because a macro like that usually needs to supply some <span class="caps">CSS</span> classes of its own.
+The operation of combining them with additional ones, passed by the caller, is awfully textual and error-prone.
+It&#8217;s easy, for example, to forget about the crucial space and run two class names&nbsp;together.</p>
+<p>As if <span class="caps">CSS</span> wasn&#8217;t difficult enough to debug&nbsp;already!</p>
+<h4>Let them have&nbsp;list</h4>
+<p>The root cause for any of those problems is working at a level that&#8217;s too low for the task.
+The value for a <code>class</code> attribute may be <em>encoded</em> as string, but it&#8217;s fundamentally a <em>list of tokens</em>.
+In the modern <span class="caps">DOM</span> <span class="caps">API</span>, for example, it is represented
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/classList">as exactly that</a>: a <code>DOMTokenList</code>.</p>
+<p>I&#8217;ve found it helpful to replicate a similar mechanism in Jinja templates. The result is a <code>ClassList</code> wrapper
+whose code I quote here in&nbsp;full:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">MutableSet</span>
+
+
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Data structure for holding, and ultimately returning as a single string,</span>
+<span class="sd">    a set of identifiers that should be managed like CSS classes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Constructor.</span>
+<span class="sd">        :param arg: A single class name or an iterable thereof.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span>
+        <span class="k">elif</span> <span class="n">arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s">&quot;expected a string or string iterable, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">class_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span>
+
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">discard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__html__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&#39;class=&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
+</pre></div>
+</td></tr></table>
+
+<p>To make it work with <a href="http://flask.pocoo.org">Flask</a>, adorn the class with
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.template_global"><code>Flask.template_global</code> decorator</a>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">myflaskapp</span> <span class="kn">import</span> <span class="n">app</span>
+
+<span class="nd">@app.template_global</span><span class="p">(</span><span class="s">&#39;classlist&#39;</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Otherwise, if you&#8217;re working with a raw <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment">Jinja <code>Environment</code></a>,
+simply add <code>ClassList</code> to its <a href="http://jinja.pocoo.org/docs/dev/api/#global-namespace">global namespace</a>&nbsp;directly:</p>
+<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">globals</span><span class="p">[</span><span class="s">&#39;classlist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ClassList</span>
+</pre></div>
+
+
+<p>In either case, I recommend following the apparent Jinja convention of naming template symbols
+as <code>lowercasewithoutspaces</code>.</p>
+<h4>Becoming&nbsp;classy</h4>
+<p>Usage of this new <code>classlist</code> helper is relatively straightforward. Since it accepts both a space-separated string
+or an iterable of <span class="caps">CSS</span> class names, a macro can wrap anything the caller would pass it as a value for <code>class</code> attribute:</p>
+<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="cp">{%</span> <span class="k">set</span> <span class="nv">classes</span> <span class="o">=</span> <span class="nv">classlist</span><span class="o">(</span><span class="nv">class</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="c">{# ... #}</span><span class="x"></span>
+</pre></div>
+
+
+<p>The <code>classlist</code> is capable of producing the complete <code>class</code> attribute syntax (i.e. <code>class="..."</code>), or omit it entirely
+if it would be empty. All we need to do is evaluate it using the normal Jinja expression&nbsp;syntax:</p>
+<div class="highlight"><pre><span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot; </span><span class="cp">{{</span> <span class="nv">classes</span> <span class="cp">}}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+</pre></div>
+
+
+<p>Before that, though, we may want to include some additional classes that are specific to our macro.
+The <code>button</code> macro, for example, needs to add the <a href="http://getbootstrap.com/css/#buttons">Bootstrap-specific</a>
+<code>btn</code> and <code>btn-$STYLE</code> classes to the <code>&lt;button&gt;</code> element it produces<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">classes.add</span><span class="o">(</span><span class="s1">&#39;btn&#39;</span><span class="o">,</span> <span class="s1">&#39;btn-&#39;</span> <span class="o">+</span> <span class="nv">style</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>After executing this statement, the final <code>class</code> attribute contains both the caller-provided classes,
+as well those two that were added&nbsp;explicitly.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Believe it or not, we can finally
+<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content">center the content vertically</a>
+without much of an issue!&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>The <code>{% do %}</code> block in Jinja allows to execute statements (such as function calls) without evaluating values
+they return. It is not exposed by default,
+but <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment.add_extension">adding</a> a standard
+<a href="http://jinja.pocoo.org/docs/dev/extensions/#expression-statement"><code>jinja2.ext.do</code> extension</a> to the <code>Environment</code>
+makes it available.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/sqlalchemy-regex-filters.html#sqlalchemy-regex-filters">Regular expression filters in&nbsp;SQLAlchemy</a></h2>
     <p>
       Posted on Wed 14 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1118,192 +1313,6 @@ the exact bytes that&#8217;ll be sent to the server. Most of the higher level ab
 (like form data or <span class="caps">JSON</span> request body) has been compiled to raw octets at this point. This is done to allow
 some authenticators (like OAuth) to analyze the full request payload and sign it cryptographically
 as a part of their flow.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/flask-auto-error-pages.html#flask-auto-error-pages">Automatic error pages in&nbsp;Flask</a></h2>
-    <p>
-      Posted on Tue 08 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/http.html">HTTP</a>,      <a href="http://xion.io/tag/errors.html">errors</a>      &#8226; <a href="http://xion.io/post/code/flask-auto-error-pages.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In <a href="http://flask.pocoo.org">Flask</a>, a popular web framework for Python, it&#8217;s pretty easy to implement custom handlers
-for specific <span class="caps">HTTP</span> errors. All you have to do is to write a function and annotate it with the <code>@errorhandler</code> decorator:</p>
-<div class="highlight"><pre><span class="nd">@app.errorhandler</span><span class="p">(</span><span class="mi">404</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">not_found</span><span class="p">(</span><span class="n">error</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;errors/404.html&#39;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Albeit simple, the above example is actually very realistic. There&#8217;s rarely anything else to do in response to serious
-request error than to send back some <span class="caps">HTML</span> with an appropriate message. If you have more handlers like that, though,
-you&#8217;ll notice they get pretty repetitive: for each erroneous <span class="caps">HTTP</span> status code (404, 403, 400, etc.),
-pick a corresponding template and simply render&nbsp;it.</p>
-<p>Which is, of course, why we&#8217;d want to deal with all in a little smarter way and with less&nbsp;boilerplate.</p>
-<h4>Just add a&nbsp;template</h4>
-<p>Ideally, we would like to avoid writing any Python code at all for each individual error handler. Since all we&#8217;re doing
-revolves around predefined templates, let&#8217;s just define the handlers automatically based on the <span class="caps">HTML</span> files&nbsp;themselves.</p>
-<p>Assuming we store them in the same template directory &#8212; say, <code>errors/</code> &#8212; and name their files after
-numeric status codes (e.g. <em>404.html</em>), getting all those codes is quite simple<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span><span class="p">,</span> <span class="n">PurePath</span>
-
-<span class="kn">from</span> <span class="nn">mywebapp</span> <span class="kn">import</span> <span class="n">app</span>
-
-
-<span class="c">#: Path to the directory where HTML templates for error pages are stored.</span>
-<span class="n">ERRORS_DIR</span> <span class="o">=</span> <span class="n">PurePath</span><span class="p">(</span><span class="s">&#39;errors&#39;</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">get_supported_error_codes</span><span class="p">():</span>
-    <span class="sd">&quot;&quot;&quot;Returns an iterable of HTTP status codes for which we have</span>
-<span class="sd">    a custom error page templates defined.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">error_templates_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="n">ERRORS_DIR</span><span class="p">)</span>
-
-    <span class="n">potential_error_templates</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">entry</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">error_templates_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_file</span><span class="p">())</span>
-    <span class="k">for</span> <span class="n">template</span> <span class="ow">in</span> <span class="n">potential_error_templates</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">code</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">template</span><span class="o">.</span><span class="n">stem</span><span class="p">)</span>  <span class="c"># e.g. 404.html</span>
-        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-            <span class="k">pass</span>  <span class="c"># could be some base.html template, or similar</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">:</span>
-                <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="s">&quot;Found error template for non-error HTTP status </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
-                <span class="k">continue</span>
-            <span class="k">yield</span> <span class="n">code</span>
-</pre></div>
-</td></tr></table>
-
-<p>Once we have them, we can try wiring up the handlers programmatically and making them do the right&nbsp;thing.</p>
-<h4>One function to handle them&nbsp;all</h4>
-<p>Although I&#8217;ve used a plural here, in reality we only need a single handler, as it&#8217;ll be perfectly capable of
-dealing with any <span class="caps">HTTP</span> error we bind it to. To help distinguishing between the different status codes,
-Flask by default invokes our error handlers with an
-<a href="http://werkzeug.pocoo.org/docs/0.10/exceptions/#werkzeug.exceptions.HTTPException"><code>HTTPException</code></a> argument
-that has the <code>code</code> as an&nbsp;attribute:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">render_template</span>
-<span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">TemplateNotFound</span>
-
-
-<span class="k">def</span> <span class="nf">error_handler</span><span class="p">(</span><span class="n">error</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Universal handler for all HTTP errors.</span>
-
-<span class="sd">    :param error: :class:`~werkzeug.exceptions.HTTPException`</span>
-<span class="sd">                  representing the HTTP error.</span>
-
-<span class="sd">    :return: HTTP response to be returned</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">code</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">error</span><span class="p">,</span> <span class="s">&#39;code&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">code</span><span class="p">:</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-            <span class="s">&quot;Got spurious argument to HTTP error handler: </span><span class="si">%r</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
-
-    <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s">&quot;HTTP error </span><span class="si">%s</span><span class="s">, rendering error page&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
-    <span class="n">template</span> <span class="o">=</span> <span class="n">ERRORS_DIR</span> <span class="o">/</span> <span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">.html&#39;</span> <span class="o">%</span> <span class="n">code</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">template</span><span class="p">)),</span> <span class="n">code</span>
-    <span class="k">except</span> <span class="n">TemplateNotFound</span><span class="p">:</span>
-        <span class="c"># shouldn&#39;t happen if the handler has been wired up properly</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">fatal</span><span class="p">(</span><span class="s">&quot;Missing template for HTTP error page: </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">template</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
-
-<span class="c">#: Response emitted when an error occurs in the error handler itself.</span>
-<span class="n">FATAL_ERROR_RESPONSE</span> <span class="o">=</span> <span class="p">(</span><span class="s">&quot;Internal Server Error&quot;</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>
-</pre></div>
-</td></tr></table>
-
-<p>Catching <code>TemplateNotFound</code> exception is admittedly a little paranoid here, as it can occur pretty much exclusively
-due to a programming error elsewhere. Feel free to treat it as a failed assertion about application&#8217;s internal state
-and e.g. convert to <code>AssertionError</code> if&nbsp;desirable.</p>
-<h4>The&nbsp;setup</h4>
-<p>The final step is to actually set up the&nbsp;handler(s):</p>
-<div class="highlight"><pre><span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">get_supported_error_codes</span><span class="p">():</span>
-    <span class="n">app</span><span class="o">.</span><span class="n">errorhandler</span><span class="p">(</span><span class="n">code</span><span class="p">)(</span><span class="n">error_handler</span><span class="p">)</span>
-</pre></div>
-
-
-<p>It may look a bit wonky, but it&#8217;s just a simple desugaring of the standard Python decorator syntax from the first example.
-There exists a more direct approach of putting the handler inside <code>app.error_handler_spec</code> dictionary,
-but it is <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.errorhandler">discouraged by Flask documentation</a>.</p>
-<p>Where to put the above code, though? I posit it&#8217;s perfectly fine to place in the module&#8217;s global scope,
-because the error handlers (and other request handlers) are traditionally defined at import time&nbsp;anyway.</p>
-<p>Also notice that the default error handling we&#8217;ve defined here doesn&#8217;t preclude more specialized variants
-for select <span class="caps">HTTP</span> codes. All you have to do is ensure that your custom <code>@app.errorhandler</code> definition occurs
-<em>after</em> the above&nbsp;loop.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Note that I&#8217;m using the <a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a> here
-&#8212; and you should, too, since it&#8217;s all around awesome. However, it is only a part of the standard library
-since Python 3.4, so you will most likely need to get <a href="https://pypi.python.org/pypi/pathlib/">the backport</a> first.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
