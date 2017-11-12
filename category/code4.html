@@ -63,6 +63,169 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-furl.html#python-furl"><span class="caps">URL</span> library for&nbsp;Python</a></h2>
+    <p>
+      Posted on Fri 27 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/url.html">URL</a>,      <a href="http://xion.io/tag/furl.html">furl</a>      &#8226; <a href="http://xion.io/post/code/python-furl.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Python has many <a href="https://docs.python.org/3/library/">batteries included</a>, but a few things are still conspicuously&nbsp;missing.</p>
+<p>One of them is a standardized and convenient approach to <span class="caps">URL</span> manipulation, akin to the
+<a href="http://docs.oracle.com/javase/7/docs/api/java/net/URI.html"><code>URI</code> class</a> in Java.
+There are some functions in <a href="https://docs.python.org/2/library/urllib.html"><code>urllib</code></a>, of course
+(or <a href="https://docs.python.org/3/library/urllib.parse.html"><code>urllib.parse</code></a> in Python 3), but much like their <span class="caps">HTTP</span>-related
+comrades, they prove rather verbose and somewhat&nbsp;clunky.</p>
+<p><span class="caps">HTTP</span>, however, is solved by the <a href="http://python-requests.org/">Requests</a> package, so you may wonder
+if there is some analogous package for <span class="caps">URL</span> operations. The answer is affirmative, and the library in question is,
+quite whimsically, called <a href="https://github.com/gruns/furl"><em>furl</em></a>.</p>
+<h4><span class="caps">URL</span> in a&nbsp;wrap</h4>
+<p>The sole interesting part of the <em>furl</em> interface is the <code>furl</code> class. It represents a single <span class="caps">URL</span>, broken down to
+its constituents, with properties and methods for both reading them out and replacing with new&nbsp;values.</p>
+<p>Thanks to this handy (and quite obvious) abstraction, common <span class="caps">URL</span> operations become quite simple and&nbsp;self-documenting:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">furl</span> <span class="kn">import</span> <span class="n">furl</span>
+
+
+<span class="k">def</span> <span class="nf">to_absolute</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;If given ``url`` is a relative path,</span>
+<span class="sd">    make it relative to the ``base``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">furled</span><span class="o">.</span><span class="n">scheme</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">furl</span><span class="p">(</span><span class="n">base</span><span class="p">)</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">url</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+    <span class="k">return</span> <span class="n">url</span>
+
+
+<span class="k">def</span> <span class="nf">is_same_origin</span><span class="p">(</span><span class="o">*</span><span class="n">urls</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Check whether URLs are from the same origin (host:port).&quot;&quot;&quot;</span>
+    <span class="n">origins</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">url</span><span class="o">.</span><span class="n">netloc</span> <span class="k">for</span> <span class="n">url</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="n">furl</span><span class="p">,</span> <span class="n">urls</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">get_facebook_username</span><span class="p">(</span><span class="n">profile_url</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get Facebook user ID from their profile URL.&quot;&quot;&quot;</span>
+    <span class="n">furled</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">profile_url</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">furled</span><span class="o">.</span><span class="n">host</span> <span class="o">==</span> <span class="s">&#39;facebook.com&#39;</span> <span class="ow">or</span>
+            <span class="n">furled</span><span class="o">.</span><span class="n">host</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s">&#39;.facebook.com&#39;</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;not a Facebook URL: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">profile_url</span><span class="p">,))</span>
+    <span class="k">return</span> <span class="n">furled</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="c"># etc.</span>
+</pre></div>
+
+
+<p>This includes the extremely prevalent, yet very harmful pattern of bulding URLs through string&nbsp;interpolation:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">?</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">BASE_URL</span><span class="p">,</span> <span class="n">urlencode</span><span class="p">(</span><span class="n">query_params</span><span class="p">))</span>
+</pre></div>
+
+
+<p>Besides looking unpythonically ugly, it&#8217;s also inflexible and error-prone. If <code>BASE_URL</code> gains some innate query string
+params (<code>'http://example.com/?a=b'</code>), this method will start producing completely invalid <code>url</code>s (with two question marks,
+e.g. <code>'http://example.com/?a=b?foo=bar'</code>).</p>
+<p>The equivalent in <em>furl</em> has none of these&nbsp;flaws:</p>
+<div class="highlight"><pre><span class="n">url</span> <span class="o">=</span> <span class="n">furl</span><span class="p">(</span><span class="n">BASE_URL</span><span class="p">)</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">query_params</span><span class="p">)</span><span class="o">.</span><span class="n">url</span>
+</pre></div>
+
+
+<h4>The full&nbsp;package</h4>
+<p>To see the full power of <em>furl</em>, I recommend having a look at its
+<a href="https://github.com/gruns/furl/blob/master/API.md"><span class="caps">API</span> documentation</a>. It&#8217;s quite clear and should be very easy to&nbsp;use.</p>
+      <a class="btn" href="http://xion.io/post/code/python-furl.html#python-furl">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">let: binding for&nbsp;Knockout</a></h2>
+    <p>
+      Posted on Wed 18 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/knockout.html">Knockout</a>,      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/web-frontend.html">web frontend</a>,      <a href="http://xion.io/tag/data-binding.html">data binding</a>      &#8226; <a href="http://xion.io/post/code/knockout-let-binding.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://knockoutjs.com/">Knockout</a> is a JavaScript &#8220;framework&#8221; that has always lurked in the shadows of other,
+more flashy ones. Even in the days of its relative novelty, the likes of Backbone or Ember had seemed to garner more
+widespread interest among frontend developers. Today, this hasn&#8217;t changed much, the difference being mainly
+that the spotlight is now taken by new actors (<em>*cough*</em> <a href="https://facebook.github.io/react/">React</a> <em>*cough*</em>).</p>
+<p>But Knockout has a loyal following, and for good reasons. Possibly the most imporant one is why I&#8217;ve put the word
+&#8220;framework&#8221; in quotes. Knockout is, first and foremost, a <em>data binding</em> library: it doesn&#8217;t do much else besides
+tying <span class="caps">DOM</span> nodes to JavaScript&nbsp;objects.</p>
+<p>This quality makes it both easy to learn and simple to integrate. In fact, it can very well live in just some small
+compartments of your web application, mingling easily with any server-side templating mechanism you might be using.
+It also interplays effortlessly with other <span class="caps">JS</span> libraries, and sticks very well to
+<a href="http://stackoverflow.com/q/30766900/434799">whatever duct tape you use</a> to hold your frontend stack&nbsp;together.</p>
+<p>Lastly, it&#8217;s also quite extensible. We can, for example, create our own
+<a href="http://knockoutjs.com/documentation/binding-syntax.html">bindings</a> rather easily, extending the declarative language
+used to describe relationship between the data and <span class="caps">UI</span>.</p>
+<p>In this post, I&#8217;m going to demonstrate this by implementing a very simple <code>let:</code> binding &#8212;
+a kind of &#8220;assignment&#8221; of an expression to a&nbsp;name.</p>
+<h4>From Knockout <code>with:</code> bluff</h4>
+<p>Out of box, Knockout proffers the <a href="http://knockoutjs.com/documentation/with-binding.html"><code>with:</code> binding</a>,
+a quite similar mechanism. How it may be somewhat problematic is analogous to the
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/with">widely discouraged <code>with</code> statement</a>
+in JavaScript itself. Namely, it blends several namespaces together, making it harder to determine which object
+is being referred to. As a result, the code is more prone to&nbsp;errors.</p>
+<p>On the other hand, freeing the developer from repeating long and complicated expressions is obviously valuable.
+Perhaps reducing them to nil is not the right approach, though, so how about we just shorten them
+to a more manageable length? Well, that&#8217;s exactly what the <code>let:</code> binding is meant to&nbsp;do:</p>
+<div class="highlight"><pre><span class="nt">&lt;div</span> <span class="na">data-bind=</span><span class="s">&quot;let: { addr: currentUser.personalInfo.address }&quot;</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line1&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- ko if: addr.line2 --&gt;</span>
+    <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: addr.line2&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+  <span class="c">&lt;!-- /ko --&gt;</span>
+  <span class="nt">&lt;p&gt;</span>
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.city&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>,
+    <span class="nt">&lt;span</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.region&quot;</span><span class="nt">&gt;&lt;/span&gt;</span>
+  <span class="nt">&lt;/p&gt;</span>
+  <span class="nt">&lt;p</span> <span class="na">data-bind=</span><span class="s">&quot;text: add.country&quot;</span><span class="nt">&gt;&lt;/p&gt;</span>
+<span class="nt">&lt;/div&gt;</span>
+</pre></div>
+
+
+<p>Making it happen turns out to be pretty&nbsp;easy.</p>
+<h4>Binding&nbsp;contract</h4>
+<p>To define a Knockout binding, up to two things are needed. We have to specify what the library should&nbsp;do:</p>
+<ul>
+<li>when the binding is first applied to a <span class="caps">DOM</span> node (the <code>init</code> method)</li>
+<li>when any of the <a href="http://knockoutjs.com/documentation/observables.html">observed values</a> changes (the <code>update</code> method)</li>
+</ul>
+<p>Not every binding has to implement both methods. In our cases, only the <code>init</code> is necessary, because all we have to do
+is modify the <em>binding context</em>.</p>
+<p>What&#8217;s that? Shortly speaking, a <a href="http://knockoutjs.com/documentation/binding-context.html">binding context</a>,
+is an object holding all the data you can potentially bind to your <span class="caps">DOM</span> nodes. Think of it as a namespace, or local scope:
+whatever&#8217;s in there can be used directly inside <code>data-bind</code> attributes.</p>
+<h4><code>let:</code> it&nbsp;go</h4>
+<p>Therefore, all that the <code>let:</code> binding has to do is to extend the context with a mapping passed to it as an argument.
+Well, almost&nbsp;all:</p>
+<div class="highlight"><pre><span class="nx">ko</span><span class="p">.</span><span class="nx">bindingHandlers</span><span class="p">[</span><span class="s1">&#39;let&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nx">init</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">element</span><span class="p">,</span> <span class="nx">valueAccessor</span><span class="p">,</span> <span class="nx">allBindings</span><span class="p">,</span> <span class="nx">viewModel</span><span class="p">,</span> <span class="nx">bindingContext</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">innerContext</span> <span class="o">=</span> <span class="nx">bindingContext</span><span class="p">.</span><span class="nx">extend</span><span class="p">(</span><span class="nx">valueAccessor</span><span class="p">);</span>
+        <span class="nx">ko</span><span class="p">.</span><span class="nx">applyBindingsToDescendants</span><span class="p">(</span><span class="nx">innerContext</span><span class="p">,</span> <span class="nx">element</span><span class="p">);</span>
+        <span class="k">return</span> <span class="p">{</span> <span class="nx">controlsDescendantBindings</span><span class="o">:</span> <span class="kc">true</span> <span class="p">};</span>
+    <span class="p">}</span>
+<span class="p">};</span>
+</pre></div>
+
+
+<p>The resulting <code>innerContext</code> is a copy of the original <code>bindingContext</code>, augmented with additional properties from
+the argument of <code>let:</code> (those are available through <code>valueAccessor</code>). Once we have it, though, we need to handle it
+in a little special&nbsp;way.</p>
+<p>Normally, Knockout is processing all bindings recursively, pasing down the same <code>bindingContext</code> (which ultimately
+comes from the root <code>viewModel</code>). But since we want to locally alter the context, we also need to interrupt this regular
+way and take care of the lower-level <span class="caps">DOM</span> nodes&nbsp;ourselves.</p>
+<p>This is exactly what the overly-long <code>ko.applyBindingsToDescendants</code> function is doing. The only caveat is that Knockout
+has to be <a href="http://knockoutjs.com/documentation/custom-bindings-controlling-descendant-bindings.html">told explicitly</a>
+about our intentions through the <code>return</code> value from <code>init</code>. Otherwise, it would try to apply the <em>original</em>
+<code>bindingContext</code> recursively, which in our case would amount to applying it <strong>twice</strong>.
+<code>{ controlsDescendantBindings: true }</code> prevents Knockout from doing so&nbsp;erroneously.</p>
+      <a class="btn" href="http://xion.io/post/code/knockout-let-binding.html#knockout-let-binding">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/sqlalchemy-query-to-sql.html#sqlalchemy-query-to-sql">Turn SQLAlchemy queries into literal <span class="caps">SQL</span></a></h2>
     <p>
       Posted on Thu 12 November 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1356,266 +1519,6 @@ has made it into the <span class="caps">ES6</span> (ECMAScript 2015) standard bu
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/requirejs-optional.html#requirejs-optional">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Reload Jinja macro&nbsp;files</a></h2>
-    <p>
-      Posted on Thu 24 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/werkzeug.html">Werkzeug</a>,      <a href="http://xion.io/tag/flask-script.html">Flask-Script</a>      &#8226; <a href="http://xion.io/post/code/jinja-reload-macro-files.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>The integration between <a href="http://jinja.pocoo.org">Jinja templating engine</a> and the
-<a href="http://flask.pocoo.org">Flask microframework</a> for Python is quite seamless most of the time. It also facilitates
-rapid development: when we run our web application through Flask&#8217;s development server, any changes in Python code
-will get picked up immediately without restarting it. Similarly, Jinja&#8217;s default template loader will detect
-whether any template has been modified after its last compilation and recompile it if&nbsp;necessary.</p>
-<p>One instance when it <em>doesn&#8217;t</em> seem to work that well, though, is template files that only contain
-<a href="http://jinja.pocoo.org/docs/dev/templates/#macros">Jinja macros</a>. They apparently aren&#8217;t subject to the same caching
-rules that apply to regular templates. Modifications to those files alone may not be picked up by Jinja <code>Environment</code>,
-causing <a href="http://flask.pocoo.org/docs/0.10/api/#flask.render_template"><code>render_template</code> calls</a> in Flask
-to (indirectly) use their stale&nbsp;versions.</p>
-<h4>I&#8217;ll be watching&nbsp;you</h4>
-<p>This problem can be alleviated by making the server watch those macro files explicitly, not unlike the Python sources
-it already monitors. When running a Flask server through
-<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.run">the <code>Flask.run</code> method</a>, you can pass additional keyword arguments
-which aren&#8217;t handled by Flask itself, but by the underlying <a href="http://wsgi.readthedocs.org/en/latest/what.html"><span class="caps">WSGI</span></a>
-scaffolding called <a href="http://werkzeug.pocoo.org/">Werkzeug</a>. The automatic reloader is actually part of it and is quite
-configurable. Most importantly, it allows passing a list of <code>extra_files=</code> to&nbsp;watch:</p>
-<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
-
-<span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">host</span><span class="o">=</span><span class="s">&#39;0.0.0.0&#39;</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)),</span>
-        <span class="n">extra_files</span><span class="o">=</span><span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="s">&#39;macros.html&#39;</span><span class="p">)])</span>
-</pre></div>
-
-
-<p>But of course it&#8217;s tedious and error-prone to keep this list up to date manually, so let&#8217;s try to do&nbsp;better.</p>
-<h4>&#8230;all of&nbsp;you</h4>
-<p>I&#8217;m going to assume you&#8217;re keeping all your Jinja macro files inside a single directory. This makes sense,
-as macros are reusable pieces of template code that are imported by multiple regular templates,
-so they shouldn&#8217;t be scattered around the codebase without some order. The folder may be named <em>macros</em>, <em>util</em>,
-<em>common</em>, or similar; what&#8217;s important is that all the macros have a designated place in the project source&nbsp;tree.</p>
-<p>Under this assumption, it&#8217;s not difficult to programmatically compute their complete list<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
-
-<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>  <span class="c"># Flask application object</span>
-
-
-<span class="c">#: Directories under app&#39;s template folder that contain files</span>
-<span class="c">#: with only Jinja macros.</span>
-<span class="n">JINJA_MACRO_DIRS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;macros&#39;</span><span class="p">,)</span>
-
-
-<span class="k">def</span> <span class="nf">get_extra_files</span><span class="p">():</span>
-    <span class="sd">&quot;&quot;&quot;Returns an iterable of the extra files that the Flask server</span>
-<span class="sd">    should monitor for changes and reload the app if any has been modified.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">app_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">dirname</span> <span class="ow">in</span> <span class="n">JINJA_MACRO_DIRS</span><span class="p">:</span>
-        <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">app_root</span> <span class="o">/</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
-        <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
-</pre></div>
-
-
-<p>If you&#8217;re using Flask <a href="http://flask.pocoo.org/docs/0.10/blueprints/">blueprints</a>,
-in addition to the global application templates you&#8217;d also want to monitor any blueprint-specific macro&nbsp;files:</p>
-<div class="highlight"><pre>        <span class="k">for</span> <span class="n">bp</span> <span class="ow">in</span> <span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">blueprints</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">macros_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">bp</span><span class="o">.</span><span class="n">root_path</span><span class="p">)</span> <span class="o">/</span> <span class="n">bp</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">/</span> <span class="n">dirname</span>
-            <span class="k">for</span> <span class="n">filepath</span> <span class="ow">in</span> <span class="n">macros_dir</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">):</span>
-                <span class="k">yield</span> <span class="nb">str</span><span class="p">(</span><span class="n">filepath</span><span class="p">)</span>
-</pre></div>
-
-
-<h4>A new&nbsp;start</h4>
-<p>How you&#8217;re going to use the <code>get_extra_files</code> function from the snippet above depends on how exactly you&#8217;re running
-the Flask development server. In the simplest case, when <code>Flask.run</code> is invoked at the top-level scope of some module,
-it&#8217;s pretty&nbsp;obvious:</p>
-<div class="highlight"><pre><span class="n">app</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">extra_files</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">()))</span>
-</pre></div>
-
-
-<p>More realistically, though, you may be using the <a href="http://flask-script.readthedocs.org/">Flask-Script</a> extension
-for all management tasks, including starting the server. If so, calling <code>Flask.run</code> will be relegated to it,
-so you&#8217;ll need to override the <code>Server</code> command to inject additional parameters&nbsp;there:</p>
-<div class="highlight"><pre><span class="kn">import</span> <span class="nn">os</span>
-
-<span class="kn">from</span> <span class="nn">flask.ext.script</span> <span class="kn">import</span> <span class="n">Manager</span><span class="p">,</span> <span class="n">Server</span> <span class="k">as</span> <span class="n">_Server</span>
-
-<span class="kn">from</span> <span class="nn">myapplication</span> <span class="kn">import</span> <span class="n">app</span>
-
-
-<span class="k">class</span> <span class="nc">Server</span><span class="p">(</span><span class="n">_Server</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;use_reloader&#39;</span><span class="p">,</span> <span class="bp">True</span><span class="p">):</span>
-            <span class="n">kwargs</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s">&#39;extra_files&#39;</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">get_extra_files</span><span class="p">())</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Server</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-
-<span class="n">manager</span> <span class="o">=</span> <span class="n">Manager</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">with_default_commands</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
-
-<span class="n">server</span> <span class="o">=</span> <span class="n">Server</span><span class="p">(</span><span class="n">port</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s">&#39;PORT&#39;</span><span class="p">,</span> <span class="mi">5000</span><span class="p">)))</span>
-<span class="n">manager</span><span class="o">.</span><span class="n">add_command</span><span class="p">(</span><span class="s">&#39;server&#39;</span><span class="p">,</span> <span class="n">server</span><span class="p">)</span>
-</pre></div>
-
-
-<p>This new <code>server</code> command should work just like the default one provided by Flask-Script out of the box,
-except that all your Jinja macro files will now be monitored for&nbsp;changes.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Like <a href="http://xion.io/post/code/flask-auto-error-pages.html">before</a>, I&#8217;m using the
-<a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a>, for which there is a
-<a href="https://pypi.python.org/pypi/pathlib/">backport</a> if you&#8217;re using Python 3.3 or older.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/memcached-purge-local.html#memcached-purge-local">Purging local&nbsp;Memcached</a></h2>
-    <p>
-      Posted on Sat 19 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/memcache.html">memcache</a>,      <a href="http://xion.io/tag/memcached.html">Memcached</a>,      <a href="http://xion.io/tag/expect.html">expect</a>,      <a href="http://xion.io/tag/caching.html">caching</a>,      <a href="http://xion.io/tag/scripting.html">scripting</a>,      <a href="http://xion.io/tag/tcl.html">Tcl</a>      &#8226; <a href="http://xion.io/post/code/memcached-purge-local.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><a href="http://memcached.org/">Memcached</a> is a ubiquitous caching solution, most commonly used to speed things up
-in web application backends. You deploy it as a separate binary and have your application servers talk to it
-before querying a database, calling a third party <span class="caps">API</span> over <span class="caps">HTTP</span>, or performing some other time-consuming I/O operation.
-Since it stores data in memory, as its name obviously suggests, it can be orders of magnitude faster than anything
-that may have to hit a spinning disk (like a database) or an unreliable, external&nbsp;network.</p>
-<p>From the point of view of a developer, using Memcached is pretty simple.
-There exist <a href="https://code.google.com/p/memcached/wiki/Clients">numerous libraries</a> that wrap its protocol in a neat,
-language-appropriate <span class="caps">API</span>. It does put another requirement on the development environment, of course: you need to have
-a working memcached deamon in the background if you want the local server to hit code paths where it retrieves data
-from memcache<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Thankfully, it&#8217;s an extremely popular piece of software, present in basically all
-<a href="https://code.google.com/p/memcached/wiki/NewInstallFromPackage">package repositories</a>,
-so having it up and running is just one <code>apt-get install</code> or <code>brew install</code> away.</p>
-<h4>How to&nbsp;flush</h4>
-<p>It&#8217;s a little dated and finicky piece of software, too. Once you have its local instance used for a while,
-there comes a time when you&#8217;d like to purge all its contents and have your server(s) fill it up again.
-Rather than restarting the daemon (which is system-specific procedure that may require root privileges),
-you&#8217;d like to just issue the <code>flush_all</code> command to&nbsp;it.</p>
-<p>This <em>should</em> be easy. Unlike <a href="http://redis.io/">Redis</a>, however, memcached doesn&#8217;t come with a dedicated <span class="caps">CLI</span> client.
-In theory, it doesn&#8217;t have to, because you can talk to it over just <code>telnet</code>:</p>
-<div class="highlight"><pre><span class="nv">$ </span>telnet localhost 11211
-Trying 127.0.0.1...
-Connected to localhost.
-Escape character is <span class="s1">&#39;^]&#39;</span>.
-flush_all
-OK
-^<span class="o">]</span>
-
-telnet&gt; quit
-Connection closed.
-</pre></div>
-
-
-<p>But going through this rigmarole every time we want to flush memcache gets a bit tedious after a while.
-An obvious attempt at automating it will, however,&nbsp;fail:</p>
-<div class="highlight"><pre><span class="nv">$ </span><span class="nb">echo</span> <span class="s2">&quot;flush_all\n&quot;</span> <span class="p">|</span> telnet localhost 11211
-Trying 127.0.0.1...
-Connected to localhost.
-Escape character is <span class="s1">&#39;^]&#39;</span>.
-Connection closed by foreign host.
-</pre></div>
-
-
-<p>Turns out the you cannot just bombard memcached with <code>flush_all</code> (or any other command) while the connection
-is being established. You can of course try adding a <code>sleep</code> to allow it some time, but this is inherently unreliable,
-especially when connecting to remote&nbsp;servers.</p>
-<p>The most successful approach I&#8217;ve managed to find is to automate not the raw data exchange,
-but the <em>interactive <code>telnet</code> session itself</em>. By that I mean invoking a <code>telnet</code> command, observing its output
-and reacting to it &#8212; just like a human would do, but in a scripted, automated&nbsp;way.</p>
-<h4>Nobody expects the Telnet&nbsp;instrumentation</h4>
-<p>There is a dedicated Unix program for scripting just this kind of <span class="caps">CLI</span> interactions. It&#8217;s decidedly more obscure
-than mere <code>echo</code> or pipes, but should nonetheless be available for any modern (or ancient) Unix system,
-from Linuxes to <span class="caps">OSX</span>. Its name is <code>expect</code> and &#8212; if installed<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> &#8212; the usual place you can find it is
-<code>/usr/bin</code> or <code>/usr/local/bin</code>.</p>
-<p><code>expect</code> accepts commands and scripts written in <a href="https://en.wikipedia.org/wiki/Tcl">Tcl</a> &#8212; a scripting language
-whose syntax looks a bit like a mix of <span class="caps">PHP</span> and Objective-C. It&#8217;s a fully featured language with all the usual
-programming constructs you&#8217;d normally want but <code>expect</code> enhances it further with instructions dedicated to spawning
-external processes, reading their output, and sending input in&nbsp;response.</p>
-<p>In fact, the main commands of the <code>expect</code> program are <code>spawn</code>, <code>expect</code>, and <code>send</code>. Mashing them together,
-we can easily nail the crucial part of our memcache-purging&nbsp;script:</p>
-<div class="highlight"><pre><span class="c">#!/usr/bin/expect</span>
-
-<span class="nv">spawn</span> telnet localhost <span class="mi">11211</span><span class="k">;</span>
-<span class="nv">expect</span> <span class="s2">&quot;Connected to localhost&quot;</span><span class="k">;</span>
-<span class="nv">send</span> <span class="s2">&quot;flush_all\n&quot;</span><span class="k">;</span>
-</pre></div>
-
-
-<p>This performs the actual flush but the <code>telnet</code> session/process is kept open afterwards.
-Once the <code>expect</code> program ends (after finishing our script), that process may get orphaned and hog system resources.
-To prevent that, we should behave like a good Unix citizen and <em>wait</em> for our child processes to&nbsp;terminate:</p>
-<div class="highlight"><pre><span class="nv">wait</span><span class="k">;</span>
-</pre></div>
-
-
-<p>But obviously, this will never happen, because we&#8217;ve never instructed the <code>telnet</code> process to&nbsp;end!</p>
-<h4>Escape&nbsp;artist</h4>
-<p>Your first instinct may be to send <code>^C</code> (<span class="caps">SIGINT</span>) or <code>^D</code> (end-of-file) to the <code>telnet</code> process
-but this won&#8217;t work either. Everything we type inside an active Telnet session is sent to the remote server,
-and that includes those two key&nbsp;chords.</p>
-<p>Authors of the <code>telnet</code> program were of course aware of this problem. As a countermeasure, they introduced the concept
-of an <em>escape character</em> that allows the user to control the Telnet connection itself &#8212; including, but not limited to,
-its termination. When encountered in the input stream, the escape character causes <code>telnet</code> to temporally suspend
-its normal operation, &#8220;escaping&#8221; from the client-server session to a simple command shell of the <code>telnet</code> program itself.
-(This is indicated by the <code>telnet&gt;</code> prompt).</p>
-<p>The default escape character is <code>^]</code>, which can be easily typed on a keyboard using the key combination <em>Ctrl+]</em>.
-The <code>expect</code> program, however, only simulates typing real characters. Coupled with some syntactical quirks of the Tcl
-language, this makes the usage of <code>^]</code> as an escape character rather cumbersome, to say the&nbsp;least.</p>
-<p>Fortunately, this default can be changed rather easily with an <code>-e</code> flag to the <code>telnet</code> application.
-After setting it to something more common but still outside of the memcache protocol &#8212; such as the exclamation mark &#8212;
-we are now able to <code>send</code> it without an&nbsp;issue:</p>
-<div class="highlight"><pre><span class="c">#!/usr/bin/expect</span>
-
-<span class="k">set</span> escapechar <span class="o">!</span><span class="k">;</span>
-
-<span class="nv">spawn</span> telnet <span class="o">-</span>e <span class="nv">$escapechar</span> localhost <span class="mi">11211</span><span class="k">;</span>
-<span class="nv">expect</span> <span class="s2">&quot;Connected to localhost&quot;</span><span class="k">;</span>
-<span class="nv">send</span> <span class="s2">&quot;flush_all\n&quot;</span><span class="k">;</span>
-
-<span class="nv">send</span> <span class="nv">$escapechar</span><span class="k">;</span>
-<span class="nv">expect</span> <span class="s2">&quot;telnet&gt;&quot;</span><span class="k">;</span>
-<span class="nv">send</span> <span class="s2">&quot;quit\n&quot;</span><span class="k">;</span>
-<span class="nv">wait</span><span class="k">;</span>
-</pre></div>
-
-
-<p>The script will also terminate despite <code>wait</code>ing for the <code>telnet</code> process to finish, which means everything has been
-shut down&nbsp;gracefully.</p>
-<h4>Production-ready</h4>
-<p>As a final touch, it&#8217;d be nice to make our solution work with any memcache server and not just <em>localhost</em>.
-You can see it done in <a href="https://gist.github.com/Xion/624979b05e0411324eb1">this gist</a>: the script accepts
-two optional arguments (host <span class="amp">&amp;</span> port) and uses it when spawning the <code>telnet</code> process.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>It probably goes without saying that any value in the memcache, as well as the entire memcached server (or servers),
-must be treated as potentially unavailable at any time. A properly written application server should still be able
-to service all requests &#8212; if only a little slower &#8212; without any (mem)caching at all.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>On all distros, as well as in Homebrew for <span class="caps">OSX</span>, it should be available as a package with a totally uncreative
-name of <code>expect</code>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/memcached-purge-local.html#memcached-purge-local">Continue reading</a>
   </div>
 </article>
 

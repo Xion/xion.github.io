@@ -63,6 +63,325 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/haskell-printer-monad.html#haskell-printer-monad">The Printer Monad in&nbsp;Haskell</a></h2>
+    <p>
+      Posted on Fri 04 August 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/haskell.html">Haskell</a>,      <a href="http://xion.io/tag/writer.html">Writer</a>,      <a href="http://xion.io/tag/monads.html">monads</a>,      <a href="http://xion.io/tag/monad-transformers.html">monad transformers</a>,      <a href="http://xion.io/tag/writert.html">WriterT</a>      &#8226; <a href="http://xion.io/post/code/haskell-printer-monad.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Quite recently, I have encountered an interesting case of monad-based refactoring in&nbsp;Haskell.</p>
+<p>Suppose you have a <code>ComplicatedRecord</code>
+that holds the results of some lengthy and important process in your program.
+You want to present that data to the user in a nicely formatted way,
+so you write a function which begins somewhat like&nbsp;this:</p>
+<div class="highlight"><pre><span class="cm">{-# LANGUAGE RecordWildcards #-}</span>
+
+<span class="c1">-- | Pretty-print the content of the record.</span>
+<span class="nf">ppRecord</span> <span class="ow">::</span> <span class="kt">ComplicatedRecord</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="nb">()</span>
+<span class="nf">ppRecord</span> <span class="kt">ComplicatedRecord</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="c1">-- ...</span>
+</pre></div>
+
+
+<p>Inside, there is plenty of <code>putStrLn</code> calls, likely hidden inside more specific subfunctions
+that format all the numerous parts of <code>ComplicatedRecord</code>.
+But the <code>IO</code> monad isn&#8217;t there just for printing:
+because the code went through multiple iterations,
+some of this logic actually takes advantage of it by making additional system <span class="amp">&amp;</span> network&nbsp;calls.</p>
+<p>So yeah, it&#8217;s not particularly&nbsp;pretty.</p>
+<p>Now, however, we find out that the output we&#8217;re printing here
+shouldn&#8217;t <em>always</em> go directly to stdout.
+In some cases, unsurprisingly, we actually want it back as a single string,
+without having it sent to the standard output at&nbsp;all.</p>
+<h4>Just $ return .&nbsp;it</h4>
+<p>Your first instinct here may be to simply give back the final string (well, <code>Text</code>)
+as the function result<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="nf">ppRecord</span> <span class="ow">::</span> <span class="kt">ComplicatedRecord</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="kt">Text</span>
+</pre></div>
+
+
+<p>However, this turns out to be rather awkward.
+While in most other languages
+we would simply accumulate output by progressively adding more data to a mutable result,
+this would be much more inconvenient (and somewhat weird) to do in&nbsp;Haskell.</p>
+<p>This is where the stdout-based approach seems cleaner;
+instead of straightforward, sequential code like&nbsp;this:</p>
+<div class="highlight"><pre><span class="cm">{-# LANGUAGE OverloadedStrings #-}</span>
+
+<span class="kr">import</span> <span class="nn">Control.Monad.Extra</span> <span class="p">(</span><span class="nf">whenJust</span><span class="p">)</span>
+<span class="kr">import</span> <span class="nn">Data.Text.IO</span>
+<span class="kr">import</span> <span class="nn">TextShow</span>
+
+<span class="nf">ppOrder</span> <span class="kt">Order</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">putStrLn</span> <span class="o">$</span> <span class="s">&quot;Order #&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">ordNumber</span>
+    <span class="n">ppAddress</span> <span class="n">ordDeliveryAddress</span>
+    <span class="n">forM_</span> <span class="p">(</span><span class="n">zip</span> <span class="p">[</span><span class="mi">1</span><span class="o">..</span><span class="p">]</span> <span class="n">ordItems</span><span class="p">)</span> <span class="o">$</span> <span class="nf">\</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="kt">Item</span><span class="p">{</span><span class="o">..</span><span class="p">})</span> <span class="ow">-&gt;</span> <span class="kr">do</span>
+        <span class="n">putStrLn</span> <span class="o">$</span> <span class="n">showt</span> <span class="p">(</span><span class="n">i</span><span class="ow">::</span><span class="kt">Int</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;. &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">itName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; x&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">showt</span> <span class="n">itQuantity</span>
+    <span class="n">whenJust</span> <span class="n">ordBillingAddress</span> <span class="n">ppAddress</span>
+
+<span class="nf">ppAddress</span> <span class="kt">Address</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">putStrLn</span> <span class="o">$</span> <span class="n">addrFirstName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrLastName</span>
+    <span class="n">putStrLn</span> <span class="n">addrLine1</span>
+    <span class="n">whenJust</span> <span class="n">addrLine2</span> <span class="n">putStrLn</span>
+    <span class="n">putStrLn</span> <span class="o">$</span> <span class="n">addrCity</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;, &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrPostalCode</span>
+</pre></div>
+
+
+<p>we have to overhaul each function and turn it into a much less pleasant &#8220;<code>mappend</code>age&#8221;:</p>
+<div class="highlight"><pre><span class="nf">ppOrder</span> <span class="kt">Order</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="n">unlines</span> <span class="o">$</span> <span class="n">mconcat</span>
+    <span class="p">[</span> <span class="s">&quot;Order #&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">ordNumber</span>
+    <span class="p">,</span> <span class="n">ppAddress</span> <span class="n">ordDeliveryAddress</span>
+    <span class="p">,</span> <span class="n">ppItems</span> <span class="n">ordItems</span>
+    <span class="p">]</span> <span class="o">+</span> <span class="n">maybe</span> <span class="kt">[]</span> <span class="p">(</span><span class="nf">\</span><span class="n">addr</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="n">ppAddress</span> <span class="n">addr</span><span class="p">])</span> <span class="n">ordBillingAddress</span>
+    <span class="kr">where</span>
+    <span class="n">ppItems</span> <span class="ow">=</span> <span class="n">mconcat</span> <span class="o">.</span> <span class="n">map</span> <span class="p">(</span><span class="n">uncurry</span> <span class="n">ppItem</span><span class="p">)</span> <span class="o">.</span> <span class="n">zip</span> <span class="p">[</span><span class="mi">1</span><span class="o">..</span><span class="p">]</span>
+    <span class="n">ppItem</span> <span class="n">i</span> <span class="kt">Item</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="n">showt</span> <span class="n">i</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;. &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">itName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; x&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">itQuantity</span>
+</pre></div>
+
+
+<p>One may argue that this is, in fact, the more idiomatic approach,
+but I&#8217;m not very fond of all those commas.
+Plus, it shows rather clearly that any conditional logic (like with <code>ordBillingAddress</code> here)
+is going to get pretty&nbsp;cumbersome.</p>
+<h4>Along comes the <code>Writer</code></h4>
+<p>What I&#8217;m saying here is that even in pure code,
+it is sometimes very desirable to have a <code>do</code> notation.
+For that, however, we need a suitable <code>Monad</code><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> to provide the meaning of &#8220;invisible semicolon&#8221; in a <code>do</code> block.</p>
+<p>And <code>Text</code>, obviously, isn&#8217;t one.
+Neither is <code>[Text]</code> (lines of text),
+nor any other type we&#8217;d use to represent the final output of formatting <span class="amp">&amp;</span> printing.
+They are unsuitable, because they cannot encode the <em>computation</em> that eventually produces said output &#8212;
+either the top-level one (<code>ppRecord</code>) or any of its building blocks (like the <code>ppOrder</code> or <code>ppAddress</code>),
+down to a most elementary <code>putStrLn</code>.
+The only thing they can stand for is the result&nbsp;itself.</p>
+<p>Fortunately, the pattern of executing code and occassionally producing some &#8220;additional&#8221; output
+has been abstracted over in the Haskell standard library.
+This is exactly the use case for the <code>Writer</code> monad!</p>
+<p>The definition of <code>Writer</code> is roughly equivalent to the&nbsp;following:</p>
+<div class="highlight"><pre><span class="kr">newtype</span> <span class="kt">Writer</span> <span class="n">w</span> <span class="n">a</span> <span class="ow">=</span> <span class="o">...</span> <span class="c1">-- omitted</span>
+</pre></div>
+
+
+<p>Of the two type parameters it takes, the <code>w</code> one signifies what output it can produce &#8220;on the side&#8221;.
+This is contrasted with <code>a</code> which is the regular result of a monadic expression or function.
+In our case, <code>a</code> will basically always be <code>()</code> (unit/&#8221;empty&#8221; type),
+but it is nonetheless necessary for the <code>Writer</code> to behave as a&nbsp;monad.</p>
+<p>To complement the above definition, <code>Writer</code> comes with several useful functions.
+Among those, the most interesting one is <code>tell</code>:</p>
+<div class="highlight"><pre><span class="nf">tell</span> <span class="ow">::</span> <span class="n">w</span> <span class="ow">-&gt;</span> <span class="kt">Writer</span> <span class="n">w</span> <span class="nb">()</span>
+</pre></div>
+
+
+<p><code>write</code> would&#8217;ve probably been a better name for it,
+as it&#8217;s definitely the main and defining operation of <code>Writer</code>.</p>
+<p>Looking at its signature, we can see it takes a bit of the <code>Writer</code><span class="quo">&#8216;</span>s output (<code>w</code>)
+and results in a <code>Writer</code> action.
+Internally, it will simply add the argument to the already accumulated output of the writer<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>To make everything more concrete,
+here&#8217;s a literal &#8220;Hello world&#8221; example coded very verbosly as a <code>Writer</code> action:</p>
+<div class="highlight"><pre><span class="kr">import</span> <span class="nn">Control.Monad.Writer</span>
+
+<span class="nf">hello</span> <span class="ow">::</span> <span class="kt">Writer</span> <span class="kt">Text</span> <span class="nb">()</span>
+<span class="nf">hello</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">tell</span> <span class="s">&quot;Hello&quot;</span>
+    <span class="n">tell</span> <span class="s">&quot; &quot;</span>
+    <span class="n">tell</span> <span class="s">&quot;world&quot;</span>
+
+<span class="nf">main</span> <span class="ow">::</span> <span class="kt">IO</span> <span class="nb">()</span>
+<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="kr">let</span> <span class="p">(</span><span class="kr">_</span><span class="p">,</span> <span class="n">greeting</span><span class="p">)</span> <span class="ow">=</span> <span class="n">runWriter</span> <span class="n">hello</span>
+    <span class="kt">Text</span><span class="o">.</span><span class="n">putStrLn</span> <span class="n">greeting</span>
+</pre></div>
+
+
+<p>It also contains the last element of the <code>Writer</code> puzzle:</p>
+<div class="highlight"><pre><span class="nf">runWriter</span> <span class="ow">::</span> <span class="kt">Writer</span> <span class="n">w</span> <span class="n">a</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Like its name suggests, this function will &#8220;run&#8221; any <code>Writer</code> action that we give it,
+returning both the &#8220;regular&#8221; result (<code>a</code>) plus any output passed in <code>tell</code>s (<code>w</code>).<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup></p>
+<h4>My little monad: transformers are&nbsp;magic</h4>
+<p>The last example may be very simple,
+but it contains all the building blocks for many of the printing functions we need.
+If we define a convenience wrapper for <code>tell</code>:</p>
+<div class="highlight"><pre><span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Writer</span> <span class="kt">Text</span> <span class="nb">()</span>
+<span class="nf">putLn</span> <span class="n">line</span> <span class="ow">=</span> <span class="n">tell</span> <span class="o">$</span> <span class="n">line</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+</pre></div>
+
+
+<p>then both <code>ppAddress</code> and <code>ppOrder</code> can be translated
+through a mere mechanical substitution of <code>putStrLn</code> with <code>putLn</code>:</p>
+<div class="highlight"><pre><span class="nf">ppAddress</span> <span class="kt">Address</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="n">addrFirstName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrLastName</span>
+    <span class="n">putLn</span> <span class="n">addrLine1</span>
+    <span class="n">whenJust</span> <span class="n">addrLine2</span> <span class="n">putLn</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="n">addrCity</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;, &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrPostalCode</span>
+
+<span class="c1">-- ppOrder omitted</span>
+</pre></div>
+
+
+<p>Unfortunately, a bare <code>Writer</code> like this can only work for pure code,
+which isn&#8217;t a luxury we can expect in every situtation.
+In my case, some of the printing logic was tied pretty strongly to <code>IO</code>,
+and it would be difficult and time consuming to decouple&nbsp;it.</p>
+<p>Thankfully, the reliance on <code>IO</code> isn&#8217;t a complete deal breaker.
+While we cannot ensure that nothing calls <code>putStrLn</code> anymore,
+we can provide the <code>tell</code>/<code>putLn</code> capabilities alongside whatever <em>other</em> <code>IO</code> calls
+our code has to make (for&nbsp;now).</p>
+<p>To achieve that, we need to create a <em>monad stack</em> with <code>WriterT</code>:</p>
+<div class="highlight"><pre><span class="kr">newtype</span> <span class="kt">WriterT</span> <span class="n">w</span> <span class="n">m</span> <span class="n">a</span> <span class="ow">=</span> <span class="o">...</span> <span class="c1">-- omitted</span>
+</pre></div>
+
+
+<p><code>WriterT</code> is a <em>monad transformer</em>, one of those scary Haskell concepts
+that are actually simpler than they appear on the surface.
+This is because transfomers like <code>WriterT</code> are mere wrappers.
+The only difference between it and a regular <code>Writer</code> is the additional <code>m</code> parameter,
+which is the <em>inner monad</em> we&#8217;re packaging inside a new <code>Writer</code>.</p>
+<p>Here (and in many other cases), <code>m</code> will be substituted with <code>IO</code>:</p>
+<div class="highlight"><pre><span class="kr">type</span> <span class="kt">Printer</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">WriterT</span> <span class="kt">Text</span> <span class="kt">IO</span> <span class="n">a</span>  <span class="c1">-- w == Text, m == IO</span>
+</pre></div>
+
+
+<p>thus creating the titular <code>Printer</code> monad.
+This hybrid beast can both output <code>Text</code> through the <code>Writer</code> <span class="caps">API</span>,
+as well as perform any additional <code>IO</code> operations
+that the code may (still)&nbsp;require.</p>
+<p>Below is an example;
+the <code>User</code> record requires an I/O call to get the size of its <code>$HOME</code> directory:</p>
+<div class="highlight"><pre><span class="kr">import</span> <span class="nn">Control.Monad.IO.Class</span> <span class="p">(</span><span class="nf">liftIO</span><span class="p">)</span>
+<span class="kr">import</span> <span class="nn">System.Directory</span> <span class="p">(</span><span class="nf">getFileSize</span><span class="p">)</span>
+
+<span class="c1">-- To print this data type nicely, we sadly require I/O :(</span>
+<span class="kr">data</span> <span class="kt">User</span> <span class="ow">=</span> <span class="kt">User</span> <span class="p">{</span> <span class="n">usrName</span> <span class="ow">::</span> <span class="kt">Text</span>
+                 <span class="p">,</span> <span class="n">usrHomeDir</span> <span class="ow">::</span> <span class="kt">FilePath</span>
+                 <span class="p">}</span>
+
+<span class="nf">ppUser</span> <span class="ow">::</span> <span class="kt">User</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="kt">Text</span>
+<span class="nf">ppUser</span> <span class="kt">User</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">runWriterT</span> <span class="o">$</span> <span class="kr">do</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="s">&quot;Name: &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">usrName</span>
+    <span class="n">homeSize</span> <span class="ow">&lt;-</span> <span class="n">liftIO</span> <span class="o">$</span> <span class="n">getFileSize</span> <span class="n">usrHomeDir</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="s">&quot;$HOME: &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">showt</span> <span class="n">usrHomeDir</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;(&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">showt</span> <span class="n">homeSize</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; bytes)&quot;</span>
+</pre></div>
+
+
+<p>As a bit of necessary cruft,
+we have to use <code>liftIO</code> to &#8220;lift&#8221; (wrap) <code>IO</code> actions such as <code>getFileSize</code>
+in a full <code>Printer</code> monad before executing them.
+Besides everything else you can think of,
+this is yet another argument for eventually getting rid of the <code>IO</code> :)</p>
+<h4>Making the monads&nbsp;coexist</h4>
+<p>But our job isn&#8217;t done yet.
+Despite looking very reasonable, this version of <code>ppUser</code> doesn&#8217;t actually compile!
+The actual type error may vary a little,
+but it all boils down to a difference between <code>WriterT Text IO ()</code> (i.e. <code>Printer ()</code>)
+and <code>Writer Text ()</code> at each call site of <code>putLn</code>.</p>
+<p><span class="caps">GHC</span> is obviously correct.
+However, the problem lies not in how we&#8217;re calling <code>putLn</code>,
+but rather the way it&#8217;s been&nbsp;defined:</p>
+<div class="highlight"><pre><span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Writer</span> <span class="kt">Text</span> <span class="nb">()</span>
+</pre></div>
+
+
+<p>This type can only produce a specific, <em>pure</em> <code>Writer</code> action.
+But to fit inside the <code>do</code> block of our compound monad,
+we need the <code>Writer</code> + <code>IO</code> combo from <code>WriterT Text IO</code> (i.e. <code>Printer</code>).</p>
+<p>We can try to address the mismatch by changing the signature&nbsp;to:</p>
+<div class="highlight"><pre><span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">WriterT</span> <span class="kt">Text</span> <span class="kt">IO</span> <span class="nb">()</span>  <span class="c1">-- or just: Printer ()</span>
+</pre></div>
+
+
+<p>but this will only result in the <em>opposite</em> problem.
+Now, all the pure printers like <code>ppAddress</code> are facing the fact
+that <code>putLn</code> is a (wrapped) <code>IO</code> action, despite not actually doing any I/O&nbsp;whatsoever.</p>
+<p>The obvious question is, can we have something that fits <em>both</em>?</p>
+<p>Earlier on, I&#8217;ve said that both vanilla <code>Writer</code> and the <code>IO</code>-spruced <code>Printer</code> support the &#8220;<code>Writer</code> <span class="caps">API</span>&#8221;,
+most notably the <code>tell</code> function.
+This notion of a &#8220;monadic interface&#8221; isn&#8217;t just hand-waving, though,
+and Haskell (obviously!) provides a way to express it&nbsp;programmatically.</p>
+<p>Meet the <code>MonadWriter</code> typeclass:</p>
+<div class="highlight"><pre><span class="kr">class</span> <span class="p">(</span><span class="kt">Monad</span> <span class="n">m</span><span class="p">,</span> <span class="kt">Monoid</span> <span class="n">w</span><span class="p">)</span> <span class="ow">=&gt;</span> <span class="kt">MonadWriter</span> <span class="n">w</span> <span class="n">m</span>
+</pre></div>
+
+
+<p>Any monad that can work as a <code>Writer</code> will be an instance of it,
+regardless of whether it wraps over <code>IO</code> or anything else.
+Functions like <code>tell</code> are defined to be
+<a href="http://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Writer-Class.html#v:tell">polymorphic over it</a>,
+enabling us to leverage the same technique they use when we define <code>putLn</code>:</p>
+<div class="highlight"><pre><span class="cm">{-# LANGUAGE FlexibleContexts #-}</span>
+
+<span class="kr">import</span> <span class="nn">Control.Monad.Writer.Class</span>
+
+<span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">MonadWriter</span> <span class="kt">Text</span> <span class="n">m</span> <span class="ow">=&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="n">m</span> <span class="nb">()</span>
+<span class="nf">putLn</span> <span class="n">line</span> <span class="ow">=</span> <span class="n">tell</span> <span class="o">$</span> <span class="n">line</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+</pre></div>
+
+
+<p>If you aren&#8217;t very familiar with this syntax,
+the part before <code>=&gt;</code> is a <em>typeclass constraint</em>, or <em>context</em>.
+It defines the requirements to be satisfied by types
+which are later used in the function&nbsp;signature.</p>
+<p>Here, we request a <code>MonadWriter</code> instance &#8212; one where <code>Text</code> is the output
+but <em>anything</em> can be the inner monad.
+We refer to that unknown monad only as <code>m</code>, a type variable.
+The compiler will figure out what to substitute for it <em>at every call site</em> of <code>putLn</code>.</p>
+<p>As a result, both a pure <code>Writer</code> and the <code>IO</code>-bound <code>Printer</code> can now use it.
+In the second case, the relevant instance of <code>MonadWriter</code> will,
+naturally, have <code>IO</code> fill in the <code>m</code> position.</p>
+<p>But curiously, the &#8220;pure&#8221; <code>Writer</code> also has
+<a href="http://hackage.haskell.org/package/base-4.9.1.0/docs/Data-Functor-Identity.html#t:Identity">an inner monad</a>.
+It just literally <em>does nothing</em> but wrap some other&nbsp;value:</p>
+<div class="highlight"><pre><span class="kr">newtype</span> <span class="kt">Identity</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">Identity</span> <span class="p">{</span> <span class="n">runIdentity</span> <span class="ow">::</span> <span class="n">a</span> <span class="p">}</span>
+</pre></div>
+
+
+<p>In most cases, this fact is hidden behind
+<a href="http://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Writer-Lazy.html#t:Writer">the real definition of <code>Writer</code></a>,
+though <code>runIdentity</code> may sometimes come handy for some on-the-spot type hacks<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.</p>
+<h4>The&nbsp;wrap</h4>
+<p>The many things we&#8217;ve talked about here could of course be a starting point
+for even more advanced stuff, but obviously we have to stop somewhere!
+But don&#8217;t worry: knowing about <code>MonadWriter</code> and other monad typeclasses like this
+is enough to write quite idiomatic&nbsp;code&#8230;</p>
+<p>&#8230;at least until you learn about
+<a href="http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html">free monads</a>,
+<a href="https://ocharles.org.uk/blog/posts/2013-12-04-24-days-of-hackage-extensible-effects.html">effects</a>,
+and the like&nbsp;;-)</p>
+<p>In any case, you can check <a href="https://gist.github.com/Xion/74c39b65c591ae9615b7cf81e88a5946">this gist</a>
+for the complete code from this&nbsp;post.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p><code>IO</code> is still necessary due to ad-hoc network fetches and syscalls mentioned earlier.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Or at least an <code>Applicative</code>, via the <code>ApplicativeDo</code> <span class="caps">GHC</span> extension.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>The adding is done via <code>mappend</code>, requiring <code>w</code> to be a <code>Monoid</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>There is also the <code>execWriter</code> variant which is actually more practical here
+  as it only returns the accumulated output.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>We could, for example, use it alongside <code>mapWriterT</code> to &#8220;fix&#8221; the calls to <code>putLn</code>
+  if we didn&#8217;t have control over its definition.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/haskell-printer-monad.html#haskell-printer-monad">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/rust-into-haskell.html#rust-into-haskell">Rust as a gateway drug to&nbsp;Haskell</a></h2>
     <p>
       Posted on Tue 13 June 2017 in <a href="http://xion.io/category/programming.html">Programming</a>

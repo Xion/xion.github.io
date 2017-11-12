@@ -63,6 +63,538 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
+    <p>
+      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
+<p>For a long time, I resisted the appeal of various incremental improvements
+that early 3.x releases offered.
+And the world agreed with me:
+a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
+<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
+<p>As if to compensate for years of &#8220;good enough&#8221;,
+Python 3 development team has given in to a steadily accelerating feature creep.
+Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
+(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
+but it nevertheless causes an increasingly wide functional gap
+between the 2.x and 3.x&nbsp;series.</p>
+<p>Starting from around Python 3.5, this gap becomes really noticeable,
+even when partially bridged with many excellent backports.
+The ecosystem support is also mostly there,
+at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
+<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
+<p>Given all those portents,
+even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
+For better or for worse, 3.x is how Python will look like in the coming years and decades.
+Might as well prepare for&nbsp;it.</p>
+<p>In this post, I will discuss some important issues
+one should be aware of before trying to switch from Python 2 to 3.
+I won&#8217;t be talking about all the minute changes and additions,
+but cover the more significant, broader concepts
+that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
+<p>The two concepts I&#8217;ll be mentioning here are
+<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
+<h4>Unicode&nbsp;handling</h4>
+<p>You have probably heard it before.
+Python 3 was going to solve your Unicode problems once and for all.
+You haven&#8217;t believed it, of course,
+like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
+<p>Still, it may be rather surprising to learn
+that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
+<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
+<p>In any case, either version of Python gets the most important thing about Unicode right.
+They both distinguish, at the type level,
+between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
+The type that holds the latter is called <code>bytes</code> in both versions,
+while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
+<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
+where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
+<p>But where Python 2 does poorly is in the choice of defaults.
+You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
+That <code>str</code> is a fully functional string type,
+even though it can only contain <span class="caps">ASCII</span> characters.
+Moreover, it is also the <em>default</em>:
+quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
+<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
+<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
+If you already deal with Unicode correctly in your programs
+&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
+your main benefit will be not having to write that <code>u""</code> quotes anymore.
+Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
+rather than letting you write &#8220;working&#8221; programs
+that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
+<h4>Laziness by&nbsp;default</h4>
+<p>The second major change that Python 3 brings is of similar nature.
+It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
+<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
+are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
+Included in these are functions like <code>map</code> or <code>filter</code>,
+as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
+<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
+<ul>
+<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
+<li><code>xrange</code> is now just <code>range</code></li>
+<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
+</ul>
+<p>and so&nbsp;on.</p>
+<p>In some cases, this is exactly what happens.
+For example, there is virtually no downside to the new implementation of <code>range</code>,
+especially considering the way it is used most&nbsp;often.</p>
+<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
+Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
+their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
+i.e. the most simplistic and limited flavor of Python iterables.
+Working with them is trickier and more error-prone than with lists,
+which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
+that generators expose us&nbsp;to.</p>
+<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
+by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
+and using its functions in place of the built-ins.
+What you could gain in return was increased performance, and a lesser memory footprint.
+All those benefits came from making the computations <em>lazy</em>
+and refraining from storage of the intermediate&nbsp;results.</p>
+<p>In Python 3, however, laziness is <em>preordained</em>.
+Even if we don&#8217;t need or care about the aforementioned perks,
+we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
+<p>One option is to embrace lazy evaluation fully,
+and adapt to handling unspecified iterables throughout our code bases.<br>
+The risk is an increased frequency of bugs stemming from generator misuse &#8212;
+including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
+deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
+<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
+wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
+in order to &#8220;sanitize&#8221; them for later (re)use.<br>
+Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
+</pre></div>
+
+
+<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
+    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
+    <span class="c"># ...the rest of a long function...</span>
+</pre></div>
+
+
+<p>Even if you choose the first path, and somehow use lazy generators everywhere,
+conversions are still required at the serialization&nbsp;boundaries:</p>
+<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
+</pre></div>
+
+
+<p>At least in this case, the lazy iterable will vocally fail with an exception,
+rather than silently doing nothing (in case of repeated iteration)
+or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
+<h4>from __future__ import&nbsp;doubts</h4>
+<p>So, here they are: the highlights of Python 3.
+If you are disappointed they all turned out to be mixed blessings,
+don&#8217;t worry: you are
+<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
+<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
+<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
+<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
+<p>The truth is that Python 3 is more finnicky, less forgiving,
+and much less beginner-friendly than its predecessor.
+Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
+by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
+<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
+Perhaps it&#8217;s not a coincidence
+that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
+has passed between the first public version of Python (0.9)
+and the release of Python 3.0.
+By no conceivable means it is a toy language anymore,
+and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
+<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
+<p>It&#8217;s becoming harder to claim the language favors simplicity
+over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
+It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
+is the <em>obvious</em> way to do it.<br>
+It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
+and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
+<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
+The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
+But who knows? Maybe after two decades,
+a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
+<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
+are about to get&nbsp;in!</p>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">for loops in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Tue 26 July 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/loops.html">loops</a>,      <a href="http://xion.io/tag/iterators.html">iterators</a>      &#8226; <a href="http://xion.io/post/code/rust-for-loop.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In this post, I&#8217;m going to talk about the <code>for</code> loop construct in <a href="https://rust-lang.org">Rust</a>,
+as well as the related concepts of <em>iterators</em> and&nbsp;&#8220;iterables&#8221;.</p>
+<p>Depending on your programming language background,
+they may seem somewhat familiar in terms of syntax <span class="amp">&amp;</span> semantics,
+or rather mysterious and surprising.
+Their closest analogues exist in Python,
+but programmers of Java, C#, or (modern) C++ should recognize many relevant features and ideas as&nbsp;well.</p>
+<h4>Basics</h4>
+<p>The syntax of a <code>for</code> loop is so modest it&#8217;s almost spartan<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;3&quot;</span><span class="p">];</span><span class="w"></span>
+<span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you would expect, <a href="https://is.gd/qtxqLD">this prints three lines</a> with <code>1</code>, <code>2</code>, <code>3</code>.
+What is probably not as obvious is that
+over the course of this loop the <code>v</code> vector was <em>expended</em>.
+Trying to <a href="https://is.gd/1mv7RV">use it</a> after the iteration,
+we&#8217;ll get a borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>&lt;anon&gt;:6:22: 6:23 error: use of moved value: `v` [E0382]
+&lt;anon&gt;:4         println!(&quot;{}&quot;, x);
+&lt;anon&gt;:5     }
+&lt;anon&gt;:6     println!(&quot;{:?}&quot;, v);
+                              ^
+</pre></div>
+
+
+<p>In Rust jargon, the vector has been <strong>moved</strong> into the loop.
+Its ownership &#8212; and that of its individual elements &#8212; has been transfered there permanently.
+While definitely surprising when compared to other languages,
+this behavior is consistent with Rust&#8217;s ubiquitous policy of moving values by&nbsp;default.</p>
+<p>Still, you may not expect it here
+because moving ownership is mostly seen at the function call boundaries.
+For most intents and purposes, however,
+you can picture a <code>for_each</code> function like this to be the equivalent of the <code>for</code> loop&nbsp;above:</p>
+<div class="highlight"><pre><span class="n">for_each</span><span class="p">(</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
+</pre></div>
+
+
+<p>This also gives us a hint on how we could prevent the move from happening.
+Rather than taking the vector itself,
+the function could accept only a reference to&nbsp;it:</p>
+<div class="highlight"><pre><span class="n">for_each_ref</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
+</pre></div>
+
+
+<p>After we translate this <a href="https://is.gd/Zrq0JL">back to the looping syntax</a>:</p>
+<div class="highlight"><pre><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+<span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>we won&#8217;t get any more objections from the&nbsp;compiler.</p>
+<h4>Iterators and &#8220;iterables&#8221; in&nbsp;Rust</h4>
+<p>It is important to emphasize that this new ampersand symbol (<code>&amp;</code>)
+is by no means a part of the syntax of the <code>for</code> loop itself.
+We have actually changed <em>what object</em> we&#8217;re iterating here.
+It is no longer <code>Vec&lt;T&gt;</code> &#8212; a vector itself &#8212; but <code>&amp;Vec&lt;T&gt;</code>, an immutable reference to it.
+As a consequence, <code>x</code> is not a <code>T</code> (the element type) anymore,
+but a <code>&amp;T</code> &#8212; a <em>reference</em> to an element<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<p>So it seems that in Rust, both <code>Vec&lt;T&gt;</code> and <code>&amp;Vec&lt;T&gt;</code> are what we would call &#8220;iterables&#8221;:
+collections (or other objects) that we can get iterate over.
+The usual way this is implemented in various programming languages
+is by introducing an <em>iterator</em>&nbsp;object.</p>
+<p>The iterator keeps track of what element it&#8217;s currently pointing to
+and supports at least the following basic&nbsp;operations:</p>
+<ul>
+<li>getting the current&nbsp;element</li>
+<li>advancing to the next&nbsp;element</li>
+<li>signaling when no more elements are&nbsp;available</li>
+</ul>
+<p>Some languages provide separate iterator methods for each of those tasks,
+but Rust chooses to combine them all into one.
+You can see that when looking at the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>:
+<code>next</code> is the only method to be provided by its&nbsp;implementations.</p>
+<h4>Desugaring with&nbsp;into-iterators</h4>
+<p>How is the iterator object created,&nbsp;though?</p>
+<p>In a typical Rust manner, this job is delegated to another trait.
+This one is called <code>IntoIterator</code>,
+and it roughly corresponds to the &#8220;iterable&#8221; concept I&#8217;ve alluded to&nbsp;earlier:</p>
+<div class="highlight"><pre><span class="c1">// (simplified)</span>
+<span class="k">trait</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>What is uniquely Rusty is the fact that <code>into_iter</code> &#8212; the sole method of this trait &#8212;
+doesn&#8217;t just create a new iterator for the collection.
+Instead, it effectively <em>consumes</em> the whole thing,
+leaving the new iterator as its only remnant and the only way to access the items<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>This, of course, is a direct manifestation of the Rust&#8217;s move-by-default policy.
+In this case, it protects us from the common problem of <strong>iterator invalidation</strong>
+which is probably all-too-familiar to C++ programmers.
+Because the collection is essentially &#8220;converted&#8221; to an iterator here, it is&nbsp;impossible:</p>
+<ul>
+<li>for more than one iterator to exist at a&nbsp;time</li>
+<li>to modify the collection while any iterators are in&nbsp;scope</li>
+</ul>
+<p>Doesn&#8217;t all this &#8220;moving&#8221; and &#8220;consuming&#8221; sound familiar, by the way?
+I&#8217;ve mentioned earlier that when we iterate over a vector with a <code>for</code> loop,
+we essentially move it &#8220;into the&nbsp;loop&#8221;.</p>
+<p>As you can probably deduce by now,
+what really happens is that <code>IntoIterator::into_iter</code> is invoked on the vector.
+Its result &#8212; the iterator object &#8212; is then repeatedly <code>next</code><span class="quo">&#8216;</span>ed until it returns <code>None</code>.</p>
+<p>In a way, a <code>for</code> loop like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>is therefore nothing else but a syntactic sugar for the following expanded&nbsp;version:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">iter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="n">v</span><span class="p">);</span><span class="w"></span>
+<span class="k">loop</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">iter</span><span class="p">.</span><span class="n">next</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Some</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="c1">// body</span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="nb">None</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">break</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>You can see quite clearly that <code>v</code> is unusable not only after the loop ends,
+but before it even <em>begins</em>.
+This is because it has been moved into <code>iter</code> &#8212; into an iterator &#8212;
+through an <code>into_iter</code> method&#8230; of <code>IntoIterator</code>!</p>
+<p>Simple, huh?&nbsp;:)</p>
+<blockquote>
+<p><code>for</code> loop is just a syntactic sugar for an <code>IntoIterator::into_iter</code> invocation,
+followed by repeated calling of <code>Iterator::next</code>.</p>
+</blockquote>
+<h4>The&nbsp;ampersand</h4>
+<p>On a more serious note, this move isn&#8217;t something that we&#8217;d always want to happen.
+Fortunately, we know a way to prevent it.
+Rather than iterating over the vector itself, use a <em>reference</em> to&nbsp;it:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The great thing about this syntax is that everything said above still applies,
+up to and including the desugaring procedure.
+The <code>into_iter</code> method is still being invoked,
+except that this time it is done on the <em>reference to the collection</em> &#8212;
+<code>&amp;Vec&lt;T&gt;</code> rather than <code>Vec&lt;T&gt;</code>:</p>
+<div class="highlight"><pre><span class="c1">// (simplified)</span>
+<span class="k">impl</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="o">&lt;</span><span class="n">Item</span><span class="o">=&amp;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The result is therefore an iterator that yields <em>references</em> to the elements (<code>&amp;T</code>),
+rather than elements themselves (<code>T</code>).
+And because <code>self</code> above is also a reference,
+the collection isn&#8217;t really moved anywhere,
+which is why we can freely access it after the loop&nbsp;ends.</p>
+<p>The exact same thing happens when looping over a <em>mutable</em>&nbsp;reference:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>except that this time <code>into_iter</code> is called for <code>&amp;mut Vec&lt;T&gt;</code>.
+Result is therefore of type <code>Iterator&lt;Item=&amp;mut T&gt;</code>,
+enabling us to modify the elements as we go through&nbsp;them.</p>
+<p>No further compiler machinery is required to support those two cases,
+because everything is already handled by the same&nbsp;trait.</p>
+<blockquote>
+<p>The <code>IntoIterator</code> desugaring works the same way for collections
+<em>and</em> both immutable and mutable references to&nbsp;them.</p>
+</blockquote>
+<h4>What about the iter()&nbsp;method?</h4>
+<p>So far, we&#8217;ve talked about regular <code>for</code> loops,
+and the very imperative style of computation they&nbsp;represent.</p>
+<p>If you are more inclined towards functional programming, though,
+you may have seen and written rather different constructs,
+combining various &#8220;fluent&#8221; methods into expressions such as this&nbsp;one:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">numbers</span><span class="p">.</span><span class="n">iter</span><span class="p">()</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>Methods like <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"><code>map</code></a>
+and <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"><code>filter</code></a> here
+are called <em>iterator adapters</em>,
+and they are all defined on the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>.
+Not only are they very powerful and numerous,
+but they can also be supplemented through several <a href="https://crates.io/crates/itertools">third-party crates</a>.</p>
+<p>In order to take advantage of the adapters, however,
+we need to obtain an iterator for our collection first.
+We know that <code>into_iter</code> is the way loops normally do it,
+so in principle we could follow the same approach&nbsp;here:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="o">&amp;</span><span class="n">numbers</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>To spare us the verbosity of this explicit syntax,
+collections normally offer an <code>iter</code> method which is exactly equivalent<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+This method is what you will normally see in chained expressions like the one&nbsp;above.</p>
+<blockquote>
+<p><code>v.iter()</code> is just a shorthand for <code>IntoIterator::into_iter(&amp;v)</code>.</p>
+</blockquote>
+<h4>Why not&nbsp;both?</h4>
+<p>The last thing to note is that Rust mandates neither loops nor iterator adapters
+when writing code that operates on collections of elements.
+When optimizations are turned on in the <a href="http://doc.crates.io/manifest.html#the-profile-sections">release mode</a>,
+both versions should compile to equally efficient machine code,
+with closures inlined and loops unrolled where&nbsp;necessary.</p>
+<p>Choosing one style over the other is therefore a matter of convention and style.
+Sometimes the right choice may actually be a <em>mix</em> of both approaches,
+and Rust allows it without any&nbsp;complaints:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">print_prime_numbers_upto</span><span class="p">(</span><span class="n">n</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Prime numbers lower than {}:&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="mf">2.</span><span class="p">.</span><span class="n">n</span><span class="p">).</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">i</span><span class="o">|</span><span class="w"> </span><span class="n">is_prime</span><span class="p">(</span><span class="n">i</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Like before, this is possible through the same <code>for</code> loop desugaring
+that involves the <code>IntoIterator</code> trait.
+In this case, Rust will simply use a
+<a href="https://github.com/rust-lang/rust/blob/bbfcb471db0799a7d92d62e66cf44bbd68051675/src/libcore/iter/traits.rs#L253">no-op implementation</a>
+of this trait, &#8220;converting&#8221; any existing <code>Iterator</code> <span class="dquo">&#8220;</span>into&#8221;&nbsp;itself.</p>
+<blockquote>
+<p>Iterators themselves are also &#8220;iterables&#8221;,
+implementing <code>IntoIterator::into_iter</code> as a&nbsp;pass-through.</p>
+</blockquote>
+<h4>Looping&nbsp;around</h4>
+<p>If you want to know even more about iterators and loops in Rust,
+the best source at this point is probably just
+<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the official documentation</a>.
+And although mastering all the iterator adapters is of course not necessary to write effective Rust code,
+taking a careful look at least at
+<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the <code>collect</code> method</a>
+(and the associated <a href="https://doc.rust-lang.org/std/iter/trait.FromIterator.html"><code>FromIterator</code> trait</a>)
+is definitely&nbsp;helpful.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The &#8220;two-semicolon&#8221; variant of the <code>for</code> loop doesn&#8217;t exist in Rust. Just like in Python, the equivalent is
+iterating over a <a href="http://rustbyexample.com/flow_control/for.html">range object</a>, or using a regular <code>while</code> loop
+for more complex cases.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>This shift is completely transparent in the loop&#8217;s body. The way it works is based on Rust&#8217;s special mechanism
+called <a href="https://doc.rust-lang.org/book/deref-coercions.html">the <code>Deref</code> coercions</a>.
+Without going into too much detail (as it is way out of scope for this post),
+this feature allows us to treat references to objects (<code>&amp;T</code>) as if they were the objects themselves (<code>T</code>).
+The compiler will perform the necessary <em>derefencing</em> where possible,
+or signal an error in case of a (rare) ambiguity.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>How do we know that? It&#8217;s because <code>into_iter</code> takes <code>self</code> (rather than <code>&amp;self</code> or <code>&amp;mut self</code>)
+as its first parameter. It means that the entire object for which this method is called is moved <em>into</em> its body
+(hence the method&#8217;s name).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Curiously enough, this equivalence isn&#8217;t encoded in the type system in any way,
+making it technically just a convention. It is followed consistently at least in the standard library, though.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">str.startswith() with tuple&nbsp;argument</a></h2>
+    <p>
+      Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/tuples.html">tuples</a>      &#8226; <a href="http://xion.io/post/code/python-startswith-tuple.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a little known trick that&#8217;s applicable to Python&#8217;s <a href="http://bugs.python.org/issue1491485"><code>startswith</code></a>
+and <a href="http://bugs.python.org/issue1491485"><code>endswith</code></a> methods of <code>str</code> (and <code>unicode</code>).</p>
+<p>Suppose you&#8217;re checking whether a string starts with some&nbsp;prefix:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">):</span>
+    <span class="c"># totally an URL</span>
+</pre></div>
+
+
+<p>You eventually add more possible prefixes (or suffixes) to your&nbsp;condition:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;https://&#39;</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Later on you notice the repetition and refactor it into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">]</span>
+<span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or if you&#8217;re feeling extra&nbsp;functional:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">,</span> <span class="n">SCHEMES</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Turns out, however, that <code>startswith</code> (and <code>endswith</code>) support this use case natively.
+Rather than passing just a single string as the argument,
+you can provide a <em>tuple</em> of strings&nbsp;instead:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Either method will then check the original string against every element of the passed tuple.
+Both will only return <code>True</code> if <em>at least one</em> of the strings is recognized as prefix/suffix.
+As you can see, that&#8217;s exactly what we would previously do with <code>any</code>.</p>
+<p>Somewhat surprisingly, however, the feature only works for actual <em>tuples</em>.
+Trying to pass a seemingly equivalent iterable &#8212; a <code>list</code> or <code>set</code>, for example &#8212;
+will be met with interpreter&#8217;s&nbsp;refusal:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">is_jpeg</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">([</span><span class="s">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s">&#39;.jpeg&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre>TypeError: endswith first arg must be str, unicode, or tuple, not list
+</pre></div>
+
+
+<p>If you dig into it, there doesn&#8217;t seem to be a compelling reason for this behavior.
+The <a href="http://bugs.python.org/issue1491485">relevant feature request</a> talks about
+consistency with the built-in <code>isinstance</code> function,
+but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
+<p>In any case, this can be worked around without much&nbsp;difficulty:</p>
+<div class="highlight"><pre><span class="n">PROTOCOLS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http&#39;</span><span class="p">,</span> <span class="s">&#39;https&#39;</span><span class="p">,</span> <span class="s">&#39;ftp&#39;</span><span class="p">,</span> <span class="s">&#39;git&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="s">&#39;://&#39;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">PROTOCOLS</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
     <p>
       Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -863,260 +1395,6 @@ manner.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="J
 </li>
 </ol>
 </div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/thoughts/in-microsoft-we-trust.html#in-microsoft-we-trust">In Microsoft we&nbsp;trust</a></h2>
-    <p>
-      Posted on Fri 08 April 2016 in <a href="http://xion.io/category/thoughts.html">Thoughts</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/microsoft.html">Microsoft</a>,      <a href="http://xion.io/tag/windows.html">Windows</a>,      <a href="http://xion.io/tag/github.html">GitHub</a>,      <a href="http://xion.io/tag/apple.html">Apple</a>,      <a href="http://xion.io/tag/facebook.html">Facebook</a>,      <a href="http://xion.io/tag/google.html">Google</a>,      <a href="http://xion.io/tag/tech-culture.html">tech culture</a>      &#8226; <a href="http://xion.io/post/thoughts/in-microsoft-we-trust.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Just like many other people, I was following news from the last week&#8217;s
-<a href="https://build.microsoft.com/"><span class="caps">BUILD</span> conference</a> with piqued interest. The ability to run Linux userland programs
-on Windows &#8212; including, of course,
-<a href="http://techcrunch.com/2016/03/30/be-very-afraid-hell-has-frozen-over-bash-is-coming-to-windows-10/">bash</a> &#8212;
-is something to be excited about. If nothing else, it should dramatically improve Windows support of new programming
-languages that seem to pop up all the&nbsp;time.</p>
-<p>There was something else, however, that I couldn&#8217;t help but notice. The reactions of tech communities to this and similar developments focused very frequently on Microsoft&nbsp;itself.</p>
-<p>The beloved &#8220;new Microsoft&#8221;,
-as <a href="https://www.reddit.com/r/programming/comments/4cqm9y/xamarin_becomes_free_and_opensource/d1kjwl8">some call it</a>,
-embraces open source, supports Linux, and generally does almost a full 180 with their stance on
-proprietary vs. free software. The circumstances fit this narrative rather snuggly, too: a new <span class="caps">CEO</span> makes a clean break
-with the past to pivot the company in this new world ruled by mobile and&nbsp;cloud.</p>
-<p>Still&#8230; <em>love</em>? Even considering how Internet comments are grotesquely exaggerated most of the time, that&#8217;s quite
-a declaration. The sentiment is nowhere near isolated either. But it&#8217;s not a question whether this infatuation
-has a rational merit, or whether those feelings will eventually turn out to be&nbsp;misplaced.</p>
-<p>The question is: why does it exist at all? We are talking about a <em>company</em> here, a for-profit organization.
-How can such a language even enter the&nbsp;picture?</p>
-<p>Then I realized this is not really a new phenomenon. Quite the opposite: the broad developer community seems to
-always need a company to champion its core values. Nowadays, we&#8217;re simply trying to find someone new
-to carry the&nbsp;standard.</p>
-<p>Why? Because we feel that our old heroes have forsaken&nbsp;us.</p>
-<h4>Hall of past&nbsp;fame</h4>
-<p>Take <strong>GitHub</strong> for example. Once a darling of the open source community, it&#8217;s been suffering sharp criticism
-for many months now. Rightfully or not, many people aren&#8217;t exactly excited &#8212; to put it mildly &#8212; about changes to
-the <a href="https://github.com/blog/2146-organizations-can-now-block-abusive-users">policy</a>
-and <a href="https://github.com/blog/2039-adopting-the-open-code-of-conduct">atmosphere</a> at GitHub,
-typified by the ill-fated <a href="http://www.businessinsider.com/githubs-ceo-ditches-meritocracy-rug-2014-1">meritocracy rug</a>.
-The widely backed and long standing <a href="https://github.com/dear-github/dear-github">plea for a few critical features</a>
-has only recently stopped falling on deaf ears. And in the background, there are always concerns about GitHub simply
-<a href="https://news.ycombinator.com/item?id=10823128">becoming too big</a>, and exterting too much control over
-the open source&nbsp;ecosystem.</p>
-<p><em>Nota bene</em>, the very same ecosystem it had once been lauded for&nbsp;nurturing.</p>
-<p>Among the other flagship tech companies, <strong>Apple</strong> or <strong>Facebook</strong> have never garnered much good will. Sure, they are
-recognized for the pure utilitarian value of hardware they produce; or convenience, broad applicability, and stability
-of APIs they offer. Facebook may be scoring some additional points for trying to
-<a href="https://facebook.github.io/react/">sort out</a> the mess of frontend development, but many say it&#8217;s
-<a href="https://medium.com/@ericclemmons/javascript-fatigue-48d4011b6fc4#.j740brod8">not doing anybody any favors</a>.
-Neither company is easy to portray as a paragon of openness, though, and it&#8217;s probably easier to argue
-<a href="http://www.ibtimes.co.uk/apples-closed-ecosystem-threatening-derail-technological-revolution-1535944">the exact opposite</a>.</p>
-<p>And then there is <strong>Google</strong>, of course<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Some time in the past few years, a palpable shift occurred in how
-the company is perceived by the techie crowd. It&#8217;s difficult to pinpoint the exact pivotal moment, and the
-<a href="https://googleblog.blogspot.com.au/2013/03/a-second-spring-of-cleaning.html">one event that leaps to attention</a>
-doesn&#8217;t seem sufficient to explain it. But the tone has been set,
-allowing <a href="http://google-opensource.blogspot.com/2015/03/farewell-to-google-code.html">news</a> to be
-<a href="https://www.reddit.com/r/programming/comments/2yt73v/google_to_close_google_code_open_source_project/cpdb6xs">molded</a>
-to fit it. Add this to the usual backdrop of complaints about the
-<a href="https://www.reddit.com/r/cscareerquestions/comments/2ll864/my_horrible_google_interview_experience/">onerous</a>
-interview process and general fearmongering, and the picture doesn&#8217;t look very&nbsp;bright.</p>
-<h4>Shades of&nbsp;grey</h4>
-<p>No similar woes seem to have been plaguing Microsoft as of late, even though their record of recent &#8220;unwholesome&#8221; deeds
-isn&#8217;t exactly
-<a href="http://www.theinquirer.net/inquirer/news/2447177/updategate-windows-10-is-resetting-default-apps-back-to-microsoft-stock">clean</a>
-either. Does it mean they are indeed the most fitting candidate for a (new) enterprise ally of the hacker&nbsp;community?&#8230;</p>
-<p>Or maybe we can finally recognize the whole notion as the utterly silly concept it actually is. Hard to shake though
-it be, this quasi-Manicheic mentality of assigning labels of virtue or sin is, at best, a naive idealism. At worst,
-it&#8217;s a peculiar kind of harmful partisanship that technologists are particularly susceptible to. You may recognize it
-as something that has a <a href="https://en.wikipedia.org/wiki/Editor_war">very long tradition</a> in the hacker&nbsp;community.</p>
-<p>But it doesn&#8217;t mean it&#8217;s a tradition worth&nbsp;keeping.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>I have no illusions I will be attributed any objectivity, but it bears mentioning
-<a href="http://xion.io/page/about.html">again</a> that nothing I say here is representative of anything but my own opinions.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/shell-xargs-into-find.html#shell-xargs-into-find">Pipe `xargs` into&nbsp;`find`</a></h2>
-    <p>
-      Posted on Sun 03 April 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/shell-scripting.html">shell scripting</a>,      <a href="http://xion.io/tag/bash.html">Bash</a>,      <a href="http://xion.io/tag/xargs.html">xargs</a>,      <a href="http://xion.io/tag/find.html">find</a>,      <a href="http://xion.io/tag/zsh.html">zsh</a>      &#8226; <a href="http://xion.io/post/code/shell-xargs-into-find.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Here&#8217;s a trick that&#8217;s hardly new, but if you haven&#8217;t heard about, it will save you a trip to a man page or&nbsp;two.</p>
-<p>Assuming you&#8217;re a person who mostly prefers the terminal over some fancy <span class="caps">GUI</span>, you&#8217;ve probably used the <code>find</code> command
-along with <code>xargs</code> at least a few times. It&#8217;s very common, for example, to use the results of <code>find</code> as arguments
-to some other program. It could something as simple as figuring out which modules in your project have grown
-slightly too&nbsp;large:</p>
-<div class="highlight"><pre>$ find . -name &#39;*.py&#39; | xargs wc -l | sort -hr
-1467 total
- 322 callee/base.py
- 261 callee/general.py
- 251 callee/collections.py
-# etc.
-</pre></div>
-
-
-<p>We find them all first, and then use <code>xargs</code> to build a long <code>wc</code> invocation, and we finally display results
-in the reverse order. Pretty easy stuff: I don&#8217;t usually have to try more than a dozen times to get it right!<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup></p>
-<p>But how about the opposite situation? Let&#8217;s say you have a list of <em>directories</em> you want to search through with <code>find</code>.
-Doing so may seem easy enough<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre>$ cat packagedirs.txt | xargs find -name &#39;__init__.py&#39;
-</pre></div>
-
-
-<p>Except it&#8217;s not going to work. Like a few other Unix commands, <code>find</code> is very particular about the order of arguments
-it receives. Not only are the predicate flags (like <code>-name</code>) considered in sequence, but they also have to appear
-<em>after</em> the directories we want to search&nbsp;through.</p>
-<p>But in the <code>xargs</code> invocation above, essentially the opposite is going to&nbsp;happen.</p>
-<h4>The replacement&nbsp;flag</h4>
-<p>So how to remedy this? Enter the <code>-I</code> flag to <code>xargs</code>:</p>
-<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} find {} -name &#39;__init__.py&#39;
-</pre></div>
-
-
-<p>This flag will tell <code>xargs</code> quite a few&nbsp;things.</p>
-<p>The most important one is to stop putting the arguments at the end of the command invocation.
-Instead, it shall place them wherever it sees the <em>replacement string</em> &#8212; here, pair of braces<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>: <code>{}</code>.
-And because we placed the braces where <code>find</code> is normally expecting the list of directories to search through,
-the command will now get us exactly the results we&nbsp;wanted.</p>
-<p>What&#8217;s almost impossible to see, however, is that it may not use the exact <em>way</em> we intended to obtain those results.
-The difference is easier to spot when we replace <code>find</code> with <code>echo</code>:</p>
-<div class="highlight"><pre>$ cat &gt;/tmp/list
-foo
-bar
-$ cat /tmp/list | xargs echo
-foo bar
-$ cat /tmp/list | xargs -I{} echo {}
-foo
-bar
-</pre></div>
-
-
-<p>or, better yet, use <code>xargs</code> with the <code>-t</code> flag to print the commands on stderr before executing&nbsp;them:</p>
-<div class="highlight"><pre>$ cat packagedirs.txt | xargs -I{} -t find {} -name &#39;__init__.py&#39; &gt;/dev/null
-find callee -name &#39;__init__.py&#39;
-find tests -name &#39;__init__.py&#39;
-</pre></div>
-
-
-<p>As you can see, we actually have more than one <code>find</code> invocation&nbsp;here!</p>
-<p>This is the second effect of <code>-I</code>: it causes <code>xargs</code> to execute given command line <em>for each argument separately</em>.
-It so happens that it doesn&#8217;t really make any difference for our usage of <code>find</code>, which is why it wasn&#8217;t at all obvious
-we were running it multiple&nbsp;times.</p>
-<p>To avoid problems, though, you should definitely be cognizant of this fact when calling other programs with <code>xargs -I</code>.</p>
-<h4>Make arguments spaced&nbsp;again</h4>
-<p>Incidentally, I&#8217;m not aware of any method that&#8217;d actually make <code>xargs</code> produce <code>find foo bar -name ...</code> calls.
-If you need this exact form, probably the easiest way is to use plain old shell&nbsp;variables:</p>
-<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find $d -name &#39;*.py&#39;)
-</pre></div>
-
-
-<p>This takes advantage of the <a href="http://mywiki.wooledge.org/WordSplitting">word splitting</a> feature of Bash and a few other
-compatible shells. Caveat is, you may be using a shell where this behavior is disabled by default. The result would be
-making <code>find</code> interpret the content of <code>$d</code> as a <em>single</em> directory name: <code>foo bar</code> rather than <code>foo</code> and <code>bar</code>.</p>
-<p>zsh is one such shell. Although <a href="http://zsh.sourceforge.net/FAQ/zshfaq03.html#l18">probably a good thing overall</a>,
-in times like these you&#8217;d want to bring the &#8220;normal&#8221; behavior back. In zsh, it&#8217;s fortunately pretty&nbsp;simple:</p>
-<div class="highlight"><pre>$ (d=$(cat packagedirs.txt); find ${=d} -name &#39;*.py&#39;)
-</pre></div>
-
-
-<p>What about a portable solution? As far as I can tell, the only certain way you can ensure word splitting occurs
-is to use <code>eval</code>. Here, the <code>xargs</code> command can actually come in handy again, albeit only as a&nbsp;prop:</p>
-<div class="highlight"><pre>$ (d=$(cat packagedirs.txt | xargs echo); eval &quot;find $d -name &#39;*.py&#39;&quot;)
-</pre></div>
-
-
-<p>One would hope such hacks aren&#8217;t needed very&nbsp;often.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>A completely kosher version would also use the <code>-print0</code> flag to <code>find</code> and the <code>-0</code> flag to <code>xargs</code>.
-It&#8217;s not necessary here because Python module files cannot contain spaces.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Purists shall excuse my use of <code>cat</code> here, it&#8217;s merely for illustrative purposes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>This use of braces in <code>find</code> has of course nothing to do with the <em>other</em> possible occurrences of <code>{}</code> there,
-like in the <code>-exec</code> flag. Since you cannot force <code>find</code> to expect a different placeholder, you should use something else
-for <code>xargs</code> in those cases, .e.g: <code>xargs -I^ find ^ -name '__main__.py' -exec 'python {}' \;</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/package-management.html#package-management">Package managers&#8217; appreciation&nbsp;day</a></h2>
-    <p>
-      Posted on Sat 26 March 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/package-manager.html">package manager</a>,      <a href="http://xion.io/tag/nodejs.html">node.js</a>,      <a href="http://xion.io/tag/npm.html">npm</a>,      <a href="http://xion.io/tag/c.html">C++</a>      &#8226; <a href="http://xion.io/post/programming/package-management.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>By now you have probably heard about the infamous &#8220;npm-gate&#8221; that swept through the developer community
-over the last week. It has been
-<a href="https://medium.com/@azerbike/i-ve-just-liberated-my-modules-9045c06be67c#.hp7p1aolc">brought up</a>,
-<a href="https://medium.com/@mproberts/a-discussion-about-the-breaking-of-the-internet-3d4d2a83aa4d#.rlnh89inz">discussed</a>,
-<a href="http://www.theregister.co.uk/2016/03/23/npm_left_pad_chaos/">covered</a>,
-<a href="http://www.haneycodes.net/npm-left-pad-have-we-forgotten-how-to-program">meta-discussed</a>,
-<a href="http://left-pad.io/">satirized</a>, and even featured by
-<a href="http://www.businessinsider.com/npm-left-pad-controversy-explained-2016-3">some mainstream media</a>.
-Evidently the nerds have managed to stir up some serious trouble again, and it only took them 11 lines of
-that strange thing they call&nbsp;&#8220;code&#8221;.</p>
-<h4>No good things in small&nbsp;packages</h4>
-<p>When looking for a culprit, the one party that everyone pounced on immediately was of course
-the <a href="http://npmjs.com">npm</a> itself. With its myriad of packages that could each fit in a tweet, it invites to create
-the exact house of cards we&#8217;ve seen&nbsp;collapse.</p>
-<p>This serves as a good wake-up call, of course. But it also compels to throw the baby out with the bathwater,
-and draw a conclusion that may be a little too far-fetched. Like perhaps declaring the <em>entire idea</em> of
-managing dependencies &#8220;the npm way&#8221; suspect. If packages tend to degenerate into something as ludicrous as
-<a href="https://www.npmjs.com/package/isarray"><code>isArray</code></a> &#8212; to say nothing of
-<a href="https://www.npmjs.com/package/left-pad"><code>left-pad</code></a>, which started the whole debacle &#8212; then maybe this approach
-to software reusability has simply bankrupted&nbsp;itself?</p>
-<h4>A world without&nbsp;*pm</h4>
-<p>I&#8217;m right away responding to that with a resounding &#8220;No!&#8221;. Package management as a concept is not responsible for
-the poor decision making of one specific developer collective. And anyone who might think tools like npm do more
-harm than good I ask: have you recently written any&nbsp;C++?</p>
-<p>See, C++ is the odd one among languages that at least pretend to be keeping up with the times. It doesn&#8217;t present
-a package management story at all. That&#8217;s right &#8212; the C++ &#8220;ecosystem&#8221;, as it stands now,&nbsp;has:</p>
-<ul>
-<li>no package&nbsp;manager</li>
-<li>no repository of&nbsp;packages</li>
-<li>no unified way of managing&nbsp;dependencies</li>
-<li>no way to isolate development environments of different projects from one&nbsp;another</li>
-</ul>
-<p>Adding any kind of third-party dependency to a C++ project &#8212; especially a portable one, which is allegedly one of C++&#8217;s
-strengths &#8212; is a considerable pain, even when it doesn&#8217;t require any additional libraries by itself. And environment
-isolation? Some people are using Linux containers (!) for this, which is like dealing with a mosquito by shooting it
-with a&nbsp;howitzer.</p>
-<p style="text-align: center">
-    <img src="http://xion.io/images/carl-sagan.jpg" alt="Billions upon billions of lines"></br>
-    <small>To build a C++ binary, you must first build the userspace.</small>
-</p>
-
-<p>But hey, at least they can use <code>apt-get</code>,&nbsp;right?&#8230;</p>
-<p>So, string padding incidents aside, package managers are absolutely <em>essential</em>. Sure, we can and should discuss
-the merits of their particular flavors and implementation details &#8212;like whether it&#8217;s prudent to allow &#8220;delisting&#8221;
-of packages. As a whole, however, package managers deserve recognition as a crucial part of modern language tooling
-that we cannot really do&nbsp;without.</p>
   </div>
 </article>
 

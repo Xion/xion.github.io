@@ -1,5 +1,102 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-06-13T22:56:00+00:00</updated><entry><title>Rust as a gateway drug to Haskell</title><link href="http://xion.io/post/programming/rust-into-haskell.html" rel="alternate"></link><updated>2017-06-13T22:56:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-13:post/programming/rust-into-haskell.html</id><summary type="html">&lt;p&gt;For work-related reasons,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-10-19T14:59:00+00:00</updated><entry><title>O(n log n) isn’t bad</title><link href="http://xion.io/post/programming/o-nlogn-isnt-bad.html" rel="alternate"></link><updated>2017-10-19T14:59:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-10-19:post/programming/o-nlogn-isnt-bad.html</id><summary type="html">&lt;p&gt;Most programmers should be familiar with the Big O notation of computational complexity.
+This is how, in very theoretical terms, we are describing the relative differences in the performance of&amp;nbsp;algorithms.&lt;/p&gt;
+&lt;p&gt;Excluding the case of constant time complexity (&lt;code&gt;O(1)&lt;/code&gt;),
+the vast majority of practical algorithms falls into one of the following&amp;nbsp;classes:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;O(log n)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;O(n)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;O(n log n)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;O(n²)&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The further down a class is on this list, the worse (less efficient) it gets.
+What may not be completely obvious, however, is the magnitude of&amp;nbsp;differences.&lt;/p&gt;
+&lt;p&gt;Let&amp;#8217;s have a closer&amp;nbsp;look.&lt;/p&gt;
+&lt;h4&gt;The best and the&amp;nbsp;worst&lt;/h4&gt;
+&lt;p&gt;First, it&amp;#8217;s pretty easy when it comes to the extreme points.
+A logarithmic complexity is clearly great,
+because the number of operations barely even grows as the size of input increases.
+For &lt;code&gt;N&lt;/code&gt; of one million,  the (natural&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;) logarithm is equal to about 14.
+For one &lt;em&gt;trillion&lt;/em&gt; &amp;#8212; million times more &amp;#8212; &lt;code&gt;log n&lt;/code&gt; is only&amp;nbsp;27!&lt;/p&gt;
+&lt;p&gt;Such amazing scalability is one of the reasons
+why databases, for example,
+can execute queries extremely efficiently even for millions or billions of&amp;nbsp;records.&lt;/p&gt;
+&lt;p&gt;On the other end, an algorithm that has quadratic complexity
+will only do well for very small datasets.
+It can still be useful in practice,
+especially as a small-input optimization of some larger procedure&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;,
+or because of some other desirable properties (like good&amp;nbsp;parallelizability).&lt;/p&gt;
+&lt;p&gt;Outside of those carefully selected cases, however,
+the computational requirements of &lt;code&gt;O(n²)&lt;/code&gt; for any large dataset are usually too&amp;nbsp;great.&lt;/p&gt;
+&lt;h4&gt;Middle&amp;nbsp;ground&lt;/h4&gt;
+&lt;p&gt;As for the remaining two classes,
+the linear one (&lt;code&gt;O(n)&lt;/code&gt;) is probably the easiest to reason&amp;nbsp;about.&lt;/p&gt;
+&lt;p&gt;In a linear algorithm,
+the number of operations increases steadily along with the size of input.&lt;br&gt;
+For thousand elements, you need roughly a thousand steps (times a constant factor).&lt;br&gt;
+For a million, there will be a million operations&amp;nbsp;necessary.&lt;/p&gt;
+&lt;p&gt;Thus, by itself, the linear scaling doesn&amp;#8217;t get any better or worse when data gets bigger&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.
+In many cases, it means there is nothing to be exploited in the structure of input set
+that could make the running time any better
+(compared to e.g. the reliance of logarithmic searches on sorted order).
+Typically, all the data must be traversed at least once in its&amp;nbsp;entirety.&lt;/p&gt;
+&lt;p&gt;All in all, it can be a decent time complexity,
+but it&amp;#8217;s nothing to write home&amp;nbsp;about.&lt;/p&gt;
+&lt;h4&gt;A function has no&amp;nbsp;name&lt;/h4&gt;
+&lt;p&gt;What about &lt;code&gt;O(n log n)&lt;/code&gt;, then?
+It falls between the linear and the quadratic,
+which suggests that it&amp;#8217;s somewhere half-way between mediocre and awful.
+We don&amp;#8217;t even have a widely used word for it,
+meaning it is probably not even that&amp;nbsp;important.&lt;/p&gt;
+&lt;p&gt;Both of those suppositions are&amp;nbsp;wrong.&lt;/p&gt;
+&lt;p&gt;First, &lt;code&gt;O(n log n)&lt;/code&gt; isn&amp;#8217;t even remotely close to the &amp;#8220;median&amp;#8221; (whatever that means) of &lt;code&gt;O(n)&lt;/code&gt; and &lt;code&gt;O(n²)&lt;/code&gt;.
+In reality, its asymptotic rate of growth places it very close to the former.
+You can see this pretty clearly by looking at the following&amp;nbsp;plot:&lt;/p&gt;
+&lt;p style="text-align:center"&gt;
+    &lt;img src="http://xion.io/images/time-complexity.png" alt="Time complexity plot"&gt;&lt;br&gt;
+    &lt;small&gt;
+        &lt;a href="http://coding-geek.com/how-databases-work/"&gt;Source&lt;/a&gt;
+    &lt;/small&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The gap between &lt;code&gt;O(n)&lt;/code&gt; and &lt;code&gt;O(n log n)&lt;/code&gt; barely even widens,
+even as the values on vertical axis increase to the limits of&amp;nbsp;practicality.&lt;/p&gt;
+&lt;p&gt;Indeed, the &lt;code&gt;log n&lt;/code&gt; part of the function grows slowly enough
+that, for many practical purposes, it can be considered a large &amp;#8220;constant&amp;#8221; in the complexity formula.
+Some complicated algorithm that&amp;#8217;s technically linear may therefore be a &lt;em&gt;worse&lt;/em&gt; choice
+than a simpler solution with &lt;code&gt;O(n log n)&lt;/code&gt; scaling.&lt;/p&gt;
+&lt;h4&gt;Sorting it&amp;nbsp;out&lt;/h4&gt;
+&lt;p&gt;What are the typical situations where &lt;code&gt;O(n log n)&lt;/code&gt; arises in practice?
+Very often, it has to do with establishing some kind of &lt;em&gt;ordering&lt;/em&gt; of the input
+which includes at least one of the&amp;nbsp;following:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;a wholesale sorting of it (using pairwise&amp;nbsp;comparison)&lt;/li&gt;
+&lt;li&gt;repeated queries for the current maximum or minimum (via a priority&amp;nbsp;queue)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Considering that many practical algoithms &amp;#8212;
+from &lt;a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm"&gt;pathfinding&lt;/a&gt;
+to &lt;a href="https://en.wikipedia.org/wiki/Huffman_coding"&gt;compression&lt;/a&gt; &amp;#8212;
+utilize some form of sorting or sorted data structures,
+it makes &lt;code&gt;O(n log n)&lt;/code&gt; quite an important complexity&amp;nbsp;class.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Natural logarithm has a base of &lt;em&gt;e&lt;/em&gt; = 2.71828183&amp;#8230;
+The exact choice of logarithm base doesn&amp;#8217;t matter for asymptotic complexity,
+because it changes only the constant coefficient in the &lt;code&gt;O(f(n))&lt;/code&gt; function.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;A widely used example is &lt;a href="https://en.wikipedia.org/wiki/Timsort"&gt;Timsort&lt;/a&gt;
+which switches from merge sort (&lt;code&gt;O(log n)&lt;/code&gt;) to insertion sort (&lt;code&gt;O(n²)&lt;/code&gt;)
+when the array slice is short enough to warrant it.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;In reality, practical factors like memory/cache size, &lt;span class="caps"&gt;OS&lt;/span&gt; scheduling behavior,
+and a myriad of other things can make the actual running time scale sublinearly beyond a certain point.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="algorithms"></category><category term="complexity"></category><category term="Big O"></category></entry><entry><title>Rust as a gateway drug to Haskell</title><link href="http://xion.io/post/programming/rust-into-haskell.html" rel="alternate"></link><updated>2017-06-13T22:56:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-13:post/programming/rust-into-haskell.html</id><summary type="html">&lt;p&gt;For work-related reasons,
 I had to recently get up to speed on programming in &lt;a href="https://www.haskell.org/"&gt;Haskell&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;Before that, I had very little actual experience with the language,
 clocking probably at less than a thousand lines of working code over a couple of years.
@@ -1114,85 +1211,4 @@ with a&amp;nbsp;howitzer.&lt;/p&gt;
 &lt;p&gt;So, string padding incidents aside, package managers are absolutely &lt;em&gt;essential&lt;/em&gt;. Sure, we can and should discuss
 the merits of their particular flavors and implementation details &amp;#8212;like whether it&amp;#8217;s prudent to allow &amp;#8220;delisting&amp;#8221;
 of packages. As a whole, however, package managers deserve recognition as a crucial part of modern language tooling
-that we cannot really do&amp;nbsp;without.&lt;/p&gt;</summary><category term="packages"></category><category term="package manager"></category><category term="node.js"></category><category term="npm"></category><category term="C++"></category></entry><entry><title>You Don’t Have to Interview like Google</title><link href="http://xion.io/post/programming/dont-interview-like-google.html" rel="alternate"></link><updated>2015-12-28T21:26:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2015-12-28:post/programming/dont-interview-like-google.html</id><summary type="html">&lt;p&gt;If you look at discussion forums for people in the &lt;span class="caps"&gt;CS&lt;/span&gt; industry &amp;#8212;
-like &lt;a href="https://www.reddit.com/r/cscareerquestions/"&gt;/r/cscareequestions&lt;/a&gt; or even just Hacker News &amp;#8212;
-you&amp;#8217;ll find lots of talk about the so called &lt;em&gt;Big Four&lt;/em&gt;&amp;nbsp;companies.&lt;/p&gt;
-&lt;p&gt;This is mostly in the context of applying to them, or going through their interview process.
-Which of the large software corporations are discussed here tends to fluctuate a little bit,
-but both Google and Microsoft are invariably included, with Facebook popping up more often than&amp;nbsp;not.&lt;/p&gt;
-&lt;p&gt;Because of their privileged positions as very desirable places to work, these companies tend to be taken as models
-for others to mimic&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;. Probably the most apparent and direct outcome is the increasing prevalence of
-&amp;#8220;Google-style&amp;#8221; interviews, which are now utilized by countless software shops around the&amp;nbsp;world.&lt;/p&gt;
-&lt;p&gt;&lt;em&gt;Whiteboard coding&lt;/em&gt; is how they are often called. It is a subject of an intense debate, whether or not they &amp;#8220;work&amp;#8221;,
-and adequately assess the engineering aptitude of candidates. If some
-&lt;a href="https://twitter.com/mxcl/status/608682016205344768"&gt;high profile anecdotes&lt;/a&gt; are of any indication, the most common complaint
-is that they fail to recognize competence by ignoring previous professional work, open source contributions,
-conference talks, and so&amp;nbsp;on.&lt;/p&gt;
-&lt;p&gt;Instead, the whiteboard interview requires demand showing a &amp;#8220;pure&amp;#8221; problem solving ability
-within a relatively short time window, all without some broader context or even the usual tools of the trade:
-laptop, editor, and a search&amp;nbsp;engine.&lt;/p&gt;
-&lt;p&gt;As a Googler who had gone through this process and has now conducted a few of those interviews himself,
-I find those complaints mostly valid albeit&amp;nbsp;misdirected.&lt;/p&gt;
-&lt;p&gt;The problem isn&amp;#8217;t really that Google interviews like it&amp;nbsp;does.&lt;/p&gt;
-&lt;p&gt;What&amp;#8217;s really the issue is &lt;em&gt;other companies&lt;/em&gt; implementing the same process, and not realizing it cannot possibly work for&amp;nbsp;them.&lt;/p&gt;
-&lt;h4&gt;Somewhat&amp;nbsp;special&lt;/h4&gt;
-&lt;p&gt;It is important to understand that Google&amp;#8217;s stance on interviewing is influenced by some unique&amp;nbsp;circumstances:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;
-&lt;p&gt;very high and steady influx of potential&amp;nbsp;candidates&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;comparatively long tenure of the average engineer and the general focus on employee&amp;nbsp;retention&lt;/p&gt;
-&lt;/li&gt;
-&lt;li&gt;
-&lt;p&gt;huge and mostly proprietary software stack working at a scale that almost no others&amp;nbsp;do&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;From this perspective, it makes sense to utilize cautious hiring strategies that may result in a high ratio
-of &lt;em&gt;false negatives&lt;/em&gt;&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;. When rejections are cheap but the new hires are supposed to be here for the long run &amp;#8212;
-partially because of the long ramp-up time necessary to become productive &amp;#8212; it can be costly to give candidates
-the benefit of the&amp;nbsp;doubt.&lt;/p&gt;
-&lt;p&gt;The last point also explains why proficiency with specific technologies is less useful than
-general flexibility grounded in strong fundamentals. To put it shortly, Google prefers you know
-&lt;a href="https://en.wikipedia.org/wiki/Computer_science"&gt;&lt;span class="caps"&gt;CS&lt;/span&gt;&lt;/a&gt; rather than &lt;a href="https://en.wikipedia.org/wiki/Cascading_Style_Sheets"&gt;&lt;span class="caps"&gt;CSS&lt;/span&gt;&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;Finally, whiteboard coding is just one input to the evaluation process, but it tends to be the most trustworthy one.
-Besides programming aptitude, the ideal candidate would show a proven track record of technical leadership while
-tackling complex problems that span a broad scope.&lt;br&gt;
-Unfortunately, those qualities are difficult to convey &lt;em&gt;efficiently&lt;/em&gt; and &lt;em&gt;reliably&lt;/em&gt; through the usual industry channels:
-a resume, references from previous jobs, GitHub profile,&amp;nbsp;etc.&lt;/p&gt;
-&lt;h4&gt;Different&amp;nbsp;conditions&lt;/h4&gt;
-&lt;p&gt;Given the above reasoning as to why &amp;#8220;Google-style&amp;#8221; interviews seem to work well for Google, I hope it&amp;#8217;s evident why
-they are likely a poor choice for companies that don&amp;#8217;t share the same characteristics as the Big&amp;nbsp;4.&lt;/p&gt;
-&lt;p&gt;For one, it is highly unusual for a software shop in today&amp;#8217;s market to command a sizeable pool for qualified candidates.
-Software engineering vacancies often go unfilled for weeks and months, even if the company isn&amp;#8217;t exactly looking
-for &amp;#8220;rockstars&amp;#8221;, &amp;#8220;ninjas&amp;#8221;, &amp;#8220;gunslingers&amp;#8221;, or whatever the silly term &lt;em&gt;du jour&lt;/em&gt; is. Those who meet the requirements
-usually have their pick at many different offers,&amp;nbsp;too.&lt;/p&gt;
-&lt;p&gt;The reality for many companies (especially startups) is also one where they are unable or unwilling to invest much
-in the retention of their employees. Because the employment relationship in this industry tends to be quite volatile
-(which isn&amp;#8217;t necessarily a bad thing), it often makes sense for companies to look for a near-immediate payoff
-when&amp;nbsp;hiring.&lt;/p&gt;
-&lt;p&gt;We owe it to the prevalent open source technologies that this isn&amp;#8217;t entirely unreasonable. If your software stack
-is composed entirely of components that are available in the open, you can probably find engineers who are familiar
-with most of them. They can be productive members of your team almost literally from day&amp;nbsp;one!&lt;/p&gt;
-&lt;h4&gt;Right tool for the&amp;nbsp;job&lt;/h4&gt;
-&lt;p&gt;The most important observation is that every company is &lt;em&gt;different&lt;/em&gt;, and following the One True Best Practice™ will likely
-prevent you from utilizing the best qualities of your work place. Smaller shops, for example, could take a more personalized
-approach to hiring: let candidates actually sit with engineers, solve real-life problems, and have deep technical&amp;nbsp;conversations.&lt;/p&gt;
-&lt;p&gt;Of course, you may still find whiteboard coding valuable in its own right. Indeed, a simple test for at least
-the basic programming skill appears to be a &lt;a href="http://blog.codinghorror.com/why-cant-programmers-program/"&gt;necessary sanity check&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;But a full suite of difficult technical interviews with tough algorithmic problems that last a better part of the day?
-Most likely&amp;nbsp;not.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Some seem to have succeeded to such an extent that you may occasionally hear about &amp;#8220;Big N&amp;#8221;.
-This often includes some currently large and/or successful but still &amp;#8220;hip&amp;#8221; startups.
-&lt;span class="caps"&gt;IT&lt;/span&gt; is such a fashion industry sometimes&amp;#8230;&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Though on the flip side, it exacerbates the &lt;a href="https://en.wikipedia.org/wiki/Impostor_syndrome"&gt;impostor syndrome&lt;/a&gt;
-among people who &lt;em&gt;do&lt;/em&gt; get hired, as their success could easily be construed as mostly luck.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Google"></category><category term="interviews"></category><category term="startups"></category><category term="career"></category><category term="hiring"></category></entry></feed>
+that we cannot really do&amp;nbsp;without.&lt;/p&gt;</summary><category term="packages"></category><category term="package manager"></category><category term="node.js"></category><category term="npm"></category><category term="C++"></category></entry></feed>

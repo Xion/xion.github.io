@@ -1,5 +1,646 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-06-21T19:38:00+00:00</updated><entry><title>Extension traits in Rust</title><link href="http://xion.io/post/code/rust-extension-traits.html" rel="alternate"></link><updated>2017-06-21T19:38:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-20:post/code/rust-extension-traits.html</id><summary type="html">&lt;p&gt;In a few object-oriented languages,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-10-31T15:21:00+00:00</updated><entry><title>Small Rust crates I (almost) always use</title><link href="http://xion.io/post/code/rust-little-crates.html" rel="alternate"></link><updated>2017-10-31T15:21:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-10-31:post/code/rust-little-crates.html</id><summary type="html">&lt;p&gt;Alternative clickbait title: &lt;em&gt;My Little Crates: Rust is Magic&lt;/em&gt;&amp;nbsp;:-)&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;Due to its relatively scant standard library,
+programming in Rust inevitably involves pulling in a good number of third-party&amp;nbsp;dependencies.&lt;/p&gt;
+&lt;p&gt;Some of them deal with problems that are solved with built-ins
+in languages that take a more &amp;#8220;batteries included&amp;#8221; approach.
+A good example would be the Python&amp;#8217;s &lt;code&gt;re&lt;/code&gt; module,
+whose moral equivalent in the Rust ecosystem is &lt;a href="http://docs.rs/regex"&gt;the &lt;em&gt;regex&lt;/em&gt; crate&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Things like regular expressions, however, represent comparatively large problems.
+It isn&amp;#8217;t very surprising that dedicated libraries exist to address them.
+It is less common for a language to offer &lt;em&gt;small&lt;/em&gt; packages
+that target very specialized&amp;nbsp;applications.&lt;/p&gt;
+&lt;p&gt;As in, one function/type/macro-kind of specialized,
+or perhaps only a little larger than&amp;nbsp;that.&lt;/p&gt;
+&lt;p&gt;In this post, we&amp;#8217;ll take a whirlwind tour through a bunch of such essential&amp;nbsp;&amp;#8220;micropackages&amp;#8221;.&lt;/p&gt;
+&lt;h4&gt;either&lt;/h4&gt;
+&lt;p&gt;Rust has the built-in &lt;code&gt;Result&lt;/code&gt; type, which is a sum&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt; of an &lt;code&gt;Ok&lt;/code&gt; outcome or an &lt;code&gt;Err&lt;/code&gt;or.
+It forms the basis of a general error handling mechanism in the&amp;nbsp;language.&lt;/p&gt;
+&lt;p&gt;Structurally, however, &lt;code&gt;Result&amp;lt;T, E&amp;gt;&lt;/code&gt; is just an alternative between the types &lt;code&gt;T&lt;/code&gt; and &lt;code&gt;E&lt;/code&gt;.
+You may want to use such an enum for other purposes
+than representing results of fallible operations.
+Unfortunately, because of the strong inherent meaning of &lt;code&gt;Result&lt;/code&gt;,
+such usage would be unidiomatic and highly&amp;nbsp;confusing.&lt;/p&gt;
+&lt;p&gt;This is why the &lt;a href="http://docs.rs/either"&gt;&lt;em&gt;either&lt;/em&gt; crate&lt;/a&gt; exists.
+It contains the following &lt;code&gt;Either&lt;/code&gt; type:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Either&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;L&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;R&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Left&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;L&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Right&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;R&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;While it is isomorphic to &lt;code&gt;Result&lt;/code&gt;,
+it carries no connotation to the entrenched error handling practices&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.
+Additionally, it offers symmetric combinator methods such as &lt;code&gt;map_left&lt;/code&gt;
+or &lt;code&gt;right_and_then&lt;/code&gt; for chaining computations involving the &lt;code&gt;Either&lt;/code&gt; values.&lt;/p&gt;
+&lt;h4&gt;lazy_static&lt;/h4&gt;
+&lt;p&gt;As a design choice, Rust doesn&amp;#8217;t allow for safe access to global mutable variables.
+The semi-standard way of introducing those into your code
+is therefore &lt;a href="http://docs.rs/lazy_static"&gt;the &lt;em&gt;lazy_static&lt;/em&gt; crate&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;However, the most important usage for it is to declare lazy initialized &lt;em&gt;constants&lt;/em&gt;
+of more complex&amp;nbsp;types:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;lazy_static&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;TICK_INTERVAL&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Duration&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Duration&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from_secs&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;7&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;24&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;60&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;60&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The trick isn&amp;#8217;t entirely transparent&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;,
+but it&amp;#8217;s the best you can do until we get a proper support
+for &lt;a href="https://github.com/rust-lang/rfcs/issues/322"&gt;compile-time expressions&lt;/a&gt; in the&amp;nbsp;language.&lt;/p&gt;
+&lt;h4&gt;maplit&lt;/h4&gt;
+&lt;p&gt;To go nicely with the crate above &amp;#8212;
+and to act as a natural syntactic follow-up to
+&lt;a href="https://doc.rust-lang.org/1.3.0/std/macro.vec!.html"&gt;the standard &lt;code&gt;vec![]&lt;/code&gt; macro&lt;/a&gt; &amp;#8212;
+we&amp;#8217;ve got the &lt;a href="http://docs.rs/maplit"&gt;&lt;em&gt;maplit&lt;/em&gt; crate&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;What it does is add &lt;code&gt;HashMap&lt;/code&gt; and &lt;code&gt;HashSet&lt;/code&gt; &lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;literals&amp;#8221; by defining
+some very simple &lt;code&gt;hashmap!&lt;/code&gt; and &lt;code&gt;hashset!&lt;/code&gt; macros:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;lazy_static&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;IMAGE_EXTENSIONS&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;HashMap&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;&amp;#39;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hashmap&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;gif&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;GIF&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;jpeg&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;JPEG&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;jpg&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;JPG&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;png&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;PNG&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Internally, &lt;code&gt;hashmap!&lt;/code&gt; expands to the appropriate amount of &lt;code&gt;HashMap::insert&lt;/code&gt; calls,
+returning the finished hash map with all the keys and values&amp;nbsp;given.&lt;/p&gt;
+&lt;h4&gt;try_opt&lt;/h4&gt;
+&lt;p&gt;Before the &lt;code&gt;?&lt;/code&gt; operator was introduced to Rust,
+the idiomatic way of propagating erroneous &lt;code&gt;Result&lt;/code&gt;s was the &lt;code&gt;try!&lt;/code&gt; macro.&lt;/p&gt;
+&lt;p&gt;A similar macro can also be implemented for &lt;code&gt;Option&lt;/code&gt; types
+so that it propagates the &lt;code&gt;None&lt;/code&gt;s upstream.
+The &lt;a href="http://docs.rs/try_opt"&gt;&lt;em&gt;try_opt&lt;/em&gt; crate&lt;/a&gt; is doing precisely that,
+and the macro can be used in a straightforward&amp;nbsp;manner:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;parse_ipv4&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;lazy_static&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="k"&gt;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;RE&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Regex&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Regex&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="s-Raw"&gt;r&amp;quot;^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$&amp;quot;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;RE&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;captures&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;c&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;d&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;c&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;d&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Until Rust supports &lt;code&gt;?&lt;/code&gt; for &lt;code&gt;Option&lt;/code&gt;s (which is &lt;a href="https://github.com/rust-lang/rust/issues/31436"&gt;planned&lt;/a&gt;),
+this &lt;code&gt;try_opt!&lt;/code&gt; macro can serve as an acceptable&amp;nbsp;workaround.&lt;/p&gt;
+&lt;h4&gt;exitcode&lt;/h4&gt;
+&lt;p&gt;It is a common convention in basically every mainstream &lt;span class="caps"&gt;OS&lt;/span&gt;
+that a process has finished with an error
+if it exits with a code different than 0 (zero),
+Linux divides the space of error codes &lt;a href="http://www.tldp.org/LDP/abs/html/exitcodes.html"&gt;further&lt;/a&gt;,
+and &amp;#8212; along with &lt;span class="caps"&gt;BSD&lt;/span&gt; &amp;#8212; it also includes the &lt;em&gt;sysexits.h&lt;/em&gt; header with some more specialized&amp;nbsp;codes.&lt;/p&gt;
+&lt;p&gt;These have been adopted by great many programs
+and &lt;a href="https://docs.python.org/3.0/library/os.html#os.EX_OK"&gt;languages&lt;/a&gt;.
+In Rust, those semi-standard names for common errors can be used, too.
+All you need to do is add &lt;a href="http://docs.rs/exitcode"&gt;the &lt;em&gt;exitcode&lt;/em&gt; crate&lt;/a&gt; to your&amp;nbsp;project:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap_or_else&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;print_args_error&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;process&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;exit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;exitcode&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;USAGE&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;});&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;In addition to constants like &lt;code&gt;USAGE&lt;/code&gt; or &lt;code&gt;TEMPFAIL&lt;/code&gt;,
+the &lt;em&gt;exitcode&lt;/em&gt; crate also defines an &lt;code&gt;ExitCode&lt;/code&gt; alias
+for the integer type holding the exit codes.
+You can use it, among other things, as a return type of your top-level&amp;nbsp;functions:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;process&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;exit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Options&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;exitcode&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ExitCode&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// ...&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;h4&gt;enum-set&lt;/h4&gt;
+&lt;p&gt;In Java, there is a specialization of the general &lt;code&gt;Set&lt;/code&gt; interface
+that works for enum types:
+&lt;a href="https://docs.oracle.com/javase/7/docs/api/java/util/EnumSet.html"&gt;the &lt;code&gt;EnumSet&lt;/code&gt; class&lt;/a&gt;.
+Its members are represented very compactly as &lt;em&gt;bits&lt;/em&gt; rather than hashed&amp;nbsp;elements.&lt;/p&gt;
+&lt;p&gt;A similar (albeit slightly less powerful&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;) structure has been implemented
+in the &lt;a href="http://docs.rs/enum-set"&gt;&lt;em&gt;enum-set&lt;/em&gt; crate&lt;/a&gt;. Given a &lt;code&gt;#[repr(u32)]&lt;/code&gt; enum&amp;nbsp;type:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#[repr(u32)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="cp"&gt;#[derive(Clone, Copy, Debug Eq, Hash, PartialEq)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Monday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Tuesday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Wednesday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Thursday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Friday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Saturday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sunday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;you can create an &lt;code&gt;EnumSet&lt;/code&gt; of its&amp;nbsp;variants:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;weekend&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;EnumSet&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;EnumSet&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;weekend&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;insert&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Saturday&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;weekend&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;insert&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Sunday&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;as long as you provide a simple trait impl that specifies
+how to convert those enum values to and from &lt;code&gt;u32&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;enum_set&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;CLike&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;to_u32&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;as&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;unsafe&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;from_u32&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Self&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;mem&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;transmute&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;The advantage is having a set structure represented by a single, unsigned 32-bit integer,
+leading to &lt;em&gt;O&lt;/em&gt;(1) complexity of &lt;em&gt;all&lt;/em&gt; common set operations.
+This includes membership checks, the union of two sets, their intersection, difference, and so&amp;nbsp;on.&lt;/p&gt;
+&lt;h4&gt;antidote&lt;/h4&gt;
+&lt;p&gt;As part of fulfilling the promise of Fearless Concurrency™,
+Rust offers multiple synchronization primitives
+that are all defined in &lt;a href="https://doc.rust-lang.org/std/sync/"&gt;the &lt;code&gt;std::sync&lt;/code&gt; module&lt;/a&gt;.
+One thing that &lt;code&gt;Mutex&lt;/code&gt;, &lt;code&gt;RwLock&lt;/code&gt;, and similar mechanisms there have in common
+is that their locks can become &amp;#8220;poisoned&amp;#8221; if a thread panicks while holding them.
+As a result, acquiring a lock requires handling the potential &lt;code&gt;PoisonError&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;For many programs, however, lock poisoning is not even a remote,
+but a straight-up &lt;em&gt;impossible&lt;/em&gt; situation.
+If you follow the best practices of concurrent resource sharing,
+you won&amp;#8217;t be holding locks for more than a few instructions,
+devoid of &lt;code&gt;unwrap&lt;/code&gt;s or any other opportunity to &lt;code&gt;panic!()&lt;/code&gt;.
+Unfortunately, you cannot prove this to the Rust compiler statically,
+so it will still require you to handle a &lt;code&gt;PoisonError&lt;/code&gt; that cannot&amp;nbsp;happen.&lt;/p&gt;
+&lt;p&gt;This is where the aptly named &lt;a href="http://docs.rs/antidote"&gt;&lt;em&gt;antidote&lt;/em&gt; crate&lt;/a&gt; crate offers help.
+In it, you can find all the same locks &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; guards &lt;span class="caps"&gt;API&lt;/span&gt; that is offered by &lt;code&gt;std::sync&lt;/code&gt;,
+just without the &lt;code&gt;PoisonError&lt;/code&gt;.
+In many cases, this removal has radically simplified the interface,
+for example by turning &lt;code&gt;Result&amp;lt;Guard, Error&amp;gt;&lt;/code&gt; return types into just &lt;code&gt;Guard&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;The caveat, of course, is that you need to ensure all threads holding these &amp;#8220;immunized&amp;#8221; locks&amp;nbsp;either:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;don&amp;#8217;t panic at all;&amp;nbsp;or&lt;/li&gt;
+&lt;li&gt;don&amp;#8217;t leave guarded resources in an inconsistent state if they &lt;em&gt;do&lt;/em&gt;&amp;nbsp;panic&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Like it&amp;#8217;s been mentioned earlier,
+the best way to make that happen is to keep lock-guarded critical sections minimal and&amp;nbsp;infallible.&lt;/p&gt;
+&lt;h4&gt;matches&lt;/h4&gt;
+&lt;p&gt;Pattern matching is one of the most important features of Rust,
+but some of the relevant language constructs have awkward shortcomings.
+The &lt;code&gt;if let&lt;/code&gt; conditional, for example, cannot be combined with boolean&amp;nbsp;tests:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_good&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;and thus requires additional nesting, or a different approach&amp;nbsp;altogether.&lt;/p&gt;
+&lt;p&gt;Thankfully, to help with situations like this,
+there is the &lt;a href="http://docs.rs/matches"&gt;&lt;em&gt;matches&lt;/em&gt; crate&lt;/a&gt; with a bunch of convenient macros.
+Besides &lt;a href="https://docs.rs/matches/0.1.6/matches/macro.matches.html"&gt;its namesake, &lt;code&gt;matches!&lt;/code&gt;&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;matches&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_good&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;it also exposes assertion macros
+(&lt;a href="https://docs.rs/matches/0.1.6/matches/macro.assert_matches.html"&gt;&lt;code&gt;assert_match!&lt;/code&gt;&lt;/a&gt;
+and &lt;a href="https://docs.rs/matches/0.1.6/matches/macro.debug_assert_matches.html"&gt;&lt;code&gt;debug_assert_match!&lt;/code&gt;&lt;/a&gt;)
+that can be used in both production and test&amp;nbsp;code.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;This concludes the overview of small Rust crates, at least for&amp;nbsp;now.&lt;/p&gt;
+&lt;p&gt;To be certain, these crates are by far not the only ones that are small in size
+and simultaneously almost indispensable.
+Many more great libraries can be found
+e.g. in the &lt;a href="https://github.com/rust-unofficial/awesome-rust#libraries"&gt;Awesome Rust registry&lt;/a&gt;,
+though obviously you could argue if all of them are truly &amp;#8220;micro&amp;#8221;&amp;nbsp;;-)&lt;/p&gt;
+&lt;p&gt;If you know more crates in the similar vein,
+make sure to mention them in the&amp;nbsp;comments!&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;A &lt;em&gt;sum type&lt;/em&gt; consists of several alternatives,
+out of which only one has been picked for a particular instance.
+The other common name for it is a &lt;em&gt;tagged union&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Unless you come from Haskell, that is, where &lt;code&gt;Either&lt;/code&gt; is the equivalent of Rust&amp;#8217;s &lt;code&gt;Result&lt;/code&gt; :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;You will occasionally need an explicit &lt;code&gt;*&lt;/code&gt; to trigger the &lt;code&gt;Deref&lt;/code&gt; coercion it uses.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;It only supports unitary enums of up to 32 variants.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="libraries"></category></entry><entry><title>O(n log n) isn’t bad</title><link href="http://xion.io/post/programming/o-nlogn-isnt-bad.html" rel="alternate"></link><updated>2017-10-19T14:59:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-10-19:post/programming/o-nlogn-isnt-bad.html</id><summary type="html">&lt;p&gt;Most programmers should be familiar with the Big O notation of computational complexity.
+This is how, in very theoretical terms, we are describing the relative differences in the performance of&amp;nbsp;algorithms.&lt;/p&gt;
+&lt;p&gt;Excluding the case of constant time complexity (&lt;code&gt;O(1)&lt;/code&gt;),
+the vast majority of practical algorithms falls into one of the following&amp;nbsp;classes:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;O(log n)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;O(n)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;O(n log n)&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;O(n²)&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The further down a class is on this list, the worse (less efficient) it gets.
+What may not be completely obvious, however, is the magnitude of&amp;nbsp;differences.&lt;/p&gt;
+&lt;p&gt;Let&amp;#8217;s have a closer&amp;nbsp;look.&lt;/p&gt;
+&lt;h4&gt;The best and the&amp;nbsp;worst&lt;/h4&gt;
+&lt;p&gt;First, it&amp;#8217;s pretty easy when it comes to the extreme points.
+A logarithmic complexity is clearly great,
+because the number of operations barely even grows as the size of input increases.
+For &lt;code&gt;N&lt;/code&gt; of one million,  the (natural&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;) logarithm is equal to about 14.
+For one &lt;em&gt;trillion&lt;/em&gt; &amp;#8212; million times more &amp;#8212; &lt;code&gt;log n&lt;/code&gt; is only&amp;nbsp;27!&lt;/p&gt;
+&lt;p&gt;Such amazing scalability is one of the reasons
+why databases, for example,
+can execute queries extremely efficiently even for millions or billions of&amp;nbsp;records.&lt;/p&gt;
+&lt;p&gt;On the other end, an algorithm that has quadratic complexity
+will only do well for very small datasets.
+It can still be useful in practice,
+especially as a small-input optimization of some larger procedure&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;,
+or because of some other desirable properties (like good&amp;nbsp;parallelizability).&lt;/p&gt;
+&lt;p&gt;Outside of those carefully selected cases, however,
+the computational requirements of &lt;code&gt;O(n²)&lt;/code&gt; for any large dataset are usually too&amp;nbsp;great.&lt;/p&gt;
+&lt;h4&gt;Middle&amp;nbsp;ground&lt;/h4&gt;
+&lt;p&gt;As for the remaining two classes,
+the linear one (&lt;code&gt;O(n)&lt;/code&gt;) is probably the easiest to reason&amp;nbsp;about.&lt;/p&gt;
+&lt;p&gt;In a linear algorithm,
+the number of operations increases steadily along with the size of input.&lt;br&gt;
+For thousand elements, you need roughly a thousand steps (times a constant factor).&lt;br&gt;
+For a million, there will be a million operations&amp;nbsp;necessary.&lt;/p&gt;
+&lt;p&gt;Thus, by itself, the linear scaling doesn&amp;#8217;t get any better or worse when data gets bigger&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.
+In many cases, it means there is nothing to be exploited in the structure of input set
+that could make the running time any better
+(compared to e.g. the reliance of logarithmic searches on sorted order).
+Typically, all the data must be traversed at least once in its&amp;nbsp;entirety.&lt;/p&gt;
+&lt;p&gt;All in all, it can be a decent time complexity,
+but it&amp;#8217;s nothing to write home&amp;nbsp;about.&lt;/p&gt;
+&lt;h4&gt;A function has no&amp;nbsp;name&lt;/h4&gt;
+&lt;p&gt;What about &lt;code&gt;O(n log n)&lt;/code&gt;, then?
+It falls between the linear and the quadratic,
+which suggests that it&amp;#8217;s somewhere half-way between mediocre and awful.
+We don&amp;#8217;t even have a widely used word for it,
+meaning it is probably not even that&amp;nbsp;important.&lt;/p&gt;
+&lt;p&gt;Both of those suppositions are&amp;nbsp;wrong.&lt;/p&gt;
+&lt;p&gt;First, &lt;code&gt;O(n log n)&lt;/code&gt; isn&amp;#8217;t even remotely close to the &amp;#8220;median&amp;#8221; (whatever that means) of &lt;code&gt;O(n)&lt;/code&gt; and &lt;code&gt;O(n²)&lt;/code&gt;.
+In reality, its asymptotic rate of growth places it very close to the former.
+You can see this pretty clearly by looking at the following&amp;nbsp;plot:&lt;/p&gt;
+&lt;p style="text-align:center"&gt;
+    &lt;img src="http://xion.io/images/time-complexity.png" alt="Time complexity plot"&gt;&lt;br&gt;
+    &lt;small&gt;
+        &lt;a href="http://coding-geek.com/how-databases-work/"&gt;Source&lt;/a&gt;
+    &lt;/small&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The gap between &lt;code&gt;O(n)&lt;/code&gt; and &lt;code&gt;O(n log n)&lt;/code&gt; barely even widens,
+even as the values on vertical axis increase to the limits of&amp;nbsp;practicality.&lt;/p&gt;
+&lt;p&gt;Indeed, the &lt;code&gt;log n&lt;/code&gt; part of the function grows slowly enough
+that, for many practical purposes, it can be considered a large &amp;#8220;constant&amp;#8221; in the complexity formula.
+Some complicated algorithm that&amp;#8217;s technically linear may therefore be a &lt;em&gt;worse&lt;/em&gt; choice
+than a simpler solution with &lt;code&gt;O(n log n)&lt;/code&gt; scaling.&lt;/p&gt;
+&lt;h4&gt;Sorting it&amp;nbsp;out&lt;/h4&gt;
+&lt;p&gt;What are the typical situations where &lt;code&gt;O(n log n)&lt;/code&gt; arises in practice?
+Very often, it has to do with establishing some kind of &lt;em&gt;ordering&lt;/em&gt; of the input
+which includes at least one of the&amp;nbsp;following:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;a wholesale sorting of it (using pairwise&amp;nbsp;comparison)&lt;/li&gt;
+&lt;li&gt;repeated queries for the current maximum or minimum (via a priority&amp;nbsp;queue)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Considering that many practical algoithms &amp;#8212;
+from &lt;a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm"&gt;pathfinding&lt;/a&gt;
+to &lt;a href="https://en.wikipedia.org/wiki/Huffman_coding"&gt;compression&lt;/a&gt; &amp;#8212;
+utilize some form of sorting or sorted data structures,
+it makes &lt;code&gt;O(n log n)&lt;/code&gt; quite an important complexity&amp;nbsp;class.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Natural logarithm has a base of &lt;em&gt;e&lt;/em&gt; = 2.71828183&amp;#8230;
+The exact choice of logarithm base doesn&amp;#8217;t matter for asymptotic complexity,
+because it changes only the constant coefficient in the &lt;code&gt;O(f(n))&lt;/code&gt; function.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;A widely used example is &lt;a href="https://en.wikipedia.org/wiki/Timsort"&gt;Timsort&lt;/a&gt;
+which switches from merge sort (&lt;code&gt;O(log n)&lt;/code&gt;) to insertion sort (&lt;code&gt;O(n²)&lt;/code&gt;)
+when the array slice is short enough to warrant it.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;In reality, practical factors like memory/cache size, &lt;span class="caps"&gt;OS&lt;/span&gt; scheduling behavior,
+and a myriad of other things can make the actual running time scale sublinearly beyond a certain point.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="algorithms"></category><category term="complexity"></category><category term="Big O"></category></entry><entry><title>The Printer Monad in Haskell</title><link href="http://xion.io/post/code/haskell-printer-monad.html" rel="alternate"></link><updated>2017-08-04T12:39:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-08-04:post/code/haskell-printer-monad.html</id><summary type="html">&lt;p&gt;Quite recently, I have encountered an interesting case of monad-based refactoring in&amp;nbsp;Haskell.&lt;/p&gt;
+&lt;p&gt;Suppose you have a &lt;code&gt;ComplicatedRecord&lt;/code&gt;
+that holds the results of some lengthy and important process in your program.
+You want to present that data to the user in a nicely formatted way,
+so you write a function which begins somewhat like&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cm"&gt;{-# LANGUAGE RecordWildcards #-}&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- | Pretty-print the content of the record.&lt;/span&gt;
+&lt;span class="nf"&gt;ppRecord&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;ComplicatedRecord&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="nf"&gt;ppRecord&lt;/span&gt; &lt;span class="kt"&gt;ComplicatedRecord&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="c1"&gt;-- ...&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Inside, there is plenty of &lt;code&gt;putStrLn&lt;/code&gt; calls, likely hidden inside more specific subfunctions
+that format all the numerous parts of &lt;code&gt;ComplicatedRecord&lt;/code&gt;.
+But the &lt;code&gt;IO&lt;/code&gt; monad isn&amp;#8217;t there just for printing:
+because the code went through multiple iterations,
+some of this logic actually takes advantage of it by making additional system &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; network&amp;nbsp;calls.&lt;/p&gt;
+&lt;p&gt;So yeah, it&amp;#8217;s not particularly&amp;nbsp;pretty.&lt;/p&gt;
+&lt;p&gt;Now, however, we find out that the output we&amp;#8217;re printing here
+shouldn&amp;#8217;t &lt;em&gt;always&lt;/em&gt; go directly to stdout.
+In some cases, unsurprisingly, we actually want it back as a single string,
+without having it sent to the standard output at&amp;nbsp;all.&lt;/p&gt;
+&lt;h4&gt;Just $ return .&amp;nbsp;it&lt;/h4&gt;
+&lt;p&gt;Your first instinct here may be to simply give back the final string (well, &lt;code&gt;Text&lt;/code&gt;)
+as the function result&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;ppRecord&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;ComplicatedRecord&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;However, this turns out to be rather awkward.
+While in most other languages
+we would simply accumulate output by progressively adding more data to a mutable result,
+this would be much more inconvenient (and somewhat weird) to do in&amp;nbsp;Haskell.&lt;/p&gt;
+&lt;p&gt;This is where the stdout-based approach seems cleaner;
+instead of straightforward, sequential code like&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cm"&gt;{-# LANGUAGE OverloadedStrings #-}&lt;/span&gt;
+
+&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;Control.Monad.Extra&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nf"&gt;whenJust&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;Data.Text.IO&lt;/span&gt;
+&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;TextShow&lt;/span&gt;
+
+&lt;span class="nf"&gt;ppOrder&lt;/span&gt; &lt;span class="kt"&gt;Order&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="n"&gt;putStrLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;Order #&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;ordNumber&lt;/span&gt;
+    &lt;span class="n"&gt;ppAddress&lt;/span&gt; &lt;span class="n"&gt;ordDeliveryAddress&lt;/span&gt;
+    &lt;span class="n"&gt;forM_&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;zip&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="n"&gt;ordItems&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="nf"&gt;\&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Item&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+        &lt;span class="n"&gt;putStrLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;showt&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="ow"&gt;::&lt;/span&gt;&lt;span class="kt"&gt;Int&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;. &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;itName&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot; x&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;showt&lt;/span&gt; &lt;span class="n"&gt;itQuantity&lt;/span&gt;
+    &lt;span class="n"&gt;whenJust&lt;/span&gt; &lt;span class="n"&gt;ordBillingAddress&lt;/span&gt; &lt;span class="n"&gt;ppAddress&lt;/span&gt;
+
+&lt;span class="nf"&gt;ppAddress&lt;/span&gt; &lt;span class="kt"&gt;Address&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="n"&gt;putStrLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;addrFirstName&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot; &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;addrLastName&lt;/span&gt;
+    &lt;span class="n"&gt;putStrLn&lt;/span&gt; &lt;span class="n"&gt;addrLine1&lt;/span&gt;
+    &lt;span class="n"&gt;whenJust&lt;/span&gt; &lt;span class="n"&gt;addrLine2&lt;/span&gt; &lt;span class="n"&gt;putStrLn&lt;/span&gt;
+    &lt;span class="n"&gt;putStrLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;addrCity&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;, &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;addrPostalCode&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;we have to overhaul each function and turn it into a much less pleasant &amp;#8220;&lt;code&gt;mappend&lt;/code&gt;age&amp;#8221;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;ppOrder&lt;/span&gt; &lt;span class="kt"&gt;Order&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;unlines&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;mconcat&lt;/span&gt;
+    &lt;span class="p"&gt;[&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;Order #&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;ordNumber&lt;/span&gt;
+    &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;ppAddress&lt;/span&gt; &lt;span class="n"&gt;ordDeliveryAddress&lt;/span&gt;
+    &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;ppItems&lt;/span&gt; &lt;span class="n"&gt;ordItems&lt;/span&gt;
+    &lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;maybe&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nf"&gt;\&lt;/span&gt;&lt;span class="n"&gt;addr&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;ppAddress&lt;/span&gt; &lt;span class="n"&gt;addr&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="n"&gt;ordBillingAddress&lt;/span&gt;
+    &lt;span class="kr"&gt;where&lt;/span&gt;
+    &lt;span class="n"&gt;ppItems&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;mconcat&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;uncurry&lt;/span&gt; &lt;span class="n"&gt;ppItem&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="n"&gt;zip&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+    &lt;span class="n"&gt;ppItem&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="kt"&gt;Item&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;showt&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;. &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;itName&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot; x&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;itQuantity&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;One may argue that this is, in fact, the more idiomatic approach,
+but I&amp;#8217;m not very fond of all those commas.
+Plus, it shows rather clearly that any conditional logic (like with &lt;code&gt;ordBillingAddress&lt;/code&gt; here)
+is going to get pretty&amp;nbsp;cumbersome.&lt;/p&gt;
+&lt;h4&gt;Along comes the &lt;code&gt;Writer&lt;/code&gt;&lt;/h4&gt;
+&lt;p&gt;What I&amp;#8217;m saying here is that even in pure code,
+it is sometimes very desirable to have a &lt;code&gt;do&lt;/code&gt; notation.
+For that, however, we need a suitable &lt;code&gt;Monad&lt;/code&gt;&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt; to provide the meaning of &amp;#8220;invisible semicolon&amp;#8221; in a &lt;code&gt;do&lt;/code&gt; block.&lt;/p&gt;
+&lt;p&gt;And &lt;code&gt;Text&lt;/code&gt;, obviously, isn&amp;#8217;t one.
+Neither is &lt;code&gt;[Text]&lt;/code&gt; (lines of text),
+nor any other type we&amp;#8217;d use to represent the final output of formatting &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; printing.
+They are unsuitable, because they cannot encode the &lt;em&gt;computation&lt;/em&gt; that eventually produces said output &amp;#8212;
+either the top-level one (&lt;code&gt;ppRecord&lt;/code&gt;) or any of its building blocks (like the &lt;code&gt;ppOrder&lt;/code&gt; or &lt;code&gt;ppAddress&lt;/code&gt;),
+down to a most elementary &lt;code&gt;putStrLn&lt;/code&gt;.
+The only thing they can stand for is the result&amp;nbsp;itself.&lt;/p&gt;
+&lt;p&gt;Fortunately, the pattern of executing code and occassionally producing some &amp;#8220;additional&amp;#8221; output
+has been abstracted over in the Haskell standard library.
+This is exactly the use case for the &lt;code&gt;Writer&lt;/code&gt; monad!&lt;/p&gt;
+&lt;p&gt;The definition of &lt;code&gt;Writer&lt;/code&gt; is roughly equivalent to the&amp;nbsp;following:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;newtype&lt;/span&gt; &lt;span class="kt"&gt;Writer&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt; &lt;span class="c1"&gt;-- omitted&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Of the two type parameters it takes, the &lt;code&gt;w&lt;/code&gt; one signifies what output it can produce &amp;#8220;on the side&amp;#8221;.
+This is contrasted with &lt;code&gt;a&lt;/code&gt; which is the regular result of a monadic expression or function.
+In our case, &lt;code&gt;a&lt;/code&gt; will basically always be &lt;code&gt;()&lt;/code&gt; (unit/&amp;#8221;empty&amp;#8221; type),
+but it is nonetheless necessary for the &lt;code&gt;Writer&lt;/code&gt; to behave as a&amp;nbsp;monad.&lt;/p&gt;
+&lt;p&gt;To complement the above definition, &lt;code&gt;Writer&lt;/code&gt; comes with several useful functions.
+Among those, the most interesting one is &lt;code&gt;tell&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;tell&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Writer&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;code&gt;write&lt;/code&gt; would&amp;#8217;ve probably been a better name for it,
+as it&amp;#8217;s definitely the main and defining operation of &lt;code&gt;Writer&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Looking at its signature, we can see it takes a bit of the &lt;code&gt;Writer&lt;/code&gt;&lt;span class="quo"&gt;&amp;#8216;&lt;/span&gt;s output (&lt;code&gt;w&lt;/code&gt;)
+and results in a &lt;code&gt;Writer&lt;/code&gt; action.
+Internally, it will simply add the argument to the already accumulated output of the writer&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;To make everything more concrete,
+here&amp;#8217;s a literal &amp;#8220;Hello world&amp;#8221; example coded very verbosly as a &lt;code&gt;Writer&lt;/code&gt; action:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;Control.Monad.Writer&lt;/span&gt;
+
+&lt;span class="nf"&gt;hello&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Writer&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="nf"&gt;hello&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="n"&gt;tell&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;Hello&amp;quot;&lt;/span&gt;
+    &lt;span class="n"&gt;tell&lt;/span&gt; &lt;span class="s"&gt;&amp;quot; &amp;quot;&lt;/span&gt;
+    &lt;span class="n"&gt;tell&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;world&amp;quot;&lt;/span&gt;
+
+&lt;span class="nf"&gt;main&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="nf"&gt;main&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="kr"&gt;let&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kr"&gt;_&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;greeting&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;runWriter&lt;/span&gt; &lt;span class="n"&gt;hello&lt;/span&gt;
+    &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;putStrLn&lt;/span&gt; &lt;span class="n"&gt;greeting&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;It also contains the last element of the &lt;code&gt;Writer&lt;/code&gt; puzzle:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;runWriter&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Writer&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Like its name suggests, this function will &amp;#8220;run&amp;#8221; any &lt;code&gt;Writer&lt;/code&gt; action that we give it,
+returning both the &amp;#8220;regular&amp;#8221; result (&lt;code&gt;a&lt;/code&gt;) plus any output passed in &lt;code&gt;tell&lt;/code&gt;s (&lt;code&gt;w&lt;/code&gt;).&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;h4&gt;My little monad: transformers are&amp;nbsp;magic&lt;/h4&gt;
+&lt;p&gt;The last example may be very simple,
+but it contains all the building blocks for many of the printing functions we need.
+If we define a convenience wrapper for &lt;code&gt;tell&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;putLn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Writer&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="nf"&gt;putLn&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;tell&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;then both &lt;code&gt;ppAddress&lt;/code&gt; and &lt;code&gt;ppOrder&lt;/code&gt; can be translated
+through a mere mechanical substitution of &lt;code&gt;putStrLn&lt;/code&gt; with &lt;code&gt;putLn&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;ppAddress&lt;/span&gt; &lt;span class="kt"&gt;Address&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="n"&gt;putLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;addrFirstName&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot; &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;addrLastName&lt;/span&gt;
+    &lt;span class="n"&gt;putLn&lt;/span&gt; &lt;span class="n"&gt;addrLine1&lt;/span&gt;
+    &lt;span class="n"&gt;whenJust&lt;/span&gt; &lt;span class="n"&gt;addrLine2&lt;/span&gt; &lt;span class="n"&gt;putLn&lt;/span&gt;
+    &lt;span class="n"&gt;putLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;addrCity&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;, &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;addrPostalCode&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- ppOrder omitted&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Unfortunately, a bare &lt;code&gt;Writer&lt;/code&gt; like this can only work for pure code,
+which isn&amp;#8217;t a luxury we can expect in every situtation.
+In my case, some of the printing logic was tied pretty strongly to &lt;code&gt;IO&lt;/code&gt;,
+and it would be difficult and time consuming to decouple&amp;nbsp;it.&lt;/p&gt;
+&lt;p&gt;Thankfully, the reliance on &lt;code&gt;IO&lt;/code&gt; isn&amp;#8217;t a complete deal breaker.
+While we cannot ensure that nothing calls &lt;code&gt;putStrLn&lt;/code&gt; anymore,
+we can provide the &lt;code&gt;tell&lt;/code&gt;/&lt;code&gt;putLn&lt;/code&gt; capabilities alongside whatever &lt;em&gt;other&lt;/em&gt; &lt;code&gt;IO&lt;/code&gt; calls
+our code has to make (for&amp;nbsp;now).&lt;/p&gt;
+&lt;p&gt;To achieve that, we need to create a &lt;em&gt;monad stack&lt;/em&gt; with &lt;code&gt;WriterT&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;newtype&lt;/span&gt; &lt;span class="kt"&gt;WriterT&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt; &lt;span class="c1"&gt;-- omitted&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;code&gt;WriterT&lt;/code&gt; is a &lt;em&gt;monad transformer&lt;/em&gt;, one of those scary Haskell concepts
+that are actually simpler than they appear on the surface.
+This is because transfomers like &lt;code&gt;WriterT&lt;/code&gt; are mere wrappers.
+The only difference between it and a regular &lt;code&gt;Writer&lt;/code&gt; is the additional &lt;code&gt;m&lt;/code&gt; parameter,
+which is the &lt;em&gt;inner monad&lt;/em&gt; we&amp;#8217;re packaging inside a new &lt;code&gt;Writer&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Here (and in many other cases), &lt;code&gt;m&lt;/code&gt; will be substituted with &lt;code&gt;IO&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;type&lt;/span&gt; &lt;span class="kt"&gt;Printer&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;WriterT&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt;  &lt;span class="c1"&gt;-- w == Text, m == IO&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;thus creating the titular &lt;code&gt;Printer&lt;/code&gt; monad.
+This hybrid beast can both output &lt;code&gt;Text&lt;/code&gt; through the &lt;code&gt;Writer&lt;/code&gt; &lt;span class="caps"&gt;API&lt;/span&gt;,
+as well as perform any additional &lt;code&gt;IO&lt;/code&gt; operations
+that the code may (still)&amp;nbsp;require.&lt;/p&gt;
+&lt;p&gt;Below is an example;
+the &lt;code&gt;User&lt;/code&gt; record requires an I/O call to get the size of its &lt;code&gt;$HOME&lt;/code&gt; directory:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;Control.Monad.IO.Class&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nf"&gt;liftIO&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;System.Directory&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nf"&gt;getFileSize&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- To print this data type nicely, we sadly require I/O :(&lt;/span&gt;
+&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;User&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;User&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;usrName&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
+                 &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;usrHomeDir&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;FilePath&lt;/span&gt;
+                 &lt;span class="p"&gt;}&lt;/span&gt;
+
+&lt;span class="nf"&gt;ppUser&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;User&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
+&lt;span class="nf"&gt;ppUser&lt;/span&gt; &lt;span class="kt"&gt;User&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="o"&gt;..&lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;snd&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;$&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;runWriterT&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="kr"&gt;do&lt;/span&gt;
+    &lt;span class="n"&gt;putLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;Name: &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;usrName&lt;/span&gt;
+    &lt;span class="n"&gt;homeSize&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;liftIO&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;getFileSize&lt;/span&gt; &lt;span class="n"&gt;usrHomeDir&lt;/span&gt;
+    &lt;span class="n"&gt;putLn&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;$HOME: &amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;showt&lt;/span&gt; &lt;span class="n"&gt;usrHomeDir&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;(&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;showt&lt;/span&gt; &lt;span class="n"&gt;homeSize&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot; bytes)&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As a bit of necessary cruft,
+we have to use &lt;code&gt;liftIO&lt;/code&gt; to &amp;#8220;lift&amp;#8221; (wrap) &lt;code&gt;IO&lt;/code&gt; actions such as &lt;code&gt;getFileSize&lt;/code&gt;
+in a full &lt;code&gt;Printer&lt;/code&gt; monad before executing them.
+Besides everything else you can think of,
+this is yet another argument for eventually getting rid of the &lt;code&gt;IO&lt;/code&gt; :)&lt;/p&gt;
+&lt;h4&gt;Making the monads&amp;nbsp;coexist&lt;/h4&gt;
+&lt;p&gt;But our job isn&amp;#8217;t done yet.
+Despite looking very reasonable, this version of &lt;code&gt;ppUser&lt;/code&gt; doesn&amp;#8217;t actually compile!
+The actual type error may vary a little,
+but it all boils down to a difference between &lt;code&gt;WriterT Text IO ()&lt;/code&gt; (i.e. &lt;code&gt;Printer ()&lt;/code&gt;)
+and &lt;code&gt;Writer Text ()&lt;/code&gt; at each call site of &lt;code&gt;putLn&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;span class="caps"&gt;GHC&lt;/span&gt; is obviously correct.
+However, the problem lies not in how we&amp;#8217;re calling &lt;code&gt;putLn&lt;/code&gt;,
+but rather the way it&amp;#8217;s been&amp;nbsp;defined:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;putLn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Writer&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This type can only produce a specific, &lt;em&gt;pure&lt;/em&gt; &lt;code&gt;Writer&lt;/code&gt; action.
+But to fit inside the &lt;code&gt;do&lt;/code&gt; block of our compound monad,
+we need the &lt;code&gt;Writer&lt;/code&gt; + &lt;code&gt;IO&lt;/code&gt; combo from &lt;code&gt;WriterT Text IO&lt;/code&gt; (i.e. &lt;code&gt;Printer&lt;/code&gt;).&lt;/p&gt;
+&lt;p&gt;We can try to address the mismatch by changing the signature&amp;nbsp;to:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;putLn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;WriterT&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;  &lt;span class="c1"&gt;-- or just: Printer ()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;but this will only result in the &lt;em&gt;opposite&lt;/em&gt; problem.
+Now, all the pure printers like &lt;code&gt;ppAddress&lt;/code&gt; are facing the fact
+that &lt;code&gt;putLn&lt;/code&gt; is a (wrapped) &lt;code&gt;IO&lt;/code&gt; action, despite not actually doing any I/O&amp;nbsp;whatsoever.&lt;/p&gt;
+&lt;p&gt;The obvious question is, can we have something that fits &lt;em&gt;both&lt;/em&gt;?&lt;/p&gt;
+&lt;p&gt;Earlier on, I&amp;#8217;ve said that both vanilla &lt;code&gt;Writer&lt;/code&gt; and the &lt;code&gt;IO&lt;/code&gt;-spruced &lt;code&gt;Printer&lt;/code&gt; support the &amp;#8220;&lt;code&gt;Writer&lt;/code&gt; &lt;span class="caps"&gt;API&lt;/span&gt;&amp;#8221;,
+most notably the &lt;code&gt;tell&lt;/code&gt; function.
+This notion of a &amp;#8220;monadic interface&amp;#8221; isn&amp;#8217;t just hand-waving, though,
+and Haskell (obviously!) provides a way to express it&amp;nbsp;programmatically.&lt;/p&gt;
+&lt;p&gt;Meet the &lt;code&gt;MonadWriter&lt;/code&gt; typeclass:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;class&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Monad&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Monoid&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;MonadWriter&lt;/span&gt; &lt;span class="n"&gt;w&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Any monad that can work as a &lt;code&gt;Writer&lt;/code&gt; will be an instance of it,
+regardless of whether it wraps over &lt;code&gt;IO&lt;/code&gt; or anything else.
+Functions like &lt;code&gt;tell&lt;/code&gt; are defined to be
+&lt;a href="http://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Writer-Class.html#v:tell"&gt;polymorphic over it&lt;/a&gt;,
+enabling us to leverage the same technique they use when we define &lt;code&gt;putLn&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cm"&gt;{-# LANGUAGE FlexibleContexts #-}&lt;/span&gt;
+
+&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;Control.Monad.Writer.Class&lt;/span&gt;
+
+&lt;span class="nf"&gt;putLn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;MonadWriter&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt; &lt;span class="ow"&gt;=&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt; &lt;span class="nb"&gt;()&lt;/span&gt;
+&lt;span class="nf"&gt;putLn&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;tell&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;line&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;&lt;/span&gt;&lt;span class="se"&gt;\n&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;If you aren&amp;#8217;t very familiar with this syntax,
+the part before &lt;code&gt;=&amp;gt;&lt;/code&gt; is a &lt;em&gt;typeclass constraint&lt;/em&gt;, or &lt;em&gt;context&lt;/em&gt;.
+It defines the requirements to be satisfied by types
+which are later used in the function&amp;nbsp;signature.&lt;/p&gt;
+&lt;p&gt;Here, we request a &lt;code&gt;MonadWriter&lt;/code&gt; instance &amp;#8212; one where &lt;code&gt;Text&lt;/code&gt; is the output
+but &lt;em&gt;anything&lt;/em&gt; can be the inner monad.
+We refer to that unknown monad only as &lt;code&gt;m&lt;/code&gt;, a type variable.
+The compiler will figure out what to substitute for it &lt;em&gt;at every call site&lt;/em&gt; of &lt;code&gt;putLn&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;As a result, both a pure &lt;code&gt;Writer&lt;/code&gt; and the &lt;code&gt;IO&lt;/code&gt;-bound &lt;code&gt;Printer&lt;/code&gt; can now use it.
+In the second case, the relevant instance of &lt;code&gt;MonadWriter&lt;/code&gt; will,
+naturally, have &lt;code&gt;IO&lt;/code&gt; fill in the &lt;code&gt;m&lt;/code&gt; position.&lt;/p&gt;
+&lt;p&gt;But curiously, the &amp;#8220;pure&amp;#8221; &lt;code&gt;Writer&lt;/code&gt; also has
+&lt;a href="http://hackage.haskell.org/package/base-4.9.1.0/docs/Data-Functor-Identity.html#t:Identity"&gt;an inner monad&lt;/a&gt;.
+It just literally &lt;em&gt;does nothing&lt;/em&gt; but wrap some other&amp;nbsp;value:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;newtype&lt;/span&gt; &lt;span class="kt"&gt;Identity&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Identity&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;runIdentity&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="n"&gt;a&lt;/span&gt; &lt;span class="p"&gt;}&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;In most cases, this fact is hidden behind
+&lt;a href="http://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Writer-Lazy.html#t:Writer"&gt;the real definition of &lt;code&gt;Writer&lt;/code&gt;&lt;/a&gt;,
+though &lt;code&gt;runIdentity&lt;/code&gt; may sometimes come handy for some on-the-spot type hacks&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;h4&gt;The&amp;nbsp;wrap&lt;/h4&gt;
+&lt;p&gt;The many things we&amp;#8217;ve talked about here could of course be a starting point
+for even more advanced stuff, but obviously we have to stop somewhere!
+But don&amp;#8217;t worry: knowing about &lt;code&gt;MonadWriter&lt;/code&gt; and other monad typeclasses like this
+is enough to write quite idiomatic&amp;nbsp;code&amp;#8230;&lt;/p&gt;
+&lt;p&gt;&amp;#8230;at least until you learn about
+&lt;a href="http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html"&gt;free monads&lt;/a&gt;,
+&lt;a href="https://ocharles.org.uk/blog/posts/2013-12-04-24-days-of-hackage-extensible-effects.html"&gt;effects&lt;/a&gt;,
+and the like&amp;nbsp;;-)&lt;/p&gt;
+&lt;p&gt;In any case, you can check &lt;a href="https://gist.github.com/Xion/74c39b65c591ae9615b7cf81e88a5946"&gt;this gist&lt;/a&gt;
+for the complete code from this&amp;nbsp;post.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;&lt;code&gt;IO&lt;/code&gt; is still necessary due to ad-hoc network fetches and syscalls mentioned earlier.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Or at least an &lt;code&gt;Applicative&lt;/code&gt;, via the &lt;code&gt;ApplicativeDo&lt;/code&gt; &lt;span class="caps"&gt;GHC&lt;/span&gt; extension.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;The adding is done via &lt;code&gt;mappend&lt;/code&gt;, requiring &lt;code&gt;w&lt;/code&gt; to be a &lt;code&gt;Monoid&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;There is also the &lt;code&gt;execWriter&lt;/code&gt; variant which is actually more practical here
+  as it only returns the accumulated output.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:5"&gt;
+&lt;p&gt;We could, for example, use it alongside &lt;code&gt;mapWriterT&lt;/code&gt; to &amp;#8220;fix&amp;#8221; the calls to &lt;code&gt;putLn&lt;/code&gt;
+  if we didn&amp;#8217;t have control over its definition.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Haskell"></category><category term="Writer"></category><category term="monads"></category><category term="monad transformers"></category><category term="WriterT"></category></entry><entry><title>Extension traits in Rust</title><link href="http://xion.io/post/code/rust-extension-traits.html" rel="alternate"></link><updated>2017-06-21T19:38:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-20:post/code/rust-extension-traits.html</id><summary type="html">&lt;p&gt;In a few object-oriented languages,
 it is possible to add methods to a class &lt;em&gt;after&lt;/em&gt; it&amp;#8217;s already been&amp;nbsp;defined.&lt;/p&gt;
 &lt;p&gt;This feature arises quite naturally if the language has a dynamic type system
 that&amp;#8217;s modifiable at runtime.
@@ -1116,592 +1757,4 @@ But futures, by their very nature, are meant to encapsulate &lt;em&gt;any&lt;/em
 For them, &amp;#8220;each individual case&amp;#8221; is literally &lt;em&gt;every asynchronous function&lt;/em&gt; in your code.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="async"></category><category term="Tokio"></category><category term="futures"></category><category term="HTTP"></category></entry><entry><title>Iteration patterns for Result &amp; Option</title><link href="http://xion.io/post/code/rust-iter-patterns.html" rel="alternate"></link><updated>2017-04-11T11:12:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-04-10:post/code/rust-iter-patterns.html</id><summary type="html">&lt;p&gt;Towards the end of &lt;a href="http://xion.io/post/code/rust-for-loop.html"&gt;my previous post about &lt;code&gt;for&lt;/code&gt; loops in Rust&lt;/a&gt;,
-I mentioned how those loops can often be expressed in a more declarative way.
-This alternative approach involves chaining methods of
-&lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"&gt;the &lt;code&gt;Iterator&lt;/code&gt; trait&lt;/a&gt;
-to create specialized transformation&amp;nbsp;pipelines:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;odds_squared&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mf"&gt;1.&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="mi"&gt;100&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;%&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;!=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;&lt;small&gt;&lt;a href="https://is.gd/q4lXew"&gt;Playground link&lt;/a&gt;&lt;/small&gt;&lt;/p&gt;
-&lt;p&gt;Code like this isn&amp;#8217;t unique to Rust, of course.
-Similar patterns are prevalent in functional languages such as
-&lt;a href="https://msdn.microsoft.com/en-us/visualfsharpdocs/conceptual/operators.%5b-h%5d-%5d%5b't1%2c'u%5d-function-%5bfsharp%5d"&gt;F#&lt;/a&gt;,
-and can also be found in
-Java (&lt;a href="https://dzone.com/articles/understanding-java-8-streams-1"&gt;Streams&lt;/a&gt;),
-imperative .&lt;span class="caps"&gt;NET&lt;/span&gt; (&lt;a href="https://msdn.microsoft.com/en-us/library/bb308959.aspx#linqoverview_topic3"&gt;&lt;span class="caps"&gt;LINQ&lt;/span&gt;&lt;/a&gt;),
-JavaScript (&lt;a href="https://lodash.com/docs/4.17.4#chain"&gt;LoDash&lt;/a&gt;)
-and&amp;nbsp;elsewhere.&lt;/p&gt;
-&lt;p&gt;This saying, Rust also has its fair share of unique iteration idioms.
-In this post, we&amp;#8217;re going to explore those arising on the intersection of iterators
-and the most common Rust enums: &lt;code&gt;Result&lt;/code&gt; and &lt;code&gt;Option&lt;/code&gt;.&lt;/p&gt;
-&lt;h4&gt;filter_map()&lt;/h4&gt;
-&lt;p&gt;When working with iterators,
-we&amp;#8217;re almost always interested in selecting elements that match some criterion
-or passing them through a transformation function.
-It&amp;#8217;s not even uncommon to want &lt;em&gt;both&lt;/em&gt; of those things,
-as demonstrated by the initial example in this&amp;nbsp;post.&lt;/p&gt;
-&lt;p&gt;You can, of course, accomplish those two tasks independently:
-Rust&amp;#8217;s &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"&gt;&lt;code&gt;filter&lt;/code&gt;&lt;/a&gt;
-and &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"&gt;&lt;code&gt;map&lt;/code&gt;&lt;/a&gt; methods
-work just fine for this purpose.
-But there exists an alternative, and in some cases it fits the problem &lt;em&gt;amazingly&lt;/em&gt;&amp;nbsp;well.&lt;/p&gt;
-&lt;p&gt;Meet &lt;code&gt;filter_map&lt;/code&gt;.
-Here&amp;#8217;s what &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter_map"&gt;the official docs&lt;/a&gt;
-have to say about&amp;nbsp;it:&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;Creates an iterator that both filters and&amp;nbsp;maps.&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;p&gt;Well, &lt;em&gt;duh&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;On a more serious note, the common pattern that &lt;code&gt;filter_map&lt;/code&gt; simplifies
-is unwrapping a series of &lt;code&gt;Option&lt;/code&gt;s.
-If you have a sequence of maybe-values,
-and you want to retain only those that are actually there,
-&lt;code&gt;filter_map&lt;/code&gt; can do it in a single&amp;nbsp;step:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Get the sequence of all files matching a glob pattern via the glob crate.&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;glob&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;glob&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;foo.*&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="c1"&gt;// Retain only their extensions, e.g. &amp;quot;.txt&amp;quot; or &amp;quot;.md&amp;quot;.&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file_extensions&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;extension&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The equivalent that doesn&amp;#8217;t use &lt;code&gt;filter_map&lt;/code&gt;
-would have to split the checking &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; unwrapping of &lt;code&gt;Option&lt;/code&gt;s into separate&amp;nbsp;steps:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;file_extensions&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_files&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;p&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;extension&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_some&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Because of this check &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; unwrap logic,
-&lt;code&gt;filter_map&lt;/code&gt; can be useful even with a no-op predicate (&lt;code&gt;.filter_map(|x| x)&lt;/code&gt;)
-if we already have the &lt;code&gt;Option&lt;/code&gt; objects handy.
-Otherwise, it&amp;#8217;s often very easy to obtain them,
-which is exactly the case for the &lt;code&gt;Result&lt;/code&gt; type:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// Read all text lines from a file:&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BufReader&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;fs&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;File&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;file.ext&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;?&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;lines&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;With a simple &lt;code&gt;.filter_map(Result::ok)&lt;/code&gt;, like above,
-we can pass through a sequence of &lt;code&gt;Result&lt;/code&gt;s and yield only the &amp;#8220;successful&amp;#8221; values.
-I find this particular idiom to be extremely useful in practice,
-as long as you remember that &lt;code&gt;Err&lt;/code&gt;ors will be discarded by it&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;As a final note on &lt;code&gt;filter_map&lt;/code&gt;,
-you need to keep in mind that regardless of how great it often is,
-not all combinations of &lt;code&gt;filter&lt;/code&gt; and &lt;code&gt;map&lt;/code&gt; should be replaced by it.
-When deciding whether it&amp;#8217;s appropriate in your case,
-it is helpful to consider the equivalence of these two&amp;nbsp;expressions:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;m&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="n"&gt;iter&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filter_map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;m&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Simply put, if you find yourself writing conditions like this inside &lt;code&gt;filter_map&lt;/code&gt;,
-you&amp;#8217;re probably better off with two separate processing&amp;nbsp;steps.&lt;/p&gt;
-&lt;h4&gt;collect()&lt;/h4&gt;
-&lt;p&gt;Let&amp;#8217;s go back to the last example with a sequence of &lt;code&gt;Result&lt;/code&gt;s.
-Since the final sequence won&amp;#8217;t include any &lt;code&gt;Err&lt;/code&gt;oneous values,
-you may be wondering if there is a way to preserve&amp;nbsp;them.&lt;/p&gt;
-&lt;p&gt;In more formal terms, the question is about turning a vector of results
-(&lt;code&gt;Vec&amp;lt;Result&amp;lt;T, E&amp;gt;&amp;gt;&lt;/code&gt;) into a result with a vector (&lt;code&gt;Result&amp;lt;Vec&amp;lt;T&amp;gt;, E&amp;gt;&lt;/code&gt;).
-We&amp;#8217;d like for this aggregated result to only be &lt;code&gt;Ok&lt;/code&gt;
-if &lt;em&gt;all&lt;/em&gt; original results were &lt;code&gt;Ok&lt;/code&gt;.
-Otherwise, we should just get the first &lt;code&gt;Err&lt;/code&gt;or.&lt;/p&gt;
-&lt;p&gt;Believe it or not, but this is probably &lt;em&gt;the&lt;/em&gt; most common Rust problem!&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
-&lt;p&gt;Of course, that doesn&amp;#8217;t necessarily mean the problem is particularly hard.
-Possible solutions exist in both an iterator&amp;nbsp;version:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;fold&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[]),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_mut&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;});&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;and in a loop&amp;nbsp;form:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[]);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;in&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;r&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_mut&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;break&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;but I suspect not many people would call them clear and readable,
-let alone pretty&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;Fortunately, you don&amp;#8217;t need to pollute your codebase with any of those workarounds.
-Rust offers an out-of-the-box solution which solves this particular problem,
-and its only flaw is one that I hope to address through this very&amp;nbsp;post.&lt;/p&gt;
-&lt;p&gt;So, here it&amp;nbsp;goes:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Yep, that&amp;#8217;s all of&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;The background story is that &lt;code&gt;Result&amp;lt;Vec&amp;lt;T&amp;gt;, E&amp;gt;&lt;/code&gt; simply &amp;#8220;knows&amp;#8221;
-how to construct itself from a sequence of &lt;code&gt;Result&lt;/code&gt;s.
-Unfortunately, this &lt;span class="caps"&gt;API&lt;/span&gt; is hidden behind Rust&amp;#8217;s iterator abstraction,
-and specifically the fact that
-&lt;code&gt;Result&lt;/code&gt; implements &lt;a href="https://doc.rust-lang.org/1.2.0/std/iter/trait.FromIterator.html"&gt;&lt;code&gt;FromIterator&lt;/code&gt;&lt;/a&gt;
-in this particular manner.
-The way
-&lt;a href="https://doc.rust-lang.org/std/result/enum.Result.html"&gt;the documentation page for &lt;code&gt;Result&lt;/code&gt;&lt;/a&gt;
-is structured, however &amp;#8212; with trait implementations at the very end &amp;#8212;
-ensures this useful fact remains virtually&amp;nbsp;undiscoverable.&lt;/p&gt;
-&lt;p&gt;Because let&amp;#8217;s be honest: no one scrolls that&amp;nbsp;far.&lt;/p&gt;
-&lt;p&gt;Incidentally, &lt;code&gt;Option&lt;/code&gt; offers analogous functionally:
-a sequence of &lt;code&gt;Option&amp;lt;T&amp;gt;&lt;/code&gt; can be &lt;code&gt;collect&lt;/code&gt;ed into &lt;code&gt;Option&amp;lt;Vec&amp;lt;T&amp;gt;&amp;gt;&lt;/code&gt;,
-which will be &lt;code&gt;None&lt;/code&gt; if any of the input elements were.
-As you may suspect, this fact is equally hard to find in the relevant&amp;nbsp;docs.&lt;/p&gt;
-&lt;p&gt;But the good news is: you know about all this now! :)
-And perhaps thanks to this post,
-those handy tricks become a little better in a wider Rust&amp;nbsp;community.&lt;/p&gt;
-&lt;h4&gt;partition()&lt;/h4&gt;
-&lt;p&gt;The last technique I wanted to present here follows naturally
-from the other idioms that apply to &lt;code&gt;Result&lt;/code&gt;s.
-Instead of extracting just the &lt;code&gt;Ok&lt;/code&gt; values with &lt;code&gt;flat_map&lt;/code&gt;,
-or keeping only the first error through &lt;code&gt;collect&lt;/code&gt;,
-we will now learn how to retain all the errors &lt;em&gt;and&lt;/em&gt; all the values,
-both neatly&amp;nbsp;separated.&lt;/p&gt;
-&lt;p&gt;The &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.partition"&gt;&lt;code&gt;partition&lt;/code&gt; method&lt;/a&gt;,
-as this is what the section is about,
-is essentially a more powerful variant of &lt;code&gt;filter&lt;/code&gt;.
-While the latter only returns items that &lt;em&gt;do&lt;/em&gt; match a predicate,
-&lt;code&gt;partition&lt;/code&gt; will also give us the ones which &lt;em&gt;don&amp;#8217;t&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Using it to slice an iterable of &lt;code&gt;Result&lt;/code&gt;s is&amp;nbsp;straightforward:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;oks&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fails&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;results&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;partition&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;is_ok&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The only thing that remains cumbersome is
-the fact that both parts of the resulting tuple still contain just &lt;code&gt;Result&lt;/code&gt;s.
-Ideally, we would like them to be already unwrapped into values and errors,
-but unfortunately we need to do this&amp;nbsp;ourselves:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;values&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;oks&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;errors&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fails&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unwrap_err&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;collect&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;As an alternative,
-&lt;a href="https://docs.rs/itertools/0.6.0/itertools/trait.Itertools.html#method.partition_map"&gt;the &lt;code&gt;partition_map&lt;/code&gt; method&lt;/a&gt;
-from the &lt;a href="https://crates.io/crates/itertools"&gt;&lt;code&gt;itertools&lt;/code&gt; crate&lt;/a&gt;
-can accomplish the same thing in a single step,
-albeit a more verbose&amp;nbsp;one.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;A symmetrical technique is to use &lt;code&gt;.filter_map(Result::err)&lt;/code&gt; to get just
-the &lt;code&gt;Err&lt;/code&gt;or objects, but that&amp;#8217;s probably much less useful
-as it drops all the successful values.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Based on my completely unsystematic and anecdotal observations,
-someone asks about this on the #rust-beginners &lt;span class="caps"&gt;IRC&lt;/span&gt; approximately &lt;em&gt;every other day&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;The &lt;code&gt;fold&lt;/code&gt; variant is also rife with type inference traps,
-often requiring explicit type annotations, a &amp;#8220;no-op&amp;#8221; &lt;code&gt;Err&lt;/code&gt; arm in &lt;code&gt;match&lt;/code&gt;,
-or both.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="iterators"></category></entry><entry><title>Arguments to Python generator functions</title><link href="http://xion.io/post/code/python-generator-args.html" rel="alternate"></link><updated>2017-04-02T22:10:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-03-14:post/code/python-generator-args.html</id><summary type="html">&lt;p&gt;In Python, a &lt;em&gt;generator function&lt;/em&gt; is one that
-contains a &lt;code&gt;yield&lt;/code&gt; statement inside the function body.
-Although this language construct has many fascinating use cases
-(&lt;a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"&gt;&lt;span class="caps"&gt;PDF&lt;/span&gt;&lt;/a&gt;),
-the most common one is creating concise and readable&amp;nbsp;iterators.&lt;/p&gt;
-&lt;h4&gt;A typical&amp;nbsp;case&lt;/h4&gt;
-&lt;p&gt;Consider, for example, this simple&amp;nbsp;function:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-    &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;which creates an (infinite) iterator over all multiples of given integer.
-A sample of its output looks like&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;itertools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;islice&lt;/span&gt;
-&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;islice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
-&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;15&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;25&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;30&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;35&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;40&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;45&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;50&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;If you were to replicate in a language such as Java or Rust
-&amp;#8212; neither of which supports an equivalent of &lt;code&gt;yield&lt;/code&gt; &amp;#8212;
-you&amp;#8217;d end up writing an &lt;em&gt;iterator&lt;/em&gt; class.
-Python also has them, of&amp;nbsp;course:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;current&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__iter__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;current&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;current&lt;/span&gt;
-
-    &lt;span class="n"&gt;__next__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;  &lt;span class="c"&gt;# Python 3&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;but they are usually not the first choice&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;It&amp;#8217;s also pretty easy to see why:
-they require explicit bookkeeping of any auxiliary state between iterations.
-Perhaps it&amp;#8217;s not too much to ask for a trivial walk over integers,
-but it can get quite tricky if we were to iterate over recursive data structures,
-like trees or graphs. In &lt;code&gt;yield&lt;/code&gt;-based generators, this isn&amp;#8217;t a problem,
-because the state is stored within local variables on the coroutine&amp;nbsp;stack.&lt;/p&gt;
-&lt;h4&gt;Lazy!&lt;/h4&gt;
-&lt;p&gt;It&amp;#8217;s important to remember, however, that
-generator functions behave differently than regular functions do,
-even if the surface appearance often says&amp;nbsp;otherwise.&lt;/p&gt;
-&lt;p&gt;The difference I wanted to explore in this post becomes apparent
-when we add some argument checking to the initial&amp;nbsp;example:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;ValueError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;expected a natural number, got &lt;/span&gt;&lt;span class="si"&gt;%r&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;,))&lt;/span&gt;
-
-    &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;With that &lt;code&gt;if&lt;/code&gt; in place, passing a negative number shall result in an exception.
-Yet when we attempt to do just that, it will seem as if nothing is&amp;nbsp;happening:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;And to a certain degree, this is pretty much correct.
-Simply &lt;em&gt;calling&lt;/em&gt; a generator function does comparatively little,
-and doesn&amp;#8217;t actually execute any of its code!
-Instead, we get back a &lt;em&gt;generator object&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt;
-&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;generator&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt; &lt;span class="n"&gt;at&lt;/span&gt; &lt;span class="mh"&gt;0x10f0ceb40&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;which is essentially a built-in analogue to the &lt;code&gt;Multiples&lt;/code&gt; iterator instance.
-Commonly, it is said that both generator functions and iterator classes are &lt;em&gt;lazy&lt;/em&gt;:
-they only do work when we asked (i.e. iterated&amp;nbsp;over).&lt;/p&gt;
-&lt;h4&gt;Getting&amp;nbsp;eager&lt;/h4&gt;
-&lt;p&gt;Oftentimes, this is perfectly okay.
-The laziness of generators is in fact one of their great strengths,
-which is particularly evident in the &lt;a href="https://pymotw.com/2/itertools/"&gt;immense usefulness&lt;/a&gt;
-of &lt;a href="http://docs.python.org/2/library/itertools.html"&gt;the&lt;code&gt;itertools&lt;/code&gt; module&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;On the other hand, however,
-delaying argument checks and similar operations until later may hamper debugging.
-The classic engineering principle of &lt;a href="https://en.wikipedia.org/wiki/Fail-fast"&gt;failing fast&lt;/a&gt;
-applies here very fittingly: any errors should be signaled immediately.
-In Python, this means raising exceptions as soon as problems are&amp;nbsp;detected.&lt;/p&gt;
-&lt;p&gt;Fortunately, it is possible to reconcile the benefits of laziness
-with (more) defensive programming.
-We can make the generator functions only a &lt;em&gt;little&lt;/em&gt; more eager,
-just enough to verify the correctness of their&amp;nbsp;arguments.&lt;/p&gt;
-&lt;p&gt;The trick is simple. We shall extract an &lt;em&gt;inner&lt;/em&gt; generator function
-and only call it after we have checked the&amp;nbsp;arguments:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;ValueError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;expected a natural number, got &lt;/span&gt;&lt;span class="si"&gt;%r&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;,))&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-            &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-            &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;From the caller&amp;#8217;s point of view, nothing has changed in the typical&amp;nbsp;case:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;generator&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt; &lt;span class="n"&gt;at&lt;/span&gt; &lt;span class="mh"&gt;0x110579190&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;but if we try to make an incorrect invocation now,
-the problem is detected &lt;em&gt;immediately&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;!-- --&gt;
-
-&lt;div class="highlight"&gt;&lt;pre&gt;Traceback (most recent call last):
-  File &amp;quot;&amp;lt;pyshell#2&amp;gt;&amp;quot;, line 1, in &amp;lt;module&amp;gt;
-    multiples(of=-5)
-  File &amp;quot;&amp;lt;pyshell#0&amp;gt;&amp;quot;, line 4, in multiples
-    raise ValueError(&amp;quot;expected a natural number, got %r&amp;quot; % (of,))
-ValueError: expected a natural number, got -5
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Pretty neat, especially for something that requires only two lines of&amp;nbsp;code!&lt;/p&gt;
-&lt;h4&gt;The last&amp;nbsp;(micro)optimization&lt;/h4&gt;
-&lt;p&gt;Indeed, we didn&amp;#8217;t even have to pass the arguments to the inner (generator) function,
-because they are already captured by the&amp;nbsp;closure.&lt;/p&gt;
-&lt;p&gt;Unfortunately, this also has a slight performance cost.
-A captured variable (also known as a &lt;em&gt;cell variable&lt;/em&gt;) is stored on the function object itself,
-so Python has to emit
-&lt;a href="http://holdenweb.blogspot.com/2014/07/closures-arent-easy.html"&gt;a different bytecode instruction&lt;/a&gt;
-(&lt;code&gt;LOAD_DEREF&lt;/code&gt;) that involves
-an &lt;a href="http://stupidpythonideas.blogspot.com/2015/12/how-lookup-works.html"&gt;extra pointer dereference&lt;/a&gt;.
-Normally, this is not a problem, but in a tight generator loop it can make a&amp;nbsp;difference.&lt;/p&gt;
-&lt;p&gt;We can eliminate this extra work&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt; by passing the parameters&amp;nbsp;explicitly:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;    &lt;span class="c"&gt;# (snip)&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-            &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-            &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This turns them into local variables of the inner function,
-replacing the &lt;code&gt;LOAD_DEREF&lt;/code&gt; instructions with (aptly named) &lt;code&gt;LOAD_FAST&lt;/code&gt; ones.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Technically, the &lt;em&gt;Multiples&lt;/em&gt; class is here is both an &lt;em&gt;iterator&lt;/em&gt;
-(because it has the &lt;code&gt;next&lt;/code&gt;/&lt;code&gt;__next__&lt;/code&gt; methods) and &lt;em&gt;iterable&lt;/em&gt;
-(because it has &lt;code&gt;__iter__&lt;/code&gt; method that returns an iterator, which happens to be the same object).
-This is common feature of iterators that are not associated with any collection,
-like the ones defined in the built-in &lt;a href="http://docs.python.org/2/library/itertools.html"&gt;&lt;code&gt;itertools&lt;/code&gt; module&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Note that if you engage in this kind of microoptimizations,
-I&amp;#8217;d assume you have already &lt;a href="https://www.python.org/doc/essays/list2str/"&gt;changed your global lookup into local ones&lt;/a&gt; :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="generators"></category><category term="functions"></category><category term="arguments"></category><category term="closures"></category></entry><entry><title>The “let” type trick in Rust</title><link href="http://xion.io/post/code/rust-let-unit.html" rel="alternate"></link><updated>2017-02-01T18:42:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-02-01:post/code/rust-let-unit.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a neat little trick
-that&amp;#8217;s especially useful if you&amp;#8217;re just starting out with&amp;nbsp;Rust.&lt;/p&gt;
-&lt;p&gt;Because the language uses &lt;a href="https://en.wikipedia.org/wiki/Type_inference"&gt;type inference&lt;/a&gt; all over the place
-(or at least within a single function),
-it can often be difficult to figure out the type of an expression by yourself.
-Such knowledge is very handy in resolving compiler errors,
-which may be rather complex when generics and traits are&amp;nbsp;involved.&lt;/p&gt;
-&lt;p&gt;The formula itself is very simple.
-Its shortest, most common version &amp;#8212; and arguably the cleverest one, too &amp;#8212;
-is the following &lt;code&gt;let&lt;/code&gt; binding:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_expression&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;In virtually all cases, this binding will cause a type error on its own,
-so it&amp;#8217;s not something you&amp;#8217;d leave permanently in your regular&amp;nbsp;code.&lt;/p&gt;
-&lt;p&gt;But the important part here is the exact error message you&amp;nbsp;get:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;error[E0308]: mismatched types
-  --&amp;gt; &amp;lt;anon&amp;gt;:42:13
-   |
-42 |         let () = some_expression;
-   |             ^^ expected f64, found ()
-   |
-   = note: expected type `f64`
-   = note:    found type `()`
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The type expected by Rust here (in this example, &lt;code&gt;f64&lt;/code&gt;)
-is also the type of &lt;code&gt;some_expression&lt;/code&gt;. No more, no&amp;nbsp;less.&lt;/p&gt;
-&lt;p&gt;There is nothing particularly wrong with using this technique
-and not caring too much how it works under the hood.
-But if you do want to know a little more what exactly is going on here,
-the rest of this post covers it in some&amp;nbsp;detail.&lt;/p&gt;
-&lt;h4&gt;The&amp;nbsp;unit&lt;/h4&gt;
-&lt;p&gt;Firstly, you may be wondering about this curious &lt;code&gt;()&lt;/code&gt; type
-that the compiler has apparently found in the statement above.
-The official name for it is the &lt;em&gt;unit type&lt;/em&gt;,
-and it has several notable&amp;nbsp;characteristics:&lt;/p&gt;
-&lt;ol&gt;
-&lt;li&gt;There exists only one value&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt; of this type: &lt;code&gt;()&lt;/code&gt; (same symbol as the type&amp;nbsp;itself).&lt;/li&gt;
-&lt;li&gt;It represents an empty tuple and has therefore the size of&amp;nbsp;zero.&lt;/li&gt;
-&lt;li&gt;It is the type of any expression that&amp;#8217;s turned into a &lt;em&gt;statement&lt;/em&gt;.&lt;/li&gt;
-&lt;/ol&gt;
-&lt;p&gt;That last fact is particularly interesting,
-as it makes &lt;code&gt;()&lt;/code&gt; appear in error messages that are more indicative of syntactic mishaps
-rather than mismatched&amp;nbsp;types:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;positive_signum&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="k"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="k"&gt;i32&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;!-- --&gt;
-
-&lt;div class="highlight"&gt;&lt;pre&gt;error[E0308]: mismatched types
- --&amp;gt; &amp;lt;anon&amp;gt;:2:17
-  |
-2 |     if x &amp;gt; 0 { 1i32 }
-  |                ^^^^ expected (), found i32
-  |
-  = note: expected type `()`
-  = note:    found type `i32`
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;If you think about it, however, it makes perfect sense.
-The last expression inside a function body is the return value.
-This also means that everything &lt;em&gt;before&lt;/em&gt; it has to be a statement:
-an expression of type &lt;code&gt;()&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Working its way backward,
-Rust will therefore expect only such expressions before the final &lt;code&gt;0i32&lt;/code&gt;.
-This, in turn, puts the same constraint on the body of the &lt;code&gt;if&lt;/code&gt; statement.
-The expression &lt;code&gt;1i32&lt;/code&gt; (with its type of &lt;code&gt;i32&lt;/code&gt;) clearly violates it,
-causing the above error&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;h4&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Expanded&amp;#8221;&amp;nbsp;version&lt;/h4&gt;
-&lt;p&gt;A natural question now arises:
-is &lt;code&gt;()&lt;/code&gt; inside of the &lt;code&gt;let () = ...&lt;/code&gt; formula a &lt;em&gt;type&lt;/em&gt; &lt;code&gt;()&lt;/code&gt; or a &lt;em&gt;value&lt;/em&gt; &lt;code&gt;()&lt;/code&gt;?&amp;#8230;&lt;/p&gt;
-&lt;p&gt;To answer that,
-it&amp;#8217;s quite helpful to compare and contrast the original binding with its longer&amp;nbsp;&amp;#8220;equivalent&amp;#8221;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;some_expression&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This statement is conceptually very similar to our original one.
-The error message it causes can also be used to debug issues with type&amp;nbsp;inference.&lt;/p&gt;
-&lt;p&gt;Despite some cryptic symbols, the syntax here should also be more familiar.
-It occurs in many typical, ordinary bindings you can see in everyday Rust code.
-Here&amp;#8217;s an&amp;nbsp;example:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;where it&amp;#8217;s abundantly clear that &lt;code&gt;i32&lt;/code&gt; is the type of variable &lt;code&gt;x&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Analogously above, you can see that
-an unnamed symbol (&lt;code&gt;_&lt;/code&gt;, the underscore) is declared to be of type &lt;code&gt;()&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;So in this alternate phrasing, &lt;code&gt;()&lt;/code&gt; denotes a &lt;em&gt;type&lt;/em&gt;.&lt;/p&gt;
-&lt;h4&gt;Let a pattern&amp;nbsp;emerge&lt;/h4&gt;
-&lt;p&gt;What about the original form, &lt;code&gt;let () = ...&lt;/code&gt;?
-There is no explicit type declaration here (i.e. no colon),
-and a pair of empty parentheses isn&amp;#8217;t a name that could be assigned a new&amp;nbsp;value.&lt;/p&gt;
-&lt;p&gt;What exactly is happening there,&amp;nbsp;then?&amp;#8230;&lt;/p&gt;
-&lt;p&gt;Well, it isn&amp;#8217;t really anything special.
-While it may look exceptional, and totally unlike common usages of &lt;code&gt;let&lt;/code&gt;,
-it is in fact exactly the same thing as a mundane &lt;code&gt;let x = 5&lt;/code&gt;.
-The potential misconception here is about the exact meaning of &lt;code&gt;x&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;The simple version is that it&amp;#8217;s a name for the bound expression.&lt;br&gt;
-But the actual truth is that it&amp;#8217;s a &lt;em&gt;pattern&lt;/em&gt; which is matched against that&amp;nbsp;expression.&lt;/p&gt;
-&lt;p&gt;The terms &amp;#8220;pattern&amp;#8221; and &amp;#8220;matching&amp;#8221; here refer to the same mechanism
-that occurrs within &lt;a href="https://doc.rust-lang.org/book/match.html"&gt;the &lt;code&gt;match&lt;/code&gt; statement&lt;/a&gt;.
-You could even imagine a peculiar form of desugaring,
-where a &lt;code&gt;let&lt;/code&gt; statement is converted into a semantically equivalent &lt;code&gt;match&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;original&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;desugared&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;i32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This analogy works perfectly&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;, because the patterns here are &lt;em&gt;irrefutable&lt;/em&gt;:
-any value can match them, as all we&amp;#8217;re doing is giving the value a name.
-Should the case be any different, Rust would reject our &lt;code&gt;let&lt;/code&gt; statement &amp;#8212;
-just like it rejects a &lt;code&gt;match&lt;/code&gt; block that doesn&amp;#8217;t include branches for all possible&amp;nbsp;outcomes.&lt;/p&gt;
-&lt;h4&gt;An empty&amp;nbsp;pattern&lt;/h4&gt;
-&lt;p&gt;But just because a pattern has to always match the expression,
-it doesn&amp;#8217;t mean only simple identifiers like &lt;code&gt;x&lt;/code&gt; or &lt;code&gt;y&lt;/code&gt; are permitted in &lt;code&gt;let&lt;/code&gt;.
-If Rust is able to statically ensure a match,
-it is perfectly &lt;span class="caps"&gt;OK&lt;/span&gt; to use a pattern with an internal structure&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;num&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Wrapping&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Wrapping&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Wrapping&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Of course, something like this is just superfluous and silly.
-Same mechanism, however, is also behind the ability to &amp;#8220;initialize multiple&amp;nbsp;variables&amp;#8221;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;What really happens is that we take a &lt;em&gt;tuple expression&lt;/em&gt; &lt;code&gt;(0, 1)&lt;/code&gt;
-and match it against a pattern &lt;code&gt;(x, y)&lt;/code&gt;.
-Because it is trivially satisified,
-we have the symbols &lt;code&gt;x&lt;/code&gt; and &lt;code&gt;y&lt;/code&gt; bound to the tuple elements.
-For all intents and purposes, this is equivalent to having two separate &lt;code&gt;let&lt;/code&gt; statements:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Of course, a 2-tuple is not the only pattern of this kind we can use in &lt;code&gt;let&lt;/code&gt;.
-Others possible patterns include, for example, the &lt;em&gt;0-tuple&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Or, as we express it in Rust, &lt;code&gt;()&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Now that&amp;#8217;s a truly useless statement!
-But it also harkens straight to our debug binding.
-It should be pretty clear now how it&amp;nbsp;works:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;The &lt;code&gt;()&lt;/code&gt; stanza on the left is neither a type nor a name, but a &lt;em&gt;pattern&lt;/em&gt;.&lt;/li&gt;
-&lt;li&gt;The expression on the right is being &lt;em&gt;matched&lt;/em&gt; against this&amp;nbsp;pattern.&lt;/li&gt;
-&lt;li&gt;Because the types of both of those things differ, the compiler signals an appropriate&amp;nbsp;error.&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;The curious thing is that there is nothing inherently magical about using &lt;code&gt;()&lt;/code&gt; on the left hand side.
-It&amp;#8217;s simply the shortest pattern we can put after &lt;code&gt;let&lt;/code&gt;.
-It&amp;#8217;s also one that&amp;#8217;s extremely unlikely to actually match the right hand side,
-which ensures we get the desired error.
-But if you substituted something equally exotic and rare &amp;#8212; say, &lt;code&gt;(x, ((y, z), Wrapping(w)))&lt;/code&gt; &amp;#8212;
-it would work equally well as a rudimentary type&amp;nbsp;detector.&lt;/p&gt;
-&lt;p&gt;Except for one thing, of course: nobody wants to type this much!
-Borne out of this frugality (and/or laziness), a custom thus emerged to use &lt;code&gt;()&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Short, sweet, and &lt;em&gt;clever&lt;/em&gt;.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;A more formal, type-theoretic formulation of this fact
-is saying that &lt;code&gt;()&lt;/code&gt; is &lt;em&gt;inhabited&lt;/em&gt; by only one value.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;In case you are wondering, one possible fix here is to &lt;code&gt;return 1i32;&lt;/code&gt; inside the &lt;code&gt;if&lt;/code&gt;.
-An (arguably more idiomatic) alternative is to put &lt;code&gt;0i32&lt;/code&gt; in an &lt;code&gt;else&lt;/code&gt; branch,
-turning the entire &lt;code&gt;if&lt;/code&gt; construct into the last &amp;#8212; and only &amp;#8212; expression in the function body.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;Note how each nested &lt;code&gt;match&lt;/code&gt; is also introducing a new scope,
-exactly like the
-&lt;a href="https://doc.rust-lang.org/1.10.0/book/references-and-borrowing.html#thinking-in-scopes"&gt;canonical desugaring&lt;/a&gt;
-of &lt;code&gt;let&lt;/code&gt; which is often used to explain lifetimes and borrowing.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:4"&gt;
-&lt;p&gt;Unfortunately, Rust isn&amp;#8217;t currently capable of proving that the pattern is irrefutable in all obvious cases.
-For example, &lt;code&gt;let Some(x) = Some(42);&lt;/code&gt; will be rejected due to the existence of a &lt;code&gt;None&lt;/code&gt; variant in &lt;code&gt;Option&lt;/code&gt;,
-even though it isn&amp;#8217;t actually used in the (constant) expression on the right.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="types"></category><category term="pattern matching"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="async"></category><category term="Tokio"></category><category term="futures"></category><category term="HTTP"></category></entry></feed>

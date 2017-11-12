@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+<meta name="author" content="Karol Kuczmarski" />
+<meta name="description" content="Alternative clickbait title: My Little Crates: Rust is Magic :-) Due to its relatively scant standard library, programming in Rust inevitably involves pulling in a good number of third-party dependencies. Some of them deal with problems that are solved with built-ins in languages that take a more “batteries included” approach. A good example would be the Python’s re module, whose moral equivalent in the Rust ecosystem is the regex crate. Things like regular expressions, however, represent comparatively large problems. It isn’t very surprising that dedicated libraries exist to address them. It is less common for a language to offer small packages that target very specialized applications. As in, one function/type/macro-kind of specialized, or perhaps only a little larger than that. In this post, we’ll take a whirlwind tour through a bunch of such essential “micropackages”. either Rust has the built-in Result type, which is a sum1 of an Ok outcome or an Error. It forms the basis of a general error handling mechanism in the language. Structurally, however, Result&lt;T, E&gt; is just an alternative between the types T and E. You may want to use such an enum for other purposes than representing results of fallible operations. Unfortunately, because of the strong inherent meaning of Result, such usage would be unidiomatic and highly confusing. This is why the either crate exists. It contains the following Either type: enum Either&lt;L, R&gt; { Left(L), Right(R), } While it is isomorphic to Result, it carries no connotation to the entrenched error handling practices2. Additionally, it offers symmetric combinator methods such as map_left or right_and_then for chaining computations involving the Either values. lazy_static As a design choice, Rust doesn’t allow for safe access to global mutable variables. The semi-standard way of introducing those into your code is therefore the lazy_static crate. However, the most important usage for it is to declare lazy initialized constants of more complex types: lazy_static! { static ref TICK_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60); } The trick isn’t entirely transparent3, but it’s the best you can do until we get a proper support for compile-time expressions in the language. maplit To go nicely with the crate above — and to act as a natural syntactic follow-up to the standard vec![] macro — we’ve got the maplit crate. What it does is add HashMap and HashSet “literals” by defining some very simple hashmap! and hashset! macros: lazy_static! { static ref IMAGE_EXTENSIONS: HashMap&lt;&amp;&#39;static str, ImageFormat&gt; = hashmap!{ &#34;gif&#34; =&gt; ImageFormat::GIF, &#34;jpeg&#34; =&gt; ImageFormat::JPEG, &#34;jpg&#34; =&gt; ImageFormat::JPG, &#34;png&#34; =&gt; ImageFormat::PNG, }; } Internally, hashmap! expands to the appropriate amount of HashMap::insert calls, returning the finished hash map with all the keys and values given. try_opt Before the ? operator was introduced to Rust, the idiomatic way of propagating erroneous Results was the try! macro. A similar macro can also be implemented for Option types so that it propagates the Nones upstream. The try_opt crate is doing precisely that, and the macro can be used in a straightforward manner: fn parse_ipv4(s: &amp;str) -&gt; Option&lt;(u8, u8, u8, u8)&gt; { lazy_static! { static ref RE: Regex = Regex::new( r&#34;^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$&#34; ).unwrap(); } let caps = try_opt!(RE.captures(s)); let a = try_opt!(caps.get(1)).as_str(); let b = try_opt!(caps.get(2)).as_str(); let c = try_opt!(caps.get(3)).as_str(); let d = try_opt!(caps.get(4)).as_str(); Some(( try_opt!(a.parse().ok()), try_opt!(b.parse().ok()), try_opt!(c.parse().ok()), try_opt!(d.parse().ok()), )) } Until Rust supports ? for Options (which is planned), this try_opt! macro can serve as an acceptable workaround. exitcode It is a common convention in basically every mainstream OS that a process has finished with an error if it exits with a code different than 0 (zero), Linux divides the space of error codes further, and — along with BSD — it also includes the sysexits.h header with some more specialized codes. These have been adopted by great many programs and languages. In Rust, those semi-standard names for common errors can be used, too. All you need to do is add the exitcode crate to your project: fn main() { let options = args::parse().unwrap_or_else(|e| { print_args_error(e).unwrap(); std::process::exit(exitcode::USAGE); }); In addition to constants like USAGE or TEMPFAIL, the exitcode crate also defines an ExitCode alias for the integer type holding the exit codes. You can use it, among other things, as a return type of your top-level functions: let code = do_stuff(options); std::process::exit(code); } fn do_stuff(options: Options) -&gt; exitcode::ExitCode { // ... } enum-set In Java, there is a specialization of the general Set interface that works for enum types: the EnumSet class. Its members are represented very compactly as bits rather than hashed elements. A similar (albeit slightly less powerful4) structure has been implemented in the enum-set crate. Given a #[repr(u32)] enum type: #[repr(u32)] #[derive(Clone, Copy, Debug Eq, Hash, PartialEq)] enum Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday, } you can create an EnumSet of its variants: let mut weekend: EnumSet&lt;Weekday&gt; = EnumSet::new(); weekend.insert(Weekday::Saturday); weekend.insert(Weekday::Sunday); as long as you provide a simple trait impl that specifies how to convert those enum values to and from u32: impl enum_set::CLike for Weekday { fn to_u32(&amp;self) -&gt; u32 { *self as u32 } unsafe fn from_u32(v: u32) -&gt; Self { std::mem::transmute(v) } } The advantage is having a set structure represented by a single, unsigned 32-bit integer, leading to O(1) complexity of all common set operations. This includes membership checks, the union of two sets, their intersection, difference, and so on. antidote As part of fulfilling the promise of Fearless Concurrency™, Rust offers multiple synchronization primitives that are all defined in the std::sync module. One thing that Mutex, RwLock, and similar mechanisms there have in common is that their locks can become “poisoned” if a thread panicks while holding them. As a result, acquiring a lock requires handling the potential PoisonError. For many programs, however, lock poisoning is not even a remote, but a straight-up impossible situation. If you follow the best practices of concurrent resource sharing, you won’t be holding locks for more than a few instructions, devoid of unwraps or any other opportunity to panic!(). Unfortunately, you cannot prove this to the Rust compiler statically, so it will still require you to handle a PoisonError that cannot happen. This is where the aptly named antidote crate crate offers help. In it, you can find all the same locks &amp; guards API that is offered by std::sync, just without the PoisonError. In many cases, this removal has radically simplified the interface, for example by turning Result&lt;Guard, Error&gt; return types into just Guard. The caveat, of course, is that you need to ensure all threads holding these “immunized” locks either: don’t panic at all; or don’t leave guarded resources in an inconsistent state if they do panic Like it’s been mentioned earlier, the best way to make that happen is to keep lock-guarded critical sections minimal and infallible. matches Pattern matching is one of the most important features of Rust, but some of the relevant language constructs have awkward shortcomings. The if let conditional, for example, cannot be combined with boolean tests: if let Foo(_) = x &amp;&amp; y.is_good() { and thus requires additional nesting, or a different approach altogether. Thankfully, to help with situations like this, there is the matches crate with a bunch of convenient macros. Besides its namesake, matches!: if matches!(x, Foo(_)) &amp;&amp; y.is_good() { it also exposes assertion macros (assert_match! and debug_assert_match!) that can be used in both production and test code. This concludes the overview of small Rust crates, at least for now. To be certain, these crates are by far not the only ones that are small in size and simultaneously almost indispensable. Many more great libraries can be found e.g. in the Awesome Rust registry, though obviously you could argue if all of them are truly “micro” ;-) If you know more crates in the similar vein, make sure to mention them in the comments! A sum type consists of several alternatives, out of which only one has been picked for a particular instance. The other common name for it is a tagged union. ↩ Unless you come from Haskell, that is, where Either is the equivalent of Rust’s Result :) ↩ You will occasionally need an explicit * to trigger the Deref coercion it uses. ↩ It only supports unitary enums of up to 32 variants. ↩" />
+<meta name="keywords" content="Rust, libraries">
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:title" content="Small Rust crates I (almost) always use"/>
+<meta property="og:description" content="Alternative clickbait title: My Little Crates: Rust is Magic :-) Due to its relatively scant standard library, programming in Rust inevitably involves pulling in a good number of third-party dependencies. Some of them deal with problems that are solved with built-ins in languages that take a more “batteries included” approach. A good example would be the Python’s re module, whose moral equivalent in the Rust ecosystem is the regex crate. Things like regular expressions, however, represent comparatively large problems. It isn’t very surprising that dedicated libraries exist to address them. It is less common for a language to offer small packages that target very specialized applications. As in, one function/type/macro-kind of specialized, or perhaps only a little larger than that. In this post, we’ll take a whirlwind tour through a bunch of such essential “micropackages”. either Rust has the built-in Result type, which is a sum1 of an Ok outcome or an Error. It forms the basis of a general error handling mechanism in the language. Structurally, however, Result&lt;T, E&gt; is just an alternative between the types T and E. You may want to use such an enum for other purposes than representing results of fallible operations. Unfortunately, because of the strong inherent meaning of Result, such usage would be unidiomatic and highly confusing. This is why the either crate exists. It contains the following Either type: enum Either&lt;L, R&gt; { Left(L), Right(R), } While it is isomorphic to Result, it carries no connotation to the entrenched error handling practices2. Additionally, it offers symmetric combinator methods such as map_left or right_and_then for chaining computations involving the Either values. lazy_static As a design choice, Rust doesn’t allow for safe access to global mutable variables. The semi-standard way of introducing those into your code is therefore the lazy_static crate. However, the most important usage for it is to declare lazy initialized constants of more complex types: lazy_static! { static ref TICK_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60); } The trick isn’t entirely transparent3, but it’s the best you can do until we get a proper support for compile-time expressions in the language. maplit To go nicely with the crate above — and to act as a natural syntactic follow-up to the standard vec![] macro — we’ve got the maplit crate. What it does is add HashMap and HashSet “literals” by defining some very simple hashmap! and hashset! macros: lazy_static! { static ref IMAGE_EXTENSIONS: HashMap&lt;&amp;&#39;static str, ImageFormat&gt; = hashmap!{ &#34;gif&#34; =&gt; ImageFormat::GIF, &#34;jpeg&#34; =&gt; ImageFormat::JPEG, &#34;jpg&#34; =&gt; ImageFormat::JPG, &#34;png&#34; =&gt; ImageFormat::PNG, }; } Internally, hashmap! expands to the appropriate amount of HashMap::insert calls, returning the finished hash map with all the keys and values given. try_opt Before the ? operator was introduced to Rust, the idiomatic way of propagating erroneous Results was the try! macro. A similar macro can also be implemented for Option types so that it propagates the Nones upstream. The try_opt crate is doing precisely that, and the macro can be used in a straightforward manner: fn parse_ipv4(s: &amp;str) -&gt; Option&lt;(u8, u8, u8, u8)&gt; { lazy_static! { static ref RE: Regex = Regex::new( r&#34;^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$&#34; ).unwrap(); } let caps = try_opt!(RE.captures(s)); let a = try_opt!(caps.get(1)).as_str(); let b = try_opt!(caps.get(2)).as_str(); let c = try_opt!(caps.get(3)).as_str(); let d = try_opt!(caps.get(4)).as_str(); Some(( try_opt!(a.parse().ok()), try_opt!(b.parse().ok()), try_opt!(c.parse().ok()), try_opt!(d.parse().ok()), )) } Until Rust supports ? for Options (which is planned), this try_opt! macro can serve as an acceptable workaround. exitcode It is a common convention in basically every mainstream OS that a process has finished with an error if it exits with a code different than 0 (zero), Linux divides the space of error codes further, and — along with BSD — it also includes the sysexits.h header with some more specialized codes. These have been adopted by great many programs and languages. In Rust, those semi-standard names for common errors can be used, too. All you need to do is add the exitcode crate to your project: fn main() { let options = args::parse().unwrap_or_else(|e| { print_args_error(e).unwrap(); std::process::exit(exitcode::USAGE); }); In addition to constants like USAGE or TEMPFAIL, the exitcode crate also defines an ExitCode alias for the integer type holding the exit codes. You can use it, among other things, as a return type of your top-level functions: let code = do_stuff(options); std::process::exit(code); } fn do_stuff(options: Options) -&gt; exitcode::ExitCode { // ... } enum-set In Java, there is a specialization of the general Set interface that works for enum types: the EnumSet class. Its members are represented very compactly as bits rather than hashed elements. A similar (albeit slightly less powerful4) structure has been implemented in the enum-set crate. Given a #[repr(u32)] enum type: #[repr(u32)] #[derive(Clone, Copy, Debug Eq, Hash, PartialEq)] enum Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday, } you can create an EnumSet of its variants: let mut weekend: EnumSet&lt;Weekday&gt; = EnumSet::new(); weekend.insert(Weekday::Saturday); weekend.insert(Weekday::Sunday); as long as you provide a simple trait impl that specifies how to convert those enum values to and from u32: impl enum_set::CLike for Weekday { fn to_u32(&amp;self) -&gt; u32 { *self as u32 } unsafe fn from_u32(v: u32) -&gt; Self { std::mem::transmute(v) } } The advantage is having a set structure represented by a single, unsigned 32-bit integer, leading to O(1) complexity of all common set operations. This includes membership checks, the union of two sets, their intersection, difference, and so on. antidote As part of fulfilling the promise of Fearless Concurrency™, Rust offers multiple synchronization primitives that are all defined in the std::sync module. One thing that Mutex, RwLock, and similar mechanisms there have in common is that their locks can become “poisoned” if a thread panicks while holding them. As a result, acquiring a lock requires handling the potential PoisonError. For many programs, however, lock poisoning is not even a remote, but a straight-up impossible situation. If you follow the best practices of concurrent resource sharing, you won’t be holding locks for more than a few instructions, devoid of unwraps or any other opportunity to panic!(). Unfortunately, you cannot prove this to the Rust compiler statically, so it will still require you to handle a PoisonError that cannot happen. This is where the aptly named antidote crate crate offers help. In it, you can find all the same locks &amp; guards API that is offered by std::sync, just without the PoisonError. In many cases, this removal has radically simplified the interface, for example by turning Result&lt;Guard, Error&gt; return types into just Guard. The caveat, of course, is that you need to ensure all threads holding these “immunized” locks either: don’t panic at all; or don’t leave guarded resources in an inconsistent state if they do panic Like it’s been mentioned earlier, the best way to make that happen is to keep lock-guarded critical sections minimal and infallible. matches Pattern matching is one of the most important features of Rust, but some of the relevant language constructs have awkward shortcomings. The if let conditional, for example, cannot be combined with boolean tests: if let Foo(_) = x &amp;&amp; y.is_good() { and thus requires additional nesting, or a different approach altogether. Thankfully, to help with situations like this, there is the matches crate with a bunch of convenient macros. Besides its namesake, matches!: if matches!(x, Foo(_)) &amp;&amp; y.is_good() { it also exposes assertion macros (assert_match! and debug_assert_match!) that can be used in both production and test code. This concludes the overview of small Rust crates, at least for now. To be certain, these crates are by far not the only ones that are small in size and simultaneously almost indispensable. Many more great libraries can be found e.g. in the Awesome Rust registry, though obviously you could argue if all of them are truly “micro” ;-) If you know more crates in the similar vein, make sure to mention them in the comments! A sum type consists of several alternatives, out of which only one has been picked for a particular instance. The other common name for it is a tagged union. ↩ Unless you come from Haskell, that is, where Either is the equivalent of Rust’s Result :) ↩ You will occasionally need an explicit * to trigger the Deref coercion it uses. ↩ It only supports unitary enums of up to 32 variants. ↩"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io/post/code/rust-little-crates.html"/>
+<meta property="og:type" content="article"/>
+<meta property="article:published_time" content="2017-10-31 15:21:00+00:00"/>
+<meta property="article:modified_time" content=""/>
+<meta property="article:author" content="http://xion.io/">
+<meta property="article:section" content="Code"/>
+<meta property="article:tag" content="Rust"/>
+<meta property="article:tag" content="libraries"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+  <title>Karol Kuczmarski's Blog &ndash; Small Rust crates I (almost) always use</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h1 id="rust-little-crates">Small Rust crates I (almost) always&nbsp;use</h1>
+    <p>Posted on Tue 31 October 2017 in <a href="http://xion.io/category/code.html">Code</a></p>
+  </header>
+  <div>
+    <p>Alternative clickbait title: <em>My Little Crates: Rust is Magic</em>&nbsp;:-)</p>
+<hr />
+<p>Due to its relatively scant standard library,
+programming in Rust inevitably involves pulling in a good number of third-party&nbsp;dependencies.</p>
+<p>Some of them deal with problems that are solved with built-ins
+in languages that take a more &#8220;batteries included&#8221; approach.
+A good example would be the Python&#8217;s <code>re</code> module,
+whose moral equivalent in the Rust ecosystem is <a href="http://docs.rs/regex">the <em>regex</em> crate</a>.</p>
+<p>Things like regular expressions, however, represent comparatively large problems.
+It isn&#8217;t very surprising that dedicated libraries exist to address them.
+It is less common for a language to offer <em>small</em> packages
+that target very specialized&nbsp;applications.</p>
+<p>As in, one function/type/macro-kind of specialized,
+or perhaps only a little larger than&nbsp;that.</p>
+<p>In this post, we&#8217;ll take a whirlwind tour through a bunch of such essential&nbsp;&#8220;micropackages&#8221;.</p>
+<h4>either</h4>
+<p>Rust has the built-in <code>Result</code> type, which is a sum<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> of an <code>Ok</code> outcome or an <code>Err</code>or.
+It forms the basis of a general error handling mechanism in the&nbsp;language.</p>
+<p>Structurally, however, <code>Result&lt;T, E&gt;</code> is just an alternative between the types <code>T</code> and <code>E</code>.
+You may want to use such an enum for other purposes
+than representing results of fallible operations.
+Unfortunately, because of the strong inherent meaning of <code>Result</code>,
+such usage would be unidiomatic and highly&nbsp;confusing.</p>
+<p>This is why the <a href="http://docs.rs/either"><em>either</em> crate</a> exists.
+It contains the following <code>Either</code> type:</p>
+<div class="highlight"><pre><span class="k">enum</span><span class="w"> </span><span class="n">Either</span><span class="o">&lt;</span><span class="n">L</span><span class="p">,</span><span class="w"> </span><span class="n">R</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Left</span><span class="p">(</span><span class="n">L</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Right</span><span class="p">(</span><span class="n">R</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>While it is isomorphic to <code>Result</code>,
+it carries no connotation to the entrenched error handling practices<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+Additionally, it offers symmetric combinator methods such as <code>map_left</code>
+or <code>right_and_then</code> for chaining computations involving the <code>Either</code> values.</p>
+<h4>lazy_static</h4>
+<p>As a design choice, Rust doesn&#8217;t allow for safe access to global mutable variables.
+The semi-standard way of introducing those into your code
+is therefore <a href="http://docs.rs/lazy_static">the <em>lazy_static</em> crate</a>.</p>
+<p>However, the most important usage for it is to declare lazy initialized <em>constants</em>
+of more complex&nbsp;types:</p>
+<div class="highlight"><pre><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">TICK_INTERVAL</span><span class="o">:</span><span class="w"> </span><span class="n">Duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Duration</span><span class="o">::</span><span class="n">from_secs</span><span class="p">(</span><span class="mi">7</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">24</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The trick isn&#8217;t entirely transparent<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>,
+but it&#8217;s the best you can do until we get a proper support
+for <a href="https://github.com/rust-lang/rfcs/issues/322">compile-time expressions</a> in the&nbsp;language.</p>
+<h4>maplit</h4>
+<p>To go nicely with the crate above &#8212;
+and to act as a natural syntactic follow-up to
+<a href="https://doc.rust-lang.org/1.3.0/std/macro.vec!.html">the standard <code>vec![]</code> macro</a> &#8212;
+we&#8217;ve got the <a href="http://docs.rs/maplit"><em>maplit</em> crate</a>.</p>
+<p>What it does is add <code>HashMap</code> and <code>HashSet</code> <span class="dquo">&#8220;</span>literals&#8221; by defining
+some very simple <code>hashmap!</code> and <code>hashset!</code> macros:</p>
+<div class="highlight"><pre><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">IMAGE_EXTENSIONS</span><span class="o">:</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&amp;</span><span class="n">&#39;static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hashmap</span><span class="o">!</span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;gif&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">GIF</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;jpeg&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">JPEG</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;jpg&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">JPG</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;png&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">PNG</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="p">};</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Internally, <code>hashmap!</code> expands to the appropriate amount of <code>HashMap::insert</code> calls,
+returning the finished hash map with all the keys and values&nbsp;given.</p>
+<h4>try_opt</h4>
+<p>Before the <code>?</code> operator was introduced to Rust,
+the idiomatic way of propagating erroneous <code>Result</code>s was the <code>try!</code> macro.</p>
+<p>A similar macro can also be implemented for <code>Option</code> types
+so that it propagates the <code>None</code>s upstream.
+The <a href="http://docs.rs/try_opt"><em>try_opt</em> crate</a> is doing precisely that,
+and the macro can be used in a straightforward&nbsp;manner:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">parse_ipv4</span><span class="p">(</span><span class="n">s</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">RE</span><span class="o">:</span><span class="w"> </span><span class="n">Regex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Regex</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="w"></span>
+<span class="w">            </span><span class="s-Raw">r&quot;^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">caps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">RE</span><span class="p">.</span><span class="n">captures</span><span class="p">(</span><span class="n">s</span><span class="p">));</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">1</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">2</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">3</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">4</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">((</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">b</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">c</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">d</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">    </span><span class="p">))</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Until Rust supports <code>?</code> for <code>Option</code>s (which is <a href="https://github.com/rust-lang/rust/issues/31436">planned</a>),
+this <code>try_opt!</code> macro can serve as an acceptable&nbsp;workaround.</p>
+<h4>exitcode</h4>
+<p>It is a common convention in basically every mainstream <span class="caps">OS</span>
+that a process has finished with an error
+if it exits with a code different than 0 (zero),
+Linux divides the space of error codes <a href="http://www.tldp.org/LDP/abs/html/exitcodes.html">further</a>,
+and &#8212; along with <span class="caps">BSD</span> &#8212; it also includes the <em>sysexits.h</em> header with some more specialized&nbsp;codes.</p>
+<p>These have been adopted by great many programs
+and <a href="https://docs.python.org/3.0/library/os.html#os.EX_OK">languages</a>.
+In Rust, those semi-standard names for common errors can be used, too.
+All you need to do is add <a href="http://docs.rs/exitcode">the <em>exitcode</em> crate</a> to your&nbsp;project:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">options</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">args</span><span class="o">::</span><span class="n">parse</span><span class="p">().</span><span class="n">unwrap_or_else</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">print_args_error</span><span class="p">(</span><span class="n">e</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">process</span><span class="o">::</span><span class="n">exit</span><span class="p">(</span><span class="n">exitcode</span><span class="o">::</span><span class="n">USAGE</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">});</span><span class="w"></span>
+</pre></div>
+
+
+<p>In addition to constants like <code>USAGE</code> or <code>TEMPFAIL</code>,
+the <em>exitcode</em> crate also defines an <code>ExitCode</code> alias
+for the integer type holding the exit codes.
+You can use it, among other things, as a return type of your top-level&nbsp;functions:</p>
+<div class="highlight"><pre><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">do_stuff</span><span class="p">(</span><span class="n">options</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">process</span><span class="o">::</span><span class="n">exit</span><span class="p">(</span><span class="n">code</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">do_stuff</span><span class="p">(</span><span class="n">options</span><span class="o">:</span><span class="w"> </span><span class="n">Options</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">exitcode</span><span class="o">::</span><span class="n">ExitCode</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// ...</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>enum-set</h4>
+<p>In Java, there is a specialization of the general <code>Set</code> interface
+that works for enum types:
+<a href="https://docs.oracle.com/javase/7/docs/api/java/util/EnumSet.html">the <code>EnumSet</code> class</a>.
+Its members are represented very compactly as <em>bits</em> rather than hashed&nbsp;elements.</p>
+<p>A similar (albeit slightly less powerful<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>) structure has been implemented
+in the <a href="http://docs.rs/enum-set"><em>enum-set</em> crate</a>. Given a <code>#[repr(u32)]</code> enum&nbsp;type:</p>
+<div class="highlight"><pre><span class="cp">#[repr(u32)]</span><span class="w"></span>
+<span class="cp">#[derive(Clone, Copy, Debug Eq, Hash, PartialEq)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">Weekday</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Monday</span><span class="p">,</span><span class="w"> </span><span class="n">Tuesday</span><span class="p">,</span><span class="w"> </span><span class="n">Wednesday</span><span class="p">,</span><span class="w"> </span><span class="n">Thursday</span><span class="p">,</span><span class="w"> </span><span class="n">Friday</span><span class="p">,</span><span class="w"> </span><span class="n">Saturday</span><span class="p">,</span><span class="w"> </span><span class="n">Sunday</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>you can create an <code>EnumSet</code> of its&nbsp;variants:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">weekend</span><span class="o">:</span><span class="w"> </span><span class="n">EnumSet</span><span class="o">&lt;</span><span class="n">Weekday</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">EnumSet</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="n">weekend</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">Weekday</span><span class="o">::</span><span class="n">Saturday</span><span class="p">);</span><span class="w"></span>
+<span class="n">weekend</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">Weekday</span><span class="o">::</span><span class="n">Sunday</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>as long as you provide a simple trait impl that specifies
+how to convert those enum values to and from <code>u32</code>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="w"> </span><span class="n">enum_set</span><span class="o">::</span><span class="n">CLike</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">Weekday</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">to_u32</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w">            </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="bp">self</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">from_u32</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Self</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="o">::</span><span class="n">transmute</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The advantage is having a set structure represented by a single, unsigned 32-bit integer,
+leading to <em>O</em>(1) complexity of <em>all</em> common set operations.
+This includes membership checks, the union of two sets, their intersection, difference, and so&nbsp;on.</p>
+<h4>antidote</h4>
+<p>As part of fulfilling the promise of Fearless Concurrency™,
+Rust offers multiple synchronization primitives
+that are all defined in <a href="https://doc.rust-lang.org/std/sync/">the <code>std::sync</code> module</a>.
+One thing that <code>Mutex</code>, <code>RwLock</code>, and similar mechanisms there have in common
+is that their locks can become &#8220;poisoned&#8221; if a thread panicks while holding them.
+As a result, acquiring a lock requires handling the potential <code>PoisonError</code>.</p>
+<p>For many programs, however, lock poisoning is not even a remote,
+but a straight-up <em>impossible</em> situation.
+If you follow the best practices of concurrent resource sharing,
+you won&#8217;t be holding locks for more than a few instructions,
+devoid of <code>unwrap</code>s or any other opportunity to <code>panic!()</code>.
+Unfortunately, you cannot prove this to the Rust compiler statically,
+so it will still require you to handle a <code>PoisonError</code> that cannot&nbsp;happen.</p>
+<p>This is where the aptly named <a href="http://docs.rs/antidote"><em>antidote</em> crate</a> crate offers help.
+In it, you can find all the same locks <span class="amp">&amp;</span> guards <span class="caps">API</span> that is offered by <code>std::sync</code>,
+just without the <code>PoisonError</code>.
+In many cases, this removal has radically simplified the interface,
+for example by turning <code>Result&lt;Guard, Error&gt;</code> return types into just <code>Guard</code>.</p>
+<p>The caveat, of course, is that you need to ensure all threads holding these &#8220;immunized&#8221; locks&nbsp;either:</p>
+<ul>
+<li>don&#8217;t panic at all;&nbsp;or</li>
+<li>don&#8217;t leave guarded resources in an inconsistent state if they <em>do</em>&nbsp;panic</li>
+</ul>
+<p>Like it&#8217;s been mentioned earlier,
+the best way to make that happen is to keep lock-guarded critical sections minimal and&nbsp;infallible.</p>
+<h4>matches</h4>
+<p>Pattern matching is one of the most important features of Rust,
+but some of the relevant language constructs have awkward shortcomings.
+The <code>if let</code> conditional, for example, cannot be combined with boolean&nbsp;tests:</p>
+<div class="highlight"><pre><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="n">Foo</span><span class="p">(</span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">y</span><span class="p">.</span><span class="n">is_good</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+</pre></div>
+
+
+<p>and thus requires additional nesting, or a different approach&nbsp;altogether.</p>
+<p>Thankfully, to help with situations like this,
+there is the <a href="http://docs.rs/matches"><em>matches</em> crate</a> with a bunch of convenient macros.
+Besides <a href="https://docs.rs/matches/0.1.6/matches/macro.matches.html">its namesake, <code>matches!</code></a>:</p>
+<div class="highlight"><pre><span class="k">if</span><span class="w"> </span><span class="n">matches</span><span class="o">!</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">Foo</span><span class="p">(</span><span class="n">_</span><span class="p">))</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">y</span><span class="p">.</span><span class="n">is_good</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+</pre></div>
+
+
+<p>it also exposes assertion macros
+(<a href="https://docs.rs/matches/0.1.6/matches/macro.assert_matches.html"><code>assert_match!</code></a>
+and <a href="https://docs.rs/matches/0.1.6/matches/macro.debug_assert_matches.html"><code>debug_assert_match!</code></a>)
+that can be used in both production and test&nbsp;code.</p>
+<hr />
+<p>This concludes the overview of small Rust crates, at least for&nbsp;now.</p>
+<p>To be certain, these crates are by far not the only ones that are small in size
+and simultaneously almost indispensable.
+Many more great libraries can be found
+e.g. in the <a href="https://github.com/rust-unofficial/awesome-rust#libraries">Awesome Rust registry</a>,
+though obviously you could argue if all of them are truly &#8220;micro&#8221;&nbsp;;-)</p>
+<p>If you know more crates in the similar vein,
+make sure to mention them in the&nbsp;comments!</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A <em>sum type</em> consists of several alternatives,
+out of which only one has been picked for a particular instance.
+The other common name for it is a <em>tagged union</em>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Unless you come from Haskell, that is, where <code>Either</code> is the equivalent of Rust&#8217;s <code>Result</code> :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>You will occasionally need an explicit <code>*</code> to trigger the <code>Deref</code> coercion it uses.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>It only supports unitary enums of up to 32 variants.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <div class="tag-cloud">
+    <p>
+      <a href="http://xion.io/tag/rust.html">Rust</a>
+      <a href="http://xion.io/tag/libraries.html">libraries</a>
+    </p>
+  </div>
+<div id="disqus_thread"></div>
+<script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+</article>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org",
+  "@type": "BlogPosting",
+  "name": "Small Rust crates I (almost) always use",
+  "headline": "Small Rust crates I (almost) always use",
+  "datePublished": "2017-10-31 15:21:00+00:00",
+  "dateModified": "",
+  "author": {
+    "@type": "Person",
+    "name": "Karol Kuczmarski",
+    "url": "http://xion.io/"
+  },
+  "image": "http://xion.io/logo.jpeg",
+  "url": "http://xion.io/post/code/rust-little-crates.html",
+  "description": "Alternative clickbait title: My Little Crates: Rust is Magic :-) Due to its relatively scant standard library, programming in Rust inevitably involves pulling in a good number of third-party dependencies. Some of them deal with problems that are solved with built-ins in languages that take a more “batteries included” approach. A good example would be the Python’s re module, whose moral equivalent in the Rust ecosystem is the regex crate. Things like regular expressions, however, represent comparatively large problems. It isn’t very surprising that dedicated libraries exist to address them. It is less common for a language to offer small packages that target very specialized applications. As in, one function/type/macro-kind of specialized, or perhaps only a little larger than that. In this post, we’ll take a whirlwind tour through a bunch of such essential “micropackages”. either Rust has the built-in Result type, which is a sum1 of an Ok outcome or an Error. It forms the basis of a general error handling mechanism in the language. Structurally, however, Result<T, E> is just an alternative between the types T and E. You may want to use such an enum for other purposes than representing results of fallible operations. Unfortunately, because of the strong inherent meaning of Result, such usage would be unidiomatic and highly confusing. This is why the either crate exists. It contains the following Either type: enum Either<L, R> { Left(L), Right(R), } While it is isomorphic to Result, it carries no connotation to the entrenched error handling practices2. Additionally, it offers symmetric combinator methods such as map_left or right_and_then for chaining computations involving the Either values. lazy_static As a design choice, Rust doesn’t allow for safe access to global mutable variables. The semi-standard way of introducing those into your code is therefore the lazy_static crate. However, the most important usage for it is to declare lazy initialized constants of more complex types: lazy_static! { static ref TICK_INTERVAL: Duration = Duration::from_secs(7 * 24 * 60 * 60); } The trick isn’t entirely transparent3, but it’s the best you can do until we get a proper support for compile-time expressions in the language. maplit To go nicely with the crate above — and to act as a natural syntactic follow-up to the standard vec![] macro — we’ve got the maplit crate. What it does is add HashMap and HashSet “literals” by defining some very simple hashmap! and hashset! macros: lazy_static! { static ref IMAGE_EXTENSIONS: HashMap<&'static str, ImageFormat> = hashmap!{ "gif" => ImageFormat::GIF, "jpeg" => ImageFormat::JPEG, "jpg" => ImageFormat::JPG, "png" => ImageFormat::PNG, }; } Internally, hashmap! expands to the appropriate amount of HashMap::insert calls, returning the finished hash map with all the keys and values given. try_opt Before the ? operator was introduced to Rust, the idiomatic way of propagating erroneous Results was the try! macro. A similar macro can also be implemented for Option types so that it propagates the Nones upstream. The try_opt crate is doing precisely that, and the macro can be used in a straightforward manner: fn parse_ipv4(s: &str) -> Option<(u8, u8, u8, u8)> { lazy_static! { static ref RE: Regex = Regex::new( r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$" ).unwrap(); } let caps = try_opt!(RE.captures(s)); let a = try_opt!(caps.get(1)).as_str(); let b = try_opt!(caps.get(2)).as_str(); let c = try_opt!(caps.get(3)).as_str(); let d = try_opt!(caps.get(4)).as_str(); Some(( try_opt!(a.parse().ok()), try_opt!(b.parse().ok()), try_opt!(c.parse().ok()), try_opt!(d.parse().ok()), )) } Until Rust supports ? for Options (which is planned), this try_opt! macro can serve as an acceptable workaround. exitcode It is a common convention in basically every mainstream OS that a process has finished with an error if it exits with a code different than 0 (zero), Linux divides the space of error codes further, and — along with BSD — it also includes the sysexits.h header with some more specialized codes. These have been adopted by great many programs and languages. In Rust, those semi-standard names for common errors can be used, too. All you need to do is add the exitcode crate to your project: fn main() { let options = args::parse().unwrap_or_else(|e| { print_args_error(e).unwrap(); std::process::exit(exitcode::USAGE); }); In addition to constants like USAGE or TEMPFAIL, the exitcode crate also defines an ExitCode alias for the integer type holding the exit codes. You can use it, among other things, as a return type of your top-level functions: let code = do_stuff(options); std::process::exit(code); } fn do_stuff(options: Options) -> exitcode::ExitCode { // ... } enum-set In Java, there is a specialization of the general Set interface that works for enum types: the EnumSet class. Its members are represented very compactly as bits rather than hashed elements. A similar (albeit slightly less powerful4) structure has been implemented in the enum-set crate. Given a #[repr(u32)] enum type: #[repr(u32)] #[derive(Clone, Copy, Debug Eq, Hash, PartialEq)] enum Weekday { Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday, } you can create an EnumSet of its variants: let mut weekend: EnumSet<Weekday> = EnumSet::new(); weekend.insert(Weekday::Saturday); weekend.insert(Weekday::Sunday); as long as you provide a simple trait impl that specifies how to convert those enum values to and from u32: impl enum_set::CLike for Weekday { fn to_u32(&self) -> u32 { *self as u32 } unsafe fn from_u32(v: u32) -> Self { std::mem::transmute(v) } } The advantage is having a set structure represented by a single, unsigned 32-bit integer, leading to O(1) complexity of all common set operations. This includes membership checks, the union of two sets, their intersection, difference, and so on. antidote As part of fulfilling the promise of Fearless Concurrency™, Rust offers multiple synchronization primitives that are all defined in the std::sync module. One thing that Mutex, RwLock, and similar mechanisms there have in common is that their locks can become “poisoned” if a thread panicks while holding them. As a result, acquiring a lock requires handling the potential PoisonError. For many programs, however, lock poisoning is not even a remote, but a straight-up impossible situation. If you follow the best practices of concurrent resource sharing, you won’t be holding locks for more than a few instructions, devoid of unwraps or any other opportunity to panic!(). Unfortunately, you cannot prove this to the Rust compiler statically, so it will still require you to handle a PoisonError that cannot happen. This is where the aptly named antidote crate crate offers help. In it, you can find all the same locks & guards API that is offered by std::sync, just without the PoisonError. In many cases, this removal has radically simplified the interface, for example by turning Result<Guard, Error> return types into just Guard. The caveat, of course, is that you need to ensure all threads holding these “immunized” locks either: don’t panic at all; or don’t leave guarded resources in an inconsistent state if they do panic Like it’s been mentioned earlier, the best way to make that happen is to keep lock-guarded critical sections minimal and infallible. matches Pattern matching is one of the most important features of Rust, but some of the relevant language constructs have awkward shortcomings. The if let conditional, for example, cannot be combined with boolean tests: if let Foo(_) = x && y.is_good() { and thus requires additional nesting, or a different approach altogether. Thankfully, to help with situations like this, there is the matches crate with a bunch of convenient macros. Besides its namesake, matches!: if matches!(x, Foo(_)) && y.is_good() { it also exposes assertion macros (assert_match! and debug_assert_match!) that can be used in both production and test code. This concludes the overview of small Rust crates, at least for now. To be certain, these crates are by far not the only ones that are small in size and simultaneously almost indispensable. Many more great libraries can be found e.g. in the Awesome Rust registry, though obviously you could argue if all of them are truly “micro” ;-) If you know more crates in the similar vein, make sure to mention them in the comments! A sum type consists of several alternatives, out of which only one has been picked for a particular instance. The other common name for it is a tagged union. ↩ Unless you come from Haskell, that is, where Either is the equivalent of Rust’s Result :) ↩ You will occasionally need an explicit * to trigger the Deref coercion it uses. ↩ It only supports unitary enums of up to 32 variants. ↩"
+}
+</script></body>
+</html>

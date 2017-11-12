@@ -63,6 +63,261 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-little-crates.html#rust-little-crates">Small Rust crates I (almost) always&nbsp;use</a></h2>
+    <p>
+      Posted on Tue 31 October 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/libraries.html">libraries</a>      &#8226; <a href="http://xion.io/post/code/rust-little-crates.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Alternative clickbait title: <em>My Little Crates: Rust is Magic</em>&nbsp;:-)</p>
+<hr />
+<p>Due to its relatively scant standard library,
+programming in Rust inevitably involves pulling in a good number of third-party&nbsp;dependencies.</p>
+<p>Some of them deal with problems that are solved with built-ins
+in languages that take a more &#8220;batteries included&#8221; approach.
+A good example would be the Python&#8217;s <code>re</code> module,
+whose moral equivalent in the Rust ecosystem is <a href="http://docs.rs/regex">the <em>regex</em> crate</a>.</p>
+<p>Things like regular expressions, however, represent comparatively large problems.
+It isn&#8217;t very surprising that dedicated libraries exist to address them.
+It is less common for a language to offer <em>small</em> packages
+that target very specialized&nbsp;applications.</p>
+<p>As in, one function/type/macro-kind of specialized,
+or perhaps only a little larger than&nbsp;that.</p>
+<p>In this post, we&#8217;ll take a whirlwind tour through a bunch of such essential&nbsp;&#8220;micropackages&#8221;.</p>
+<h4>either</h4>
+<p>Rust has the built-in <code>Result</code> type, which is a sum<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> of an <code>Ok</code> outcome or an <code>Err</code>or.
+It forms the basis of a general error handling mechanism in the&nbsp;language.</p>
+<p>Structurally, however, <code>Result&lt;T, E&gt;</code> is just an alternative between the types <code>T</code> and <code>E</code>.
+You may want to use such an enum for other purposes
+than representing results of fallible operations.
+Unfortunately, because of the strong inherent meaning of <code>Result</code>,
+such usage would be unidiomatic and highly&nbsp;confusing.</p>
+<p>This is why the <a href="http://docs.rs/either"><em>either</em> crate</a> exists.
+It contains the following <code>Either</code> type:</p>
+<div class="highlight"><pre><span class="k">enum</span><span class="w"> </span><span class="n">Either</span><span class="o">&lt;</span><span class="n">L</span><span class="p">,</span><span class="w"> </span><span class="n">R</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Left</span><span class="p">(</span><span class="n">L</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Right</span><span class="p">(</span><span class="n">R</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>While it is isomorphic to <code>Result</code>,
+it carries no connotation to the entrenched error handling practices<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+Additionally, it offers symmetric combinator methods such as <code>map_left</code>
+or <code>right_and_then</code> for chaining computations involving the <code>Either</code> values.</p>
+<h4>lazy_static</h4>
+<p>As a design choice, Rust doesn&#8217;t allow for safe access to global mutable variables.
+The semi-standard way of introducing those into your code
+is therefore <a href="http://docs.rs/lazy_static">the <em>lazy_static</em> crate</a>.</p>
+<p>However, the most important usage for it is to declare lazy initialized <em>constants</em>
+of more complex&nbsp;types:</p>
+<div class="highlight"><pre><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">TICK_INTERVAL</span><span class="o">:</span><span class="w"> </span><span class="n">Duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Duration</span><span class="o">::</span><span class="n">from_secs</span><span class="p">(</span><span class="mi">7</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">24</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The trick isn&#8217;t entirely transparent<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>,
+but it&#8217;s the best you can do until we get a proper support
+for <a href="https://github.com/rust-lang/rfcs/issues/322">compile-time expressions</a> in the&nbsp;language.</p>
+<h4>maplit</h4>
+<p>To go nicely with the crate above &#8212;
+and to act as a natural syntactic follow-up to
+<a href="https://doc.rust-lang.org/1.3.0/std/macro.vec!.html">the standard <code>vec![]</code> macro</a> &#8212;
+we&#8217;ve got the <a href="http://docs.rs/maplit"><em>maplit</em> crate</a>.</p>
+<p>What it does is add <code>HashMap</code> and <code>HashSet</code> <span class="dquo">&#8220;</span>literals&#8221; by defining
+some very simple <code>hashmap!</code> and <code>hashset!</code> macros:</p>
+<div class="highlight"><pre><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">IMAGE_EXTENSIONS</span><span class="o">:</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&amp;</span><span class="n">&#39;static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hashmap</span><span class="o">!</span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;gif&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">GIF</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;jpeg&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">JPEG</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;jpg&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">JPG</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;png&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">PNG</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="p">};</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Internally, <code>hashmap!</code> expands to the appropriate amount of <code>HashMap::insert</code> calls,
+returning the finished hash map with all the keys and values&nbsp;given.</p>
+<h4>try_opt</h4>
+<p>Before the <code>?</code> operator was introduced to Rust,
+the idiomatic way of propagating erroneous <code>Result</code>s was the <code>try!</code> macro.</p>
+<p>A similar macro can also be implemented for <code>Option</code> types
+so that it propagates the <code>None</code>s upstream.
+The <a href="http://docs.rs/try_opt"><em>try_opt</em> crate</a> is doing precisely that,
+and the macro can be used in a straightforward&nbsp;manner:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">parse_ipv4</span><span class="p">(</span><span class="n">s</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">RE</span><span class="o">:</span><span class="w"> </span><span class="n">Regex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Regex</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="w"></span>
+<span class="w">            </span><span class="s-Raw">r&quot;^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">caps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">RE</span><span class="p">.</span><span class="n">captures</span><span class="p">(</span><span class="n">s</span><span class="p">));</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">1</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">2</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">3</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">4</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">((</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">b</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">c</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">d</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">    </span><span class="p">))</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Until Rust supports <code>?</code> for <code>Option</code>s (which is <a href="https://github.com/rust-lang/rust/issues/31436">planned</a>),
+this <code>try_opt!</code> macro can serve as an acceptable&nbsp;workaround.</p>
+<h4>exitcode</h4>
+<p>It is a common convention in basically every mainstream <span class="caps">OS</span>
+that a process has finished with an error
+if it exits with a code different than 0 (zero),
+Linux divides the space of error codes <a href="http://www.tldp.org/LDP/abs/html/exitcodes.html">further</a>,
+and &#8212; along with <span class="caps">BSD</span> &#8212; it also includes the <em>sysexits.h</em> header with some more specialized&nbsp;codes.</p>
+<p>These have been adopted by great many programs
+and <a href="https://docs.python.org/3.0/library/os.html#os.EX_OK">languages</a>.
+In Rust, those semi-standard names for common errors can be used, too.
+All you need to do is add <a href="http://docs.rs/exitcode">the <em>exitcode</em> crate</a> to your&nbsp;project:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">options</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">args</span><span class="o">::</span><span class="n">parse</span><span class="p">().</span><span class="n">unwrap_or_else</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">print_args_error</span><span class="p">(</span><span class="n">e</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">process</span><span class="o">::</span><span class="n">exit</span><span class="p">(</span><span class="n">exitcode</span><span class="o">::</span><span class="n">USAGE</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">});</span><span class="w"></span>
+</pre></div>
+
+
+<p>In addition to constants like <code>USAGE</code> or <code>TEMPFAIL</code>,
+the <em>exitcode</em> crate also defines an <code>ExitCode</code> alias
+for the integer type holding the exit codes.
+You can use it, among other things, as a return type of your top-level&nbsp;functions:</p>
+<div class="highlight"><pre><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">do_stuff</span><span class="p">(</span><span class="n">options</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">process</span><span class="o">::</span><span class="n">exit</span><span class="p">(</span><span class="n">code</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">do_stuff</span><span class="p">(</span><span class="n">options</span><span class="o">:</span><span class="w"> </span><span class="n">Options</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">exitcode</span><span class="o">::</span><span class="n">ExitCode</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// ...</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>enum-set</h4>
+<p>In Java, there is a specialization of the general <code>Set</code> interface
+that works for enum types:
+<a href="https://docs.oracle.com/javase/7/docs/api/java/util/EnumSet.html">the <code>EnumSet</code> class</a>.
+Its members are represented very compactly as <em>bits</em> rather than hashed&nbsp;elements.</p>
+<p>A similar (albeit slightly less powerful<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>) structure has been implemented
+in the <a href="http://docs.rs/enum-set"><em>enum-set</em> crate</a>. Given a <code>#[repr(u32)]</code> enum&nbsp;type:</p>
+<div class="highlight"><pre><span class="cp">#[repr(u32)]</span><span class="w"></span>
+<span class="cp">#[derive(Clone, Copy, Debug Eq, Hash, PartialEq)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">Weekday</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Monday</span><span class="p">,</span><span class="w"> </span><span class="n">Tuesday</span><span class="p">,</span><span class="w"> </span><span class="n">Wednesday</span><span class="p">,</span><span class="w"> </span><span class="n">Thursday</span><span class="p">,</span><span class="w"> </span><span class="n">Friday</span><span class="p">,</span><span class="w"> </span><span class="n">Saturday</span><span class="p">,</span><span class="w"> </span><span class="n">Sunday</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>you can create an <code>EnumSet</code> of its&nbsp;variants:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">weekend</span><span class="o">:</span><span class="w"> </span><span class="n">EnumSet</span><span class="o">&lt;</span><span class="n">Weekday</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">EnumSet</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="n">weekend</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">Weekday</span><span class="o">::</span><span class="n">Saturday</span><span class="p">);</span><span class="w"></span>
+<span class="n">weekend</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">Weekday</span><span class="o">::</span><span class="n">Sunday</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>as long as you provide a simple trait impl that specifies
+how to convert those enum values to and from <code>u32</code>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="w"> </span><span class="n">enum_set</span><span class="o">::</span><span class="n">CLike</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">Weekday</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">to_u32</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w">            </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="bp">self</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">from_u32</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Self</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="o">::</span><span class="n">transmute</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The advantage is having a set structure represented by a single, unsigned 32-bit integer,
+leading to <em>O</em>(1) complexity of <em>all</em> common set operations.
+This includes membership checks, the union of two sets, their intersection, difference, and so&nbsp;on.</p>
+<h4>antidote</h4>
+<p>As part of fulfilling the promise of Fearless Concurrency™,
+Rust offers multiple synchronization primitives
+that are all defined in <a href="https://doc.rust-lang.org/std/sync/">the <code>std::sync</code> module</a>.
+One thing that <code>Mutex</code>, <code>RwLock</code>, and similar mechanisms there have in common
+is that their locks can become &#8220;poisoned&#8221; if a thread panicks while holding them.
+As a result, acquiring a lock requires handling the potential <code>PoisonError</code>.</p>
+<p>For many programs, however, lock poisoning is not even a remote,
+but a straight-up <em>impossible</em> situation.
+If you follow the best practices of concurrent resource sharing,
+you won&#8217;t be holding locks for more than a few instructions,
+devoid of <code>unwrap</code>s or any other opportunity to <code>panic!()</code>.
+Unfortunately, you cannot prove this to the Rust compiler statically,
+so it will still require you to handle a <code>PoisonError</code> that cannot&nbsp;happen.</p>
+<p>This is where the aptly named <a href="http://docs.rs/antidote"><em>antidote</em> crate</a> crate offers help.
+In it, you can find all the same locks <span class="amp">&amp;</span> guards <span class="caps">API</span> that is offered by <code>std::sync</code>,
+just without the <code>PoisonError</code>.
+In many cases, this removal has radically simplified the interface,
+for example by turning <code>Result&lt;Guard, Error&gt;</code> return types into just <code>Guard</code>.</p>
+<p>The caveat, of course, is that you need to ensure all threads holding these &#8220;immunized&#8221; locks&nbsp;either:</p>
+<ul>
+<li>don&#8217;t panic at all;&nbsp;or</li>
+<li>don&#8217;t leave guarded resources in an inconsistent state if they <em>do</em>&nbsp;panic</li>
+</ul>
+<p>Like it&#8217;s been mentioned earlier,
+the best way to make that happen is to keep lock-guarded critical sections minimal and&nbsp;infallible.</p>
+<h4>matches</h4>
+<p>Pattern matching is one of the most important features of Rust,
+but some of the relevant language constructs have awkward shortcomings.
+The <code>if let</code> conditional, for example, cannot be combined with boolean&nbsp;tests:</p>
+<div class="highlight"><pre><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="n">Foo</span><span class="p">(</span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">y</span><span class="p">.</span><span class="n">is_good</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+</pre></div>
+
+
+<p>and thus requires additional nesting, or a different approach&nbsp;altogether.</p>
+<p>Thankfully, to help with situations like this,
+there is the <a href="http://docs.rs/matches"><em>matches</em> crate</a> with a bunch of convenient macros.
+Besides <a href="https://docs.rs/matches/0.1.6/matches/macro.matches.html">its namesake, <code>matches!</code></a>:</p>
+<div class="highlight"><pre><span class="k">if</span><span class="w"> </span><span class="n">matches</span><span class="o">!</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">Foo</span><span class="p">(</span><span class="n">_</span><span class="p">))</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">y</span><span class="p">.</span><span class="n">is_good</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+</pre></div>
+
+
+<p>it also exposes assertion macros
+(<a href="https://docs.rs/matches/0.1.6/matches/macro.assert_matches.html"><code>assert_match!</code></a>
+and <a href="https://docs.rs/matches/0.1.6/matches/macro.debug_assert_matches.html"><code>debug_assert_match!</code></a>)
+that can be used in both production and test&nbsp;code.</p>
+<hr />
+<p>This concludes the overview of small Rust crates, at least for&nbsp;now.</p>
+<p>To be certain, these crates are by far not the only ones that are small in size
+and simultaneously almost indispensable.
+Many more great libraries can be found
+e.g. in the <a href="https://github.com/rust-unofficial/awesome-rust#libraries">Awesome Rust registry</a>,
+though obviously you could argue if all of them are truly &#8220;micro&#8221;&nbsp;;-)</p>
+<p>If you know more crates in the similar vein,
+make sure to mention them in the&nbsp;comments!</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A <em>sum type</em> consists of several alternatives,
+out of which only one has been picked for a particular instance.
+The other common name for it is a <em>tagged union</em>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Unless you come from Haskell, that is, where <code>Either</code> is the equivalent of Rust&#8217;s <code>Result</code> :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>You will occasionally need an explicit <code>*</code> to trigger the <code>Deref</code> coercion it uses.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>It only supports unitary enums of up to 32 variants.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-little-crates.html#rust-little-crates">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-extension-traits.html#rust-extension-traits">Extension traits in&nbsp;Rust</a></h2>
     <p>
       Posted on Tue 20 June 2017 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1874,162 +2129,6 @@ essentially by abusing the approach I describe later in this post.&#160;<a class
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-unit-test-placement.html#rust-unit-test-placement">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/rust-nightly-vs-stable.html#rust-nightly-vs-stable">A tale of two&nbsp;Rusts</a></h2>
-    <p>
-      Posted on Sat 24 December 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/nightly-rust.html">nightly Rust</a>,      <a href="http://xion.io/tag/stable-rust.html">stable Rust</a>,      <a href="http://xion.io/tag/rocketrs.html">Rocket.rs</a>      &#8226; <a href="http://xion.io/post/programming/rust-nightly-vs-stable.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>The writing has been on the wall for many months now,
-but I think the time has come when we can officially declare&nbsp;it.</p>
-<blockquote>
-<p>Stable Rust is dead. Nightly Rust is the only&nbsp;Rust.</p>
-</blockquote>
-<h4>Say&nbsp;what?</h4>
-<p>If you&#8217;re out of the loop,
-<a href="http://rust-lang.org/">Rust</a> is this newfangled system programming language.
-Rust is meant to fit in the niches normally occupied by C,
-so its domain includes performance-sensitive and safety-critical applications.
-Embedded programming, <span class="caps">OS</span> kernels, databases, servers,
-and similar low-level pieces of computing and networking infrastructure
-are all within its&nbsp;purview.</p>
-<p>Of course, this &#8220;replacing C&#8221; thing is still an ambition that&#8217;s years or decades away.
-But in theory, there is nothing preventing it from happening.
-The main thing Rust would need here is <em>time</em>: time to buy trust of developers
-by having been used in real-world, production scenarios without&nbsp;issues.</p>
-<p>To facilitate this (and for other reasons),
-Rust has been using <a href="https://doc.rust-lang.org/stable/book/release-channels.html">three <em>release channels</em></a>
-with varying frequency of updates.
-There are the <em>stable</em>, <em>beta</em>, and <em>nightly</em> Rust.
-Of those, beta is pretty much an
-<a href="https://en.wikipedia.org/wiki/Software_release_life_cycle#Release_candidate"><span class="caps">RC</span></a>
-for a future stable release,
-so there aren&#8217;t many differences at all between the first two&nbsp;channels.</p>
-<h4>Nightly&nbsp;perks</h4>
-<p>This cannot be said about&nbsp;nightly.</p>
-<p>In fact, nightly Rust is essentially <em>its own language</em>.</p>
-<p>First, there is a number of exclusive language features that are only available on nightly.
-They are all guarded by numerous <code>#![feature(...)]</code> gates
-which are required to activate them.
-Because stable Rust doesn&#8217;t accept any such directive,
-trying to compile code that uses them will fail on a non-nightly&nbsp;compiler.</p>
-<p>This has been justified as a necessary step for testing out new features
-in real scenarios, or at least those that resemble (stable) reality as close as possible.
-Indeed, many features <em>did</em> eventually land in stable Rust by going through this route
-&#8212; a recent example would be <a href="https://m4rw3r.github.io/rust-questionmark-operator">the <code>?</code> operator</a>,
-an error-handling measure analogous to the <code>try!</code> macro.</p>
-<p>But some features take a lot of time to stabilize.
-And few (like <code>zero_one</code> which guards the numeric traits
-<a href="https://doc.rust-lang.org/std/num/trait.Zero.html"><code>Zero</code></a>
-and <a href="https://doc.rust-lang.org/std/num/trait.One.html"><code>One</code></a>) may even be deprecated
-without ever getting out of the nightly&nbsp;channel.</p>
-<h4>Unplugged</h4>
-<p>Secondly, and most importantly, there is at least one feature
-that won&#8217;t get stabilized <strong>ever</strong>:</p>
-<div class="highlight"><pre><span class="cp">#![feature(plugin)]</span><span class="w"></span>
-</pre></div>
-
-
-<p>And it&#8217;s all by&nbsp;design.</p>
-<p>This <code>plugin</code> switch is what&#8217;s necessary to include <code>#![plugin(...)]</code> directives.
-Those in turn activate <em>compiler plugins</em>:
-user-provided additions to the compiler itself.
-Plugins operate against the <span class="caps">API</span> provided directly by <code>rustc</code>
-and enhance its capabilities beyond what the language normally&nbsp;provides.</p>
-<p>Although it sounds rather ominous,
-the vast majority of plugins in the wild serve a singular purpose: <em>code generation</em>.
-They are written with the sole purpose of combating Rust&#8217;s rigidity,
-including the (perfectly expected) lack of dynamic runtime capabilities
-and the (disappointingly) stiff limits of its wanting macro&nbsp;system.</p>
-<p>This is how they are utilized by <a href="http://diesel.rs/">Diesel</a>, for example,
-a popular <span class="caps">ORM</span> and <span class="caps">SQL</span> query interface;
-or <a href="https://serde.rs/">Serde</a>, a serialization&nbsp;framework.</p>
-<p>Why compiler plugins can never be stable, though?
-It&#8217;s because the internal <span class="caps">API</span> they are coded against
-goes too deep into the compiler bowels to ever get stabilized.
-If it were, it would severely limit the ability to further develop the language
-without significant breakage of the established&nbsp;plugins.</p>
-<h4>Pseudo-stable</h4>
-<p><span class="dquo">&#8220;</span>Wait,&#8221; you may ask, &#8220;how do we even talk about «established» compiler plugins?
-Shouldn&#8217;t they be, by their very definition, <em>unstable</em>?&#8221;</p>
-<p>Well&#8230; yes. They definitely should. And therein lies the crux of the&nbsp;problem.</p>
-<p>Turns out, plugins <span class="amp">&amp;</span> nightly Rust are only <em>mostly</em> treated as&nbsp;unstable.</p>
-<p>In reality, the comfort and convenience provided by nightly versions of many libraries
-&#8212; all of which rely on compiler plugins &#8212; is difficult to overstate.
-While their stable approximations are available, they at best require rather complicated&nbsp;setup.</p>
-<p>What&#8217;s always involved is a custom build step,
-and usually a separate file for the relevant code symbols and declarations.
-In the end, we get a bunch of autogenerated modules
-whose prior non-existence during development may also confuse IDEs and autocompletion&nbsp;tools.</p>
-<p>For all those reasons and more,
-an ecosystem has developed where several popular libraries are &#8220;nightly but pseudo-stable&#8221;.
-This includes some key components in many serious applications,
-like the aforementioned <span class="caps">ORM</span> <span class="amp">&amp;</span> serialization&nbsp;crates.</p>
-<h4>The&nbsp;precedent</h4>
-<p>And so has been the state of affairs until very recently.
-The nightly Rust has been offering some extremely enticing features,
-but the stable channel was at least paid a lip service to.
-However, the mentality among library authors that &#8220;nightly-first&#8221; is an acceptable policy
-had been strong for a long time&nbsp;now.</p>
-<p>No wonder it has finally shifted towards&nbsp;&#8220;nightly-only&#8221;.</p>
-<p>Meet <a href="http://rocket.rs">Rocket</a>,
-the latest contestant in the already rich lineup of <a href="http://www.arewewebyet.org/topics/frameworks/">Rust web frameworks</a>.
-Everything about it is really slick:
-a flashy designer website; approachable and comprehensive documentation;
-and concise, <a href="http://flask.pocoo.org/">Flask</a>-like <span class="caps">API</span> for
-<a href="https://rocket.rs/overview/#anatomy-of-a-rocket-application">routing</a>
-and response handling.
-Predictably, it&#8217;s been making quite a
-<a href="https://www.reddit.com/r/rust/comments/5jxv6u/rocket_web_framework_for_rust/">buzz</a> on
-<a href="https://www.reddit.com/r/programming/comments/5jy64x/rocket_a_web_framework_for_rust/">Reddit</a>
-and <a href="https://news.ycombinator.com/item?id=13245475">elsewhere</a>.</p>
-<p>There is just an itty bitty little problem: Rocket <em>only works on nightly</em>.
-No alternatives, no codegen shims&#8230;
-and no prospects of any change in the foreseeable future.
-Yet, there doesn&#8217;t seem to be many people concerned about this,
-so clearly this is (a new?)&nbsp;norm.</p>
-<h4>The Rusts&nbsp;split</h4>
-<p>In essence, Rust is now two separate&nbsp;languages.</p>
-<p>The stable-nightly divide has essentially evolved into something that closely resembles
-the early stages of the <a href="https://wiki.python.org/moin/Python2orPython3">2.x vs. 3.x</a> split in the Python world.
-The people still &#8220;stuck&#8221; on 2.7 (i.e. stable) were &#8220;holdouts&#8221;,
-and the future was with 3.x (nightly).
-Sure, there have been some pithy backports (feature stabilizations),
-but the interesting stuff has been happening on the other&nbsp;side.</p>
-<p>It&#8217;s astonishing that Rust managed to replicate this phenomenon
-without any major version bumps, and with no backwards-incompatible releases.
-Technically, everything is still version 1.x..
-Not even <a href="http://crates.io">Cargo</a>, the Rust package manager, recognizes the stable-nightly&nbsp;distinction.</p>
-<p>But that&#8217;s hardly any consolation when you try to install a nightly-only crate on stable Rust.
-You will download it just fine, and get all the way to compiling its code,
-only to have it error out due to unsupported <code>#![feature(...)]</code> declarations.</p>
-<h4>What&nbsp;now?</h4>
-<p>The natural question is, can this situation be effectively&nbsp;addressed?</p>
-<p>I hope it&#8217;s obvious why stable Rust cannot suddenly start supporting compiler plugins.
-Given that they rely on <code>rustc</code> internals which aren&#8217;t standardized,
-doing so would be contrary to the very definition of a &#8220;stable&#8221; release&nbsp;channel.</p>
-<p>The other option is to fully embrace nightly as <em>de facto</em> recommended toolchain.
-This has been informally happening already,
-despite the <a href="https://doc.rust-lang.org/stable/book/release-channels.html#choosing-a-version">contrary recommendations</a>
-in the official&nbsp;docs.</p>
-<p>The downsides are obvious here, though: nightly Rust is not a misnomer at all.
-The compiler is in active development and its build <a href="https://travis-ci.org/rust-lang/rust/builds">breaks often</a>.
-Some of those breakages make it into nightly releases with unsatisfying&nbsp;regularity.</p>
-<p>Of course, there was also another option:
-stick to the intended purpose of release channels and don&#8217;t build castles on the sand
-by publishing nightly-first or nightly-only crates.
-This ship seems to have sailed by now, as the community has collectively decided&nbsp;otherwise.</p>
-<p>Oh&nbsp;well.</p>
-<p>It&#8217;s just a little ironic that in a language that is so focused on safety,
-everyone is perfectly happy with an <em>unstable compiler</em>.</p>
-      <a class="btn" href="http://xion.io/post/programming/rust-nightly-vs-stable.html#rust-nightly-vs-stable">Continue reading</a>
   </div>
 </article>
 

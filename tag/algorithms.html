@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <link href='//fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,700,400italic' rel='stylesheet' type='text/css'>
+
+    <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/style.min.css">
+
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/pygments.min.css">
+  <link rel="stylesheet" type="text/css" href="http://xion.io/$theme/stylesheet/font-awesome.min.css">
+
+    <link href="http://xion.io/style.css" rel="stylesheet">
+
+
+
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="" />
+
+    <meta name="author" content="Karol Kuczmarski" />
+    <meta name="description" content="" />
+<meta property="og:site_name" content="Karol Kuczmarski's Blog"/>
+<meta property="og:type" content="blog"/>
+<meta property="og:title" content="Karol Kuczmarski's Blog"/>
+<meta property="og:description" content=""/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:url" content="http://xion.io"/>
+<meta property="og:image" content="http://xion.io/logo.jpeg">
+
+  <title>Karol Kuczmarski's Blog &ndash; Tag: algorithms</title>
+</head>
+<body>
+  <aside>
+    <div>
+      <a href="http://xion.io">
+        <img src="http://xion.io/logo.jpeg" alt="Karol Kuczmarski" title="Karol Kuczmarski">
+      </a>
+      <h1><a href="http://xion.io">Karol Kuczmarski</a></h1>
+      <p>fn(Tea) -> Code</p>
+      <nav>
+        <ul class="list">
+          <li><a href="http://xion.io/page/about.html#about">About</a></li>
+          <li><a href="http://xion.io/page/projects.html#projects">Projects</a></li>
+        </ul>
+      </nav>
+      <ul class="social">
+        <li><a class="sc-github" href="http://github.com/Xion" target="_blank"><i class="fa fa-github"></i></a></li>
+        <li><a class="sc-stack-overflow" href="http://stackoverflow.com/users/434799/xion" target="_blank"><i class="fa fa-stack-overflow"></i></a></li>
+        <li><a class="sc-twitter" href="http://twitter.com/Xion__" target="_blank"><i class="fa fa-twitter"></i></a></li>
+        <li><a class="sc-google" href="https://plus.google.com/+KarolKuczmarski" target="_blank"><i class="fa fa-google"></i></a></li>
+        <li><a class="sc-rss" href="/feeds/atom.xml" target="_blank"><i class="fa fa-rss"></i></a></li>
+      </ul>
+    </div>
+  </aside>
+  <main>
+    <nav>
+      <a href="http://xion.io">Home</a>
+      <a href="/archives.html">Archives</a>
+      <a href="/categories.html">Categories</a>
+      <a href="/tags.html">Tags</a>
+      <a href="http://xion.org.pl/">Old blog</a>
+    </nav>
+
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/programming/o-nlogn-isnt-bad.html#o-nlogn-isnt-bad">O(n log n) isn&#8217;t&nbsp;bad</a></h2>
+    <p>
+      Posted on Thu 19 October 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/algorithms.html">algorithms</a>,      <a href="http://xion.io/tag/complexity.html">complexity</a>,      <a href="http://xion.io/tag/big-o.html">Big O</a>      &#8226; <a href="http://xion.io/post/programming/o-nlogn-isnt-bad.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Most programmers should be familiar with the Big O notation of computational complexity.
+This is how, in very theoretical terms, we are describing the relative differences in the performance of&nbsp;algorithms.</p>
+<p>Excluding the case of constant time complexity (<code>O(1)</code>),
+the vast majority of practical algorithms falls into one of the following&nbsp;classes:</p>
+<ul>
+<li><code>O(log n)</code></li>
+<li><code>O(n)</code></li>
+<li><code>O(n log n)</code></li>
+<li><code>O(n²)</code></li>
+</ul>
+<p>The further down a class is on this list, the worse (less efficient) it gets.
+What may not be completely obvious, however, is the magnitude of&nbsp;differences.</p>
+<p>Let&#8217;s have a closer&nbsp;look.</p>
+<h4>The best and the&nbsp;worst</h4>
+<p>First, it&#8217;s pretty easy when it comes to the extreme points.
+A logarithmic complexity is clearly great,
+because the number of operations barely even grows as the size of input increases.
+For <code>N</code> of one million,  the (natural<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>) logarithm is equal to about 14.
+For one <em>trillion</em> &#8212; million times more &#8212; <code>log n</code> is only&nbsp;27!</p>
+<p>Such amazing scalability is one of the reasons
+why databases, for example,
+can execute queries extremely efficiently even for millions or billions of&nbsp;records.</p>
+<p>On the other end, an algorithm that has quadratic complexity
+will only do well for very small datasets.
+It can still be useful in practice,
+especially as a small-input optimization of some larger procedure<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>,
+or because of some other desirable properties (like good&nbsp;parallelizability).</p>
+<p>Outside of those carefully selected cases, however,
+the computational requirements of <code>O(n²)</code> for any large dataset are usually too&nbsp;great.</p>
+<h4>Middle&nbsp;ground</h4>
+<p>As for the remaining two classes,
+the linear one (<code>O(n)</code>) is probably the easiest to reason&nbsp;about.</p>
+<p>In a linear algorithm,
+the number of operations increases steadily along with the size of input.<br>
+For thousand elements, you need roughly a thousand steps (times a constant factor).<br>
+For a million, there will be a million operations&nbsp;necessary.</p>
+<p>Thus, by itself, the linear scaling doesn&#8217;t get any better or worse when data gets bigger<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
+In many cases, it means there is nothing to be exploited in the structure of input set
+that could make the running time any better
+(compared to e.g. the reliance of logarithmic searches on sorted order).
+Typically, all the data must be traversed at least once in its&nbsp;entirety.</p>
+<p>All in all, it can be a decent time complexity,
+but it&#8217;s nothing to write home&nbsp;about.</p>
+<h4>A function has no&nbsp;name</h4>
+<p>What about <code>O(n log n)</code>, then?
+It falls between the linear and the quadratic,
+which suggests that it&#8217;s somewhere half-way between mediocre and awful.
+We don&#8217;t even have a widely used word for it,
+meaning it is probably not even that&nbsp;important.</p>
+<p>Both of those suppositions are&nbsp;wrong.</p>
+<p>First, <code>O(n log n)</code> isn&#8217;t even remotely close to the &#8220;median&#8221; (whatever that means) of <code>O(n)</code> and <code>O(n²)</code>.
+In reality, its asymptotic rate of growth places it very close to the former.
+You can see this pretty clearly by looking at the following&nbsp;plot:</p>
+<p style="text-align:center">
+    <img src="http://xion.io/images/time-complexity.png" alt="Time complexity plot"><br>
+    <small>
+        <a href="http://coding-geek.com/how-databases-work/">Source</a>
+    </small>
+</p>
+
+<p>The gap between <code>O(n)</code> and <code>O(n log n)</code> barely even widens,
+even as the values on vertical axis increase to the limits of&nbsp;practicality.</p>
+<p>Indeed, the <code>log n</code> part of the function grows slowly enough
+that, for many practical purposes, it can be considered a large &#8220;constant&#8221; in the complexity formula.
+Some complicated algorithm that&#8217;s technically linear may therefore be a <em>worse</em> choice
+than a simpler solution with <code>O(n log n)</code> scaling.</p>
+<h4>Sorting it&nbsp;out</h4>
+<p>What are the typical situations where <code>O(n log n)</code> arises in practice?
+Very often, it has to do with establishing some kind of <em>ordering</em> of the input
+which includes at least one of the&nbsp;following:</p>
+<ul>
+<li>a wholesale sorting of it (using pairwise&nbsp;comparison)</li>
+<li>repeated queries for the current maximum or minimum (via a priority&nbsp;queue)</li>
+</ul>
+<p>Considering that many practical algoithms &#8212;
+from <a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm">pathfinding</a>
+to <a href="https://en.wikipedia.org/wiki/Huffman_coding">compression</a> &#8212;
+utilize some form of sorting or sorted data structures,
+it makes <code>O(n log n)</code> quite an important complexity&nbsp;class.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Natural logarithm has a base of <em>e</em> = 2.71828183&#8230;
+The exact choice of logarithm base doesn&#8217;t matter for asymptotic complexity,
+because it changes only the constant coefficient in the <code>O(f(n))</code> function.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>A widely used example is <a href="https://en.wikipedia.org/wiki/Timsort">Timsort</a>
+which switches from merge sort (<code>O(log n)</code>) to insertion sort (<code>O(n²)</code>)
+when the array slice is short enough to warrant it.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>In reality, practical factors like memory/cache size, <span class="caps">OS</span> scheduling behavior,
+and a myriad of other things can make the actual running time scale sublinearly beyond a certain point.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/programming/o-nlogn-isnt-bad.html#o-nlogn-isnt-bad">Continue reading</a>
+  </div>
+</article>
+
+  <div class="pagination">
+  </div>
+
+    <footer>
+<p>
+  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+</p>
+<p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
+  <a rel="license"
+     href="http://creativecommons.org/licenses/by-sa/4.0/"
+     target="_blank">
+    <img alt="Creative Commons License"
+         title="Creative Commons License"
+         style="border-width:0"
+         src="https://i.creativecommons.org/l/by-sa/4.0/80x15.png"
+         width="80"
+         height="15"/>
+  </a>
+</p>    </footer>
+  </main>
+
+<!-- Google Analytics -->
+<script type="text/javascript">
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-27379564-1', 'auto');
+  ga('send', 'pageview');
+</script>
+<!-- End Google Analytics -->
+
+
+
+<script type="application/ld+json">
+{
+  "@context" : "http://schema.org",
+  "@type" : "Blog",
+  "name": " Karol Kuczmarski's Blog ",
+  "url" : "http://xion.io",
+  "image": "http://xion.io/logo.jpeg",
+  "description": ""
+}
+</script><script type="text/javascript">
+    var disqus_shortname = 'xionblog';
+    (function () {
+        var s = document.createElement('script'); s.async = true;
+        s.type = 'text/javascript';
+        s.src = '//' + disqus_shortname + '.disqus.com/count.js';
+        (document.getElementsByTagName('HEAD')[0] || document.getElementsByTagName('BODY')[0]).appendChild(s);
+    }());
+</script>
+</body>
+</html>
