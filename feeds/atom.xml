@@ -1,5 +1,461 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-11-12T14:07:00+00:00</updated><entry><title>Currying and API design</title><link href="http://xion.io/post/programming/currying-api-design.html" rel="alternate"></link><updated>2017-11-12T14:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-11-12:post/programming/currying-api-design.html</id><summary type="html">&lt;p&gt;In functional programming, &lt;em&gt;currying&lt;/em&gt; is one of the concepts
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-11-24T17:52:00+00:00</updated><entry><title>Recap of the gisht project</title><link href="http://xion.io/post/programming/gisht-recap.html" rel="alternate"></link><updated>2017-11-24T17:52:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-11-24:post/programming/gisht-recap.html</id><summary type="html">&lt;p&gt;In this post, I want to discuss some of the experiences I had with a project
+that I recently finished, &lt;a href="https://github.com/Xion/gisht"&gt;&lt;em&gt;gisht&lt;/em&gt;&lt;/a&gt;.
+By &amp;#8220;finished&amp;#8221; I mean that I don&amp;#8217;t anticipate developing any new major features for it,
+though smaller things, bug fixes, or non-code stuff, is of course still very&amp;nbsp;possible.&lt;/p&gt;
+&lt;p&gt;I&amp;#8217;m thinking this is as much &amp;#8220;done&amp;#8221; as most software projects can ever hope to be.
+Thus, it is probably the best time for a recap / summary / postmortem / etc. &amp;#8212;
+something to recount the lessons learned, and assess the choices&amp;nbsp;made.&lt;/p&gt;
+&lt;h4&gt;Some&amp;nbsp;context&lt;/h4&gt;
+&lt;p&gt;The original purpose of &lt;em&gt;gisht&lt;/em&gt; was to facilitate download &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; execution of GitHub gists
+straight from the command&amp;nbsp;line:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nv"&gt;$ &lt;/span&gt;gisht Xion/git-outgoing  &lt;span class="c"&gt;# run the https://gist.github.com/Xion/git-outgoing gist&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;I initially wrote &lt;a href="https://github.com/Xion/gisht.py"&gt;its first version in Python&lt;/a&gt;
+because I&amp;#8217;ve accumulated a sizable number of small &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; useful scripts
+(for Git, Unix, Python, etc.) which were all posted as gists.
+Sure, I could download them manually to &lt;code&gt;~/bin&lt;/code&gt; every time I used a new machine
+but that&amp;#8217;s rather cumbersome, and I&amp;#8217;m quite&amp;nbsp;lazy.&lt;/p&gt;
+&lt;p&gt;Well, lazy &lt;em&gt;and&lt;/em&gt; impatient :)
+I noticed pretty fast that the speed tax of Python
+is basically unacceptable for a program like &lt;em&gt;gisht&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;What I&amp;#8217;m referring to here is not the speed of code execution, however,
+but only the &lt;em&gt;startup time&lt;/em&gt; of Python interpreter.
+Irrespective of the machine, operating system, or language version,
+it doesn&amp;#8217;t seem to go lower than about one hundred milliseconds;
+empirically, it&amp;#8217;s often 2 or 3 times higher than that.
+For the common case of finding a cached gist (no downloads)
+and doing a simple &lt;code&gt;fork&lt;/code&gt;+&lt;code&gt;exec&lt;/code&gt;,
+this startup time was very noticeable and extremely jarring.
+It also precluded some more sophisticated uses for &lt;em&gt;gisht&lt;/em&gt;,
+like putting its invocation into the shell&amp;#8217;s &lt;code&gt;$PROMPT&lt;/code&gt;&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;h4&gt;Speed:&amp;nbsp;delivered&lt;/h4&gt;
+&lt;p&gt;And so the obvious solution emerged:
+let&amp;#8217;s &lt;a href="https://transitiontech.ca/random/RIIR"&gt;rewrite it in Rust&lt;/a&gt;!&amp;#8230;&lt;/p&gt;
+&lt;p&gt;Because if I&amp;#8217;m executing code straight from the internet,
+I should at least do it in a &lt;em&gt;safe&lt;/em&gt;&amp;nbsp;language.&lt;/p&gt;
+&lt;p&gt;But jokes aside, it is obvious that a language compiling to native code
+is likely a good pick if you want to optimize for startup speed.
+So while the choice of Rust was in large part educational
+(&lt;em&gt;gisht&lt;/em&gt; was one of my first projects to be written in it),
+it definitely hasn&amp;#8217;t disappointed&amp;nbsp;there.&lt;/p&gt;
+&lt;p&gt;Even without any intentional optimization efforts,
+the app still runs &lt;em&gt;instantaneously&lt;/em&gt;.
+I tried to take some measurements using the &lt;code&gt;time&lt;/code&gt; command,
+but it never ticked into more than 0.001s.
+Perceptively, it is at least on par with &lt;code&gt;git&lt;/code&gt;,
+so that&amp;#8217;s acceptable for me&amp;nbsp;:)&lt;/p&gt;
+&lt;h4&gt;Can&amp;#8217;t segfault if your code doesn&amp;#8217;t&amp;nbsp;build&lt;/h4&gt;
+&lt;p&gt;Achieving the performance objective wouldn&amp;#8217;t do us much good, however,
+if the road to get there involved excessive penalties on productivity.
+Such negative impact could manifest in many ways,
+including troublesome debugging due to a tricky runtime&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;,
+or difficulty in getting the code to compile in the first&amp;nbsp;place.&lt;/p&gt;
+&lt;p&gt;If you had even a passing contact with Rust,
+you&amp;#8217;d expect the latter to be much more likely than the&amp;nbsp;former.&lt;/p&gt;
+&lt;p&gt;Indeed, Rust&amp;#8217;s very design eschews runtime flexibility to a ridiculous degree
+(in its &amp;#8220;safe&amp;#8221; mode, at least),
+while also forcing you to absorb subtle &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; complex ideas
+to even get your code past the compiler.
+The reward is increased likelihood your program will behave as intended &amp;#8212;
+although it&amp;#8217;s definitely not on the level of &amp;#8220;if it compiles, it works&amp;#8221;
+that can be offered by Haskell or&amp;nbsp;Idris.&lt;/p&gt;
+&lt;p&gt;But since &lt;em&gt;gisht&lt;/em&gt; is hardly mission critical,
+I didn&amp;#8217;t actually care too much about this increased reliability.
+I don&amp;#8217;t think it&amp;#8217;s likely that Rust would buy me much over something like modern C++.
+And if I were to &lt;em&gt;really&lt;/em&gt; do some kind of cost-benefit analysis of several languages
+&amp;#8212; rather than going with Rust simply to learn it better &amp;#8212;
+then it would be hard to justify it over something like&amp;nbsp;Go.&lt;/p&gt;
+&lt;h4&gt;It&amp;nbsp;scales&lt;/h4&gt;
+&lt;p&gt;So the real question is: has Rust &lt;em&gt;not hampered&lt;/em&gt; my productivity too much?
+Having the benefit of hindsight,
+I&amp;#8217;m happy to say that the trade-off was definitely acceptable&amp;nbsp;:)&lt;/p&gt;
+&lt;p&gt;One thing I was particularly satisfied with was the language&amp;#8217;s &lt;em&gt;scalability&lt;/em&gt;.
+What I mean here is the ability to adapt as the project grows,
+but also to start quickly and remain nimble
+while the codebase is still pretty&amp;nbsp;small.&lt;/p&gt;
+&lt;p&gt;Many languages (most, perhaps) are naturally tailored towards the large end,
+doing their best to make it more bearable to work with big codebases.
+In turn, they often forget about helping projects take off in the first place.
+Between complicated build systems and dependency managers (Java),
+or a virtual lack of either (C++),
+it can be really hard to get going in a &amp;#8220;serious&amp;#8221; language like&amp;nbsp;this.&lt;/p&gt;
+&lt;p&gt;On the other hand, languages like Python make it very easy to start up
+and achieve relatively impressive results.
+Some people, however, report having encountered problems
+once the code evolves past certain size.
+While I&amp;#8217;m actually
+&lt;a href="http://xion.io/post/programming/long-live-dynamic-languages.html"&gt;very unsympathetic&lt;/a&gt; to those claims,
+I realize perception plays a significant role here,
+making those anecdotal experiences into a sort of self-fulfilling&amp;nbsp;prophecy.&lt;/p&gt;
+&lt;p&gt;This perception problem should almost certainly spare Rust,
+as it&amp;#8217;s a natively compiled and statically typed language,
+with a respectable type system to boot.
+There is also &lt;a href="https://servo.org/"&gt;some evidence&lt;/a&gt;
+that the language works well in large projects already.
+So the only question that we might want to ask is:
+how easy it is to actually &lt;em&gt;start&lt;/em&gt; a project in Rust,
+and carry it towards some kind of &lt;abbr title="Minimum Viable Product"&gt;&lt;span class="caps"&gt;MVP&lt;/span&gt;&lt;/abbr&gt;?&lt;/p&gt;
+&lt;p&gt;Based on my experiences with &lt;em&gt;gisht&lt;/em&gt;,
+I can say that it is, in fact, quite easy.
+Thanks mostly to the impressive Swiss army knife of &lt;code&gt;cargo&lt;/code&gt;
+&amp;#8212; acting as both package manager and a rudimentary build system &amp;#8212;
+it was almost Python-trivial to cook a &amp;#8220;Hello World&amp;#8221; program
+that does something tangible, like
+&lt;a href="https://github.com/Xion/gisht/blob/de1be876784d671dd84618c3a15d0836f9fd5697/src/main.rs"&gt;talk to a &lt;span class="caps"&gt;JSON&lt;/span&gt; &lt;span class="caps"&gt;API&lt;/span&gt;&lt;/a&gt;.
+From there, it only took a few coding sessions to grow it
+into a &lt;a href="https://github.com/Xion/gisht/tree/5c156cb"&gt;functioning prototype&lt;/a&gt;.&lt;/p&gt;
+&lt;h4&gt;Abstractions&amp;nbsp;galore&lt;/h4&gt;
+&lt;p&gt;As part of rewriting &lt;em&gt;gisht&lt;/em&gt; from Python to Rust,
+I also wanted to fix some longstanding issues that limited its&amp;nbsp;capabilities.&lt;/p&gt;
+&lt;p&gt;The most important one was the hopeless coupling to GitHub
+and their particular flavor of gists.
+Sure, this is where the project even got its name from,
+but people use a dozen of different services to share code snippets
+and it should very possible to support them&amp;nbsp;all.&lt;/p&gt;
+&lt;p&gt;Here&amp;#8217;s where it became necessary to utilize
+the abstraction capabilities that Rust has to offer.
+It was somewhat obvious to
+&lt;a href="https://github.com/Xion/gisht/blob/3fc443dc9986612fd46b4311ca2ecbc613a15cf9/src/gist.rs#L16"&gt;define a &lt;code&gt;Host&lt;/code&gt; trait&lt;/a&gt;
+but of course its exact form had to be
+&lt;a href="https://github.com/Xion/gisht/commit/26746dfc2eac68b67753f71148eb9897a861914e#diff-9d0a9c0911fa012f0fcf8ca56b43f8c5"&gt;shaped&lt;/a&gt;
+over &lt;a href="https://github.com/Xion/gisht/commit/1e54ad05480b42089977171f10d4727beca5f835#diff-9d0a9c0911fa012f0fcf8ca56b43f8c5"&gt;numerous iterations&lt;/a&gt;.
+Along the way, it even turned out that &lt;code&gt;Result&amp;lt;Option&amp;lt;T&amp;gt;&amp;gt;&lt;/code&gt; and &lt;code&gt;Option&amp;lt;Result&amp;lt;T&amp;gt;&amp;gt;&lt;/code&gt;
+are sometimes &lt;a href="https://github.com/Xion/gisht/blob/d9c30e69d58b2a4e5608e6c8a1aa6392133b490f/src/hosts/mod.rs#L44"&gt;both necessary&lt;/a&gt;
+as return types&amp;nbsp;:)&lt;/p&gt;
+&lt;p&gt;Besides cleaner architecture,
+another neat thing about an explicit abstraction is
+the ability to slice a concept into smaller pieces &amp;#8212;
+and then put &lt;em&gt;some of them&lt;/em&gt; back together.
+While the &lt;code&gt;Host&lt;/code&gt; trait could support a very diverse set of gist services and &lt;em&gt;pastebins&lt;/em&gt;,
+many of them turned out to be just a slight variation of one central theme.
+Because of this similarity, it was possible to introduce
+a single &lt;a href="https://github.com/Xion/gisht/blob/d2e78b1f5ee4616b1d5eb7067c3c5dd0ce9e2fe4/src/hosts/simple.rs#L26"&gt;&lt;code&gt;Basic&lt;/code&gt; implementation&lt;/a&gt;
+which handles multiple services through varying sets of &lt;span class="caps"&gt;URL&lt;/span&gt;&amp;nbsp;patterns.&lt;/p&gt;
+&lt;p&gt;Devices like these aren&amp;#8217;t of course specific to Rust:
+interfaces (traits) and classes are a staple of &lt;span class="caps"&gt;OO&lt;/span&gt; languages in general.
+But some other techniques were more idiomatic;
+the concept of &lt;a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"&gt;iterators&lt;/a&gt;, for example,
+is flexible enough to accommodate
+&lt;a href="https://github.com/Xion/gisht/blob/4fa347c6197190b0f6c68dd548efc28287a5859f/src/hosts/github.rs#L354"&gt;looping over GitHub user&amp;#8217;s gists&lt;/a&gt;,
+even as they read directly from &lt;span class="caps"&gt;HTTP&lt;/span&gt;&amp;nbsp;responses.&lt;/p&gt;
+&lt;h4&gt;Hacking&amp;nbsp;time&lt;/h4&gt;
+&lt;p&gt;Not everything was sunshine and rainbows,&amp;nbsp;though.&lt;/p&gt;
+&lt;p&gt;Take &lt;em&gt;clap&lt;/em&gt;, for example.
+It&amp;#8217;s mostly a very good crate for parsing command line arguments,
+but it couldn&amp;#8217;t &lt;em&gt;quite&lt;/em&gt; cope with the unusual requirements that &lt;em&gt;gisht&lt;/em&gt; had.
+To make &lt;code&gt;gisht Foo/bar&lt;/code&gt; work alongside &lt;code&gt;gisht run Foo/bar&lt;/code&gt;,
+it was necessary to
+&lt;a href="https://github.com/Xion/gisht/commit/0eff00e31f94f3856558ebb1f6655a9e6fc50ca6#diff-7397f82f682a49eb62e2b056118124d0"&gt;analyze &lt;code&gt;argv&lt;/code&gt;&lt;/a&gt;
+before even handing it over to &lt;code&gt;clap&lt;/code&gt;.
+This turned out to be
+&lt;a href="https://github.com/Xion/gisht/commit/e7ab06a01d4675947965ec82fc6f3ec5a2517c89#diff-7397f82f682a49eb62e2b056118124d0"&gt;surprisingly tricky&lt;/a&gt;
+to get right.
+Like,
+&lt;a href="https://github.com/Xion/gisht/commit/69e8aad4a1743beb57184dc38150ef02b306a0a1#diff-7397f82f682a49eb62e2b056118124d0"&gt;really&lt;/a&gt;
+tricky, with
+&lt;a href="https://github.com/Xion/gisht/commit/acadcfa0a97fe52584fbf8198541baa8733cb0a5#diff-7397f82f682a49eb62e2b056118124d0R58"&gt;edges cases&lt;/a&gt;
+and
+&lt;a href="https://github.com/Xion/gisht/commit/a9eb599168f5b6821aefa46dde0b0a89a41cd4e6#diff-7397f82f682a49eb62e2b056118124d0R562"&gt;stuff&lt;/a&gt;.
+But as it is often the case in software,
+the answer turned out to be yet another layer of indirection plus
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/args.rs#L457-L578"&gt;a copious amount of tests&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;In another instance, however, a direct library support was&amp;nbsp;crucial.&lt;/p&gt;
+&lt;p&gt;It so happened that &lt;em&gt;hyper&lt;/em&gt;, the crate I&amp;#8217;ve been using for &lt;span class="caps"&gt;HTTP&lt;/span&gt; requests,
+didn&amp;#8217;t handle the &lt;code&gt;Link:&lt;/code&gt; response header out of the box&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.
+This was a stumbling block that prevented the gist iterator (mentioned earlier)
+from correctly handling pagination in the responses from GitHub &lt;span class="caps"&gt;API&lt;/span&gt;.
+Thankfully, having &lt;a href="https://docs.rs/hyper/0.11.7/hyper/header/trait.Header.html"&gt;the &lt;code&gt;Header&lt;/code&gt; abstraction&lt;/a&gt; in &lt;em&gt;hyper&lt;/em&gt;
+meant it was possible to add the missing support in
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/ext/hyper.rs"&gt;a relatively straighforward manner&lt;/a&gt;.
+Yes, it&amp;#8217;s &lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/ext/hyper.rs#L23"&gt;not a universal implementation&lt;/a&gt;
+that&amp;#8217;d be suitable for &lt;em&gt;every&lt;/em&gt; &lt;span class="caps"&gt;HTTP&lt;/span&gt; client,
+but it does the job for &lt;em&gt;gisht&lt;/em&gt; just&amp;nbsp;fine.&lt;/p&gt;
+&lt;h4&gt;Test-Reluctant&amp;nbsp;Development&lt;/h4&gt;
+&lt;p&gt;And so the program kept growing steadily over the months,
+most notably through
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/hosts/mod.rs#L101"&gt;more and more gist hosts&lt;/a&gt;
+it could now&amp;nbsp;support.&lt;/p&gt;
+&lt;p&gt;Eventually, some of them would fall into a sort of twilight zone.
+They weren&amp;#8217;t as complicated as GitHub to warrant writing a completely new &lt;code&gt;Host&lt;/code&gt; instance,
+but they also couldn&amp;#8217;t be handled via
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/hosts/common/basic.rs#L28"&gt;the &lt;code&gt;Basic&lt;/code&gt; structure&lt;/a&gt; alone.
+A good example would be &lt;a href="http://sprunge.us/"&gt;sprunge.us&lt;/a&gt;:
+mostly an ordinary pastebin,
+except for its optional syntax highlighting
+which may add some &amp;#8220;junk&amp;#8221; to the otherwise regular&amp;nbsp;URLs.&lt;/p&gt;
+&lt;p&gt;In order to handle those odd cases,
+I went for a classic wrapper/decorator pattern which, in its essence,
+boils down to something like&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;inner&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Basic&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;inner&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Basic&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ID&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;sprunge.us&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                                  &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;http://sprunge.us/${id}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;...)}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Host&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// override &amp;amp; wrap methods that require custom logic:&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;resolve_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;io&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Gist&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url_obj&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Url&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;url_obj&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;set_query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;inner&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;resolve_url&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url_obj&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// passthrough to the `Basic` struct for others:&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;fetch_gist&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;gist&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Gist&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mode&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FetchMode&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;io&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;inner&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;fetch_gist&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;gist&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mode&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// (etc.)&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Despite the noticeable boilerplate of a few pass-through methods,
+I was pretty happy with this solution, at least initially.
+After a few more unusual hosts, however,
+it became cumbersome to fix all the edge cases
+by looking only at the final output of the inner &lt;code&gt;Basic&lt;/code&gt; implementation.
+The code was evidently asking for some &lt;em&gt;tests&lt;/em&gt;,
+if only to check how the inner structure is being&amp;nbsp;called.&lt;/p&gt;
+&lt;p&gt;Shouldn&amp;#8217;t be too hard, right?&amp;#8230; Yeah, that&amp;#8217;s what I thought,&amp;nbsp;too.&lt;/p&gt;
+&lt;p&gt;The reality, unfortunately, fell very short of those expectations.
+Stubs, mocks, fakes &amp;#8212;
+&lt;a href="https://testing.googleblog.com/2013/07/testing-on-toilet-know-your-test-doubles.html"&gt;&lt;em&gt;test doubles&lt;/em&gt;&lt;/a&gt;
+in general &amp;#8212;
+are a dark and forgotten corner of Rust
+that almost no one seems to pay any attention to.
+Absent a proper library support &amp;#8212; much less a language one &amp;#8212;
+the only way forward was to roll up my sleeves
+and implement
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/testing/inmemory_host.rs"&gt;a fake &lt;code&gt;Host&lt;/code&gt;&lt;/a&gt;
+from&amp;nbsp;scratch.&lt;/p&gt;
+&lt;p&gt;But that was just the beginning.
+How do you seamlessly inject this fake implementation into the wrapper
+so that it replaces the &lt;code&gt;Basic&lt;/code&gt; struct for testing?
+If you are not careful and go for the &amp;#8220;obvious&amp;#8221; solution &amp;#8212; a trait&amp;nbsp;object:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;inner&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Host&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;you&amp;#8217;ll soon realize that you need not just a &lt;code&gt;Box&lt;/code&gt;, but at least an &lt;code&gt;Rc&lt;/code&gt; (or maybe even &lt;code&gt;Arc&lt;/code&gt;).
+Without this kind of shared ownership,
+you&amp;#8217;ll lose your chance to interrogate the test double once you hand it over to the wrapper.
+This, in turn, will heavily limit your ability to write effective&amp;nbsp;tests.&lt;/p&gt;
+&lt;p&gt;What&amp;#8217;s the non-obvious approach, then?
+The full rationale would probably warrant a separate post,
+but the working recipe looks more or less like&amp;nbsp;this:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;First, &lt;em&gt;parametrize&lt;/em&gt; the wrapper with its inner type:
+  &lt;code&gt;pub struct Sprunge&amp;lt;T: Host&amp;gt; { inner: T }&lt;/code&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Put that in an internal module with the correct visibility&amp;nbsp;setup:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;mod&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;internal&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Host&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;super&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;inner&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Make the regular (&amp;#8220;production&amp;#8221;) version of the wrapper into an &lt;em&gt;alias&lt;/em&gt;,
+  giving it the type parameter that you&amp;#8217;ve been using directly&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;internal&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Sprunge&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Basic&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Change the &lt;code&gt;new&lt;/code&gt; constructor to instantiate the &lt;code&gt;internal&lt;/code&gt; type.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;In tests, create the wrapper with a fake &lt;code&gt;inner&lt;/code&gt; object&amp;nbsp;inside.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;As you can see in
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/hosts/sprunge.rs"&gt;the real example&lt;/a&gt;,
+this convoluted technique removes the need for any pointer indirection.
+It also permits you to
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/hosts/sprunge.rs#L152"&gt;access the out-of-band interface&lt;/a&gt;
+that a fake object would normally&amp;nbsp;expose.&lt;/p&gt;
+&lt;p&gt;It&amp;#8217;s a shame, though, that so much work is required for something
+that should be very simple.
+As it appears, testing is still a neglected topic in&amp;nbsp;Rust.&lt;/p&gt;
+&lt;h4&gt;Packing&amp;nbsp;up&lt;/h4&gt;
+&lt;p&gt;It wasn&amp;#8217;t just Rust that played a notable role in the development of &lt;em&gt;gisht&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Pretty soon after getting the app to a presentable state,
+it became clear that a mere &lt;code&gt;cargo build&lt;/code&gt; won&amp;#8217;t do everything
+that&amp;#8217;s necessary to carry out a complete build.
+It &lt;em&gt;could&lt;/em&gt; do more, admittedly,
+if I had the foresight to explore &lt;a href="http://doc.crates.io/build-script.html"&gt;Cargo build scripts&lt;/a&gt;
+a little more thoroughly.
+But overall, I don&amp;#8217;t regret dropping back to my trusty ol&amp;#8217; pick:&amp;nbsp;Python.&lt;/p&gt;
+&lt;p&gt;Like in a few previous projects, I used the &lt;a href="http://pyinvoke.org"&gt;Invoke task runner&lt;/a&gt;
+for both the crucial and the auxiliary automation tasks.
+It is a relatively powerful tool
+&amp;#8212; and probably the best in its class in Python that I know of &amp;#8212;
+though it can be a bit capricious if you want to
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/tasks/release/__init__.py#L69"&gt;really fine-tune it&lt;/a&gt;.
+But it does make it much easier to organize your automation code,
+to reuse it between tasks, and to (ahem) &lt;em&gt;invoke&lt;/em&gt; those tasks in a convenient&amp;nbsp;manner.&lt;/p&gt;
+&lt;p&gt;In any case, it certainly beats a collection of disconnected Bash scripts&amp;nbsp;;)&lt;/p&gt;
+&lt;p&gt;What have I automated in this way, you may ask?
+Well, a couple of small things; those&amp;nbsp;include:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;embedding of the current Git commit hash into the binary,
+to help identify the exact revision in the logs of any potential bug reports&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;after a successful build,
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/tasks/build.py#L40"&gt;replacing&lt;/a&gt;
+the &lt;em&gt;Usage&lt;/em&gt; section in &lt;em&gt;&lt;span class="caps"&gt;README&lt;/span&gt;&lt;/em&gt; with the program&amp;#8217;s &lt;code&gt;--help&lt;/code&gt; output&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;generating &lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/tasks/build.py#L96"&gt;completion scripts&lt;/a&gt;
+for popular shells by invoking the binary with a magic hidden flag (courtesy of &lt;em&gt;clap&lt;/em&gt;)&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Undoubtedly the biggest task that I relegated to Python/Invoke,
+was the preparation of
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/tasks/release/__init__.py"&gt;&lt;em&gt;release packages&lt;/em&gt;&lt;/a&gt;.
+When it comes to the various Linuxes (currently Debian and Red Hat flavors),
+this wasn&amp;#8217;t particularly complicated.
+Major thanks are due to the amazing &lt;a href="https://github.com/jordansissel/fpm"&gt;&lt;em&gt;fpm&lt;/em&gt; tool&lt;/a&gt; here,
+which I recommend to anyone who needs to package their software in a distro-compatible&amp;nbsp;manner.&lt;/p&gt;
+&lt;p&gt;Homebrew, however &amp;#8212; or more precisely, &lt;span class="caps"&gt;OS&lt;/span&gt; X itself &amp;#8212; was quite a different story.
+Many, &lt;a href="https://github.com/Xion/gisht/commits/a5423a63d10221c50faa1cb30a999a85286853a1"&gt;many&lt;/a&gt;
+failed attempts were needed to even get it to build on &lt;a href="https://travis-ci.org"&gt;Travis&lt;/a&gt;,
+and the additional dependency on Python was
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/ci/travis/before_install-osx.sh#L15"&gt;partially to blame&lt;/a&gt;.
+To be fair, however, most of the pain was exclusively due to OpenSSL;
+getting that thing to build is always &lt;a href="https://github.com/sfackler/rust-openssl/issues/255"&gt;loads of &amp;#8220;fun&amp;#8221;&lt;/a&gt;,
+especially in such an opaque and poorly debuggable environment as&amp;nbsp;Travis.&lt;/p&gt;
+&lt;h4&gt;The&amp;nbsp;wrap&lt;/h4&gt;
+&lt;p&gt;There&amp;#8217;s probably a lot of minor things and tidbits I could&amp;#8217;ve mentioned along the way,
+but the story so far has most likely covered all the important topics.
+Let&amp;#8217;s wrap it up then, and highlight some interesting points in the classic &lt;em&gt;Yay/Meh/Nay&lt;/em&gt;&amp;nbsp;manner.&lt;/p&gt;
+&lt;h5&gt;Yay&lt;/h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;It was definitely a good choice to rewrite &lt;em&gt;gisht&lt;/em&gt; specifically in Rust.
+Besides all the advantages I&amp;#8217;ve mentioned already,
+it is also worth noting that the language went through about 10 minor version bumps
+while I was working on this project.
+Of all those new releases,
+I don&amp;#8217;t recall a single one that would introduce a breaking&amp;nbsp;change.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Most of the Rust ecosystem (third-party libraries) was a joy to use,
+and very easy to get started with.
+Honorable mention goes to &lt;em&gt;serde_json&lt;/em&gt; and how easy it was to
+&lt;a href="https://github.com/Xion/gisht/commit/a0655a6a5b86c05df5665e3bc7f1512f2476c9e4"&gt;transition the code&lt;/a&gt;
+from &lt;em&gt;rustc_serialize&lt;/em&gt; that I had used at&amp;nbsp;first.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;With a possible exception of sucking in node.js as a huge dependency of your project
+and using Grunt, there is probably no better way of writing automation &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; support code than Python.
+There may eventually be some Rust-based task runners that could try to compete,
+but I&amp;#8217;m not very convinced about using a compiled language for this purpose
+(and especially one that takes so long to&amp;nbsp;build).&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h5&gt;Meh&lt;/h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;While &lt;a href="https://docs.rs/clap"&gt;the &lt;em&gt;clap&lt;/em&gt; crate&lt;/a&gt; is quite configurable and pretty straightforward to use,
+it does lack at least &lt;a href="https://github.com/kbknapp/clap-rs/issues/568"&gt;one feature&lt;/a&gt;
+that&amp;#8217;d be very nice for &lt;em&gt;gisht&lt;/em&gt;.
+Additionally, working with raw &lt;em&gt;clap&lt;/em&gt; is often a little tedious,
+as it doesn&amp;#8217;t assist you in translating parsed flags into your own configuration types,
+and thus requires
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/src/args.rs#L138-L182"&gt;shuffling those bits&lt;/a&gt;
+manually&lt;sup id="fnref:6"&gt;&lt;a class="footnote-ref" href="#fn:6" rel="footnote"&gt;6&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Being a &lt;em&gt;defacto&lt;/em&gt; standard for continuous integration in open-source projects,
+&lt;a href="https://travis-ci.org"&gt;Travis &lt;span class="caps"&gt;CI&lt;/span&gt;&lt;/a&gt; could be a &lt;em&gt;little&lt;/em&gt; less finicky.
+In almost every project I decide to use it for,
+I end up with about half a dozen commits
+that frantically try to fix silly configuration issues,
+all before even a simple &lt;em&gt;.travis.yml&lt;/em&gt; works as intended.
+Providing a way to test &lt;span class="caps"&gt;CI&lt;/span&gt; builds locally would be an obvious way to avoid this&amp;nbsp;churn.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h5&gt;Nay&lt;/h5&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;Testing in Rust is such a weird animal.
+On one hand, there is a first-class, out-of-the-box support for unit tests
+(and even integration tests) right in the toolchain.
+On the other hand, the relevant parts of the ecosystem are immature or lacking,
+as evidenced by the dreary story of mocking and stubbing.
+It&amp;#8217;s no surprise that there is a long way to catch up to languages with the strongest testing culture
+(Java and C#/.&lt;span class="caps"&gt;NET&lt;/span&gt;&lt;sup id="fnref:7"&gt;&lt;a class="footnote-ref" href="#fn:7" rel="footnote"&gt;7&lt;/a&gt;&lt;/sup&gt;), but it&amp;#8217;s disappointing to see Rust outclassed
+&lt;a href="https://github.com/google/googletest"&gt;even by C++&lt;/a&gt;.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Getting anything to build reliably on &lt;span class="caps"&gt;OSX&lt;/span&gt; in a &lt;span class="caps"&gt;CI&lt;/span&gt; environment is already a tall order.
+But if it involves things as OpenSSL, then it quickly goes from bad to terrible.
+I&amp;#8217;m really not amused anymore how this &amp;#8220;Just Works&amp;#8221; system often turns out to hardly work at&amp;nbsp;all.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Since I don&amp;#8217;t want to end on such a negative note,
+I feel compelled to state the obvious fact: every technology choice is a trade-off.
+In case of this project, however, the drawbacks were &lt;em&gt;heavily&lt;/em&gt; outweighed by the&amp;nbsp;benefits.&lt;/p&gt;
+&lt;p&gt;For this reason, I can definitely recommend the software stack I&amp;#8217;ve just described
+to anyone developing non-trivial, cross-platform command line&amp;nbsp;tools.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;This is not an isolated complaint, by the way,
+as the interpreter startup time has recently emerged as &lt;a href="https://lwn.net/Articles/730915/"&gt;an important issue&lt;/a&gt;
+to many developers of the Python language.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Which may also include a practical &lt;em&gt;lack&lt;/em&gt; thereof.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;It does handle it &lt;a href="https://docs.rs/hyper/0.11.7/hyper/header/struct.Link.html"&gt;now&lt;/a&gt;, fortunately.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;Observant readers may notice that we&amp;#8217;re exposing a technically private type (&lt;code&gt;internal::Sprunge&lt;/code&gt;)
+through a publicly visible type alias. If that type was &lt;em&gt;actually&lt;/em&gt; private,
+this would trigger a compiler warning
+which is slated to become &lt;a href="https://github.com/rust-lang/rust/issues/34537"&gt;a hard error&lt;/a&gt;
+at some point in the future. But, amusingly, we can fool the compiler by making it a
+&lt;em&gt;public type&lt;/em&gt; inside a &lt;em&gt;private module&lt;/em&gt;, which is exactly what we&amp;#8217;re doing here.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:5"&gt;
+&lt;p&gt;This has since been rewritten and is now done in
+&lt;a href="https://github.com/Xion/gisht/blob/30df960052f2a03270bbb5ca1f7be0920978007d/build.rs"&gt;&lt;em&gt;build.rs&lt;/em&gt;&lt;/a&gt;
+&amp;#8212; but that&amp;#8217;s only because I implemented
+&lt;a href="https://github.com/rust-lang/cargo/pull/3929"&gt;the relevant Cargo feature&lt;/a&gt; myself :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:6"&gt;
+&lt;p&gt;For an alternative approach that doesn&amp;#8217;t seem to have this problem,
+check &lt;a href="https://docs.rs/structopt_derive"&gt;the &lt;em&gt;structopt&lt;/em&gt; crate&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:7"&gt;
+&lt;p&gt;Dynamically typed languages, due to their rich runtime,
+are basically a class of their own when it comes to testing ease,
+so it wouldn&amp;#8217;t really be fair to hold them up for comparison.&amp;#160;&lt;a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="gisht"></category><category term="CLI"></category><category term="GitHub"></category><category term="Python"></category><category term="testing"></category></entry><entry><title>Currying and API design</title><link href="http://xion.io/post/programming/currying-api-design.html" rel="alternate"></link><updated>2017-11-12T14:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-11-12:post/programming/currying-api-design.html</id><summary type="html">&lt;p&gt;In functional programming, &lt;em&gt;currying&lt;/em&gt; is one of the concepts
 that contribute greatly to its expressive power.
 Its importance could be compared to something as ubiquitous
 as chaining method calls (&lt;code&gt;foo.bar().baz()&lt;/code&gt;) in imperative, object-oriented&amp;nbsp;languages.&lt;/p&gt;
@@ -1695,100 +2151,4 @@ exposed as &lt;a href="https://doc.rust-lang.org/std/result/enum.Result.html#met
 I&amp;#8217;ve heard that Scala fills that niche quite well.&amp;#160;&lt;a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="Haskell"></category><category term="traits"></category><category term="typeclasses"></category><category term="monads"></category><category term="ADTs"></category><category term="FP"></category></entry><entry><title>Long Live Dynamic Languages!</title><link href="http://xion.io/post/programming/long-live-dynamic-languages.html" rel="alternate"></link><updated>2017-05-24T19:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-05-24:post/programming/long-live-dynamic-languages.html</id><summary type="html">&lt;p&gt;If you followed the few (or a dozen) of my recent posts,
-you&amp;#8217;ve probably noticed a sizable bias in the choice of topics.
-The vast majority were about &lt;a href="http://rust-lang.org"&gt;Rust&lt;/a&gt; &amp;#8212;
-a native, bare metal, statically typed language with powerful compile time semantics
-but little in the way of runtime&amp;nbsp;flexibility.&lt;/p&gt;
-&lt;p&gt;Needless to say, Rust is radically different than (almost the exact opposite of) Python,
-the other language that I&amp;#8217;m covering sometimes.
-Considering this topical shift,
-it would fair to assume that I, too, have subscribed to the whole Static Typing™&amp;nbsp;trend.&lt;/p&gt;
-&lt;p&gt;But that wouldn&amp;#8217;t be very&amp;nbsp;accurate.&lt;/p&gt;
-&lt;p&gt;Don&amp;#8217;t get me wrong.
-As far as fashion cycles in the software industry go,
-the current trend towards static/compiled languages is difficult to disparage.
-Strong in both hype &lt;em&gt;and&lt;/em&gt; merit,
-it has given us some &lt;a href="http://rust-lang.org"&gt;really innovative&lt;/a&gt;
-&lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; &lt;a href="https://www.typescriptlang.org/"&gt;promising&lt;/a&gt; solutions
-(as well as some &lt;a href="http://golang.org"&gt;not-so-innovative&lt;/a&gt; ones)
-that are poised to shape the future of programming for years, if not decades to come.
-In many ways, it is also correcting mistakes of &lt;a href="https://www.java.com/en/"&gt;the previous generation&lt;/a&gt;:
-excessive boilerplate, byzantine abstractions, and software&amp;nbsp;bloat.&lt;/p&gt;
-&lt;p&gt;What about dynamic languages, then?
-Are they slowly going the way of the&amp;nbsp;dodo?&lt;/p&gt;
-&lt;h4&gt;Trigger warning: &lt;code&gt;TypeError&lt;/code&gt;&lt;/h4&gt;
-&lt;p&gt;Some programmers would certainly wish&amp;nbsp;so.&lt;/p&gt;
-&lt;p&gt;Indeed, it&amp;#8217;s not hard at all to find
-&lt;a href="https://arstechnica.com/information-technology/2014/06/why-do-dynamic-languages-make-it-difficult-to-maintain-large-codebases/"&gt;articles&lt;/a&gt;
-and &lt;a href="https://www.reddit.com/r/rust/comments/6aqksm/rust_productivity_compared_to_other_languages/dhgp037/"&gt;opinions&lt;/a&gt;
-about dynamic languages that are, well, less than&amp;nbsp;flattering.&lt;/p&gt;
-&lt;p&gt;The common argument echoed in those accounts points to supposed unsuitability of Python et al.
-for any large, multi-person project.
-The reasoning can be summed up as &amp;#8220;good for small scripts and not much else&amp;#8221;.
-Without statically checked types, the argument goes,
-anything bigger than a quick hack or a prototype
-shall inevitably become hairy and dangerous&amp;nbsp;monstrosity.&lt;/p&gt;
-&lt;p&gt;And when that happens,
-&lt;em&gt;a single typo&lt;/em&gt; can go unchecked and bring down the entire&amp;nbsp;system!&amp;#8230;&lt;/p&gt;
-&lt;p&gt;At the very end of this spectrum of beliefs,
-some pundits may eventually make the leap from languages to &lt;em&gt;people&lt;/em&gt;.
-If dynamically typed languages (or &amp;#8220;untyped&amp;#8221; ones, as they&amp;#8217;re often mislabeled)
-are letting even trivial bugs through,
-then obviously anyone who wants to use them is
-&lt;a href="https://danluu.com/images/empirical-pl/pl_godwin.png"&gt;dangerously irresponsible&lt;/a&gt;.
-It must follow that all they &lt;em&gt;really&lt;/em&gt; want is to hack up some shoddy code,
-&lt;em&gt;yolo&lt;/em&gt; it over to production, and let others worry about the&amp;nbsp;consequences.&lt;/p&gt;
-&lt;h4&gt;Mind the&amp;nbsp;gap&lt;/h4&gt;
-&lt;p&gt;It&amp;#8217;s likely unproductive to engage with someone who&amp;#8217;s that extreme.
-If the rhetoric is dialed down, however, we can definitely find the edge of&amp;nbsp;reason.&lt;/p&gt;
-&lt;p&gt;In my opinion, this fine line goes right through the &amp;#8220;good in small quantities&amp;#8221; argument.
-I can certainly understand the apprehension towards large projects
-that utilize dynamically typed languages throughout their codebases.
-The prospect of such a project &lt;em&gt;is&lt;/em&gt; scary,
-because it contains an additional element of uncertainty.
-More so than with many other technologies,
-you ought to &lt;em&gt;know what you&amp;#8217;re doing&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Some people (and teams) do. Others, not so&amp;nbsp;much.&lt;/p&gt;
-&lt;p&gt;I would therefore refine the argument
-so that it better reflects the strengths and weaknesses of dynamic languages.
-They are perfectly suited for at least the following&amp;nbsp;cases:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;anyone writing small, standalone applications or&amp;nbsp;scripts&lt;/li&gt;
-&lt;li&gt;&lt;em&gt;any project&lt;/em&gt; (large or small) with a well-functioning team of talented&amp;nbsp;individuals&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;The sad reality of the software industry is the vast, gaping chasm of calamity and despair
-that stretches between those two&amp;nbsp;scenarios.&lt;/p&gt;
-&lt;p&gt;Within lies the bulk of commercial software projects,
-consistently hamstrung by the usual suspects:
-incompetent management, unclear and shifting requirements, under- or overstaffing,
-ancient development practices, lack of coding standards, rampant bureaucracy,
-&lt;a href="http://www.daedtech.com/how-developers-stop-learning-rise-of-the-expert-beginner/"&gt;inexperienced developers&lt;/a&gt;,
-and so&amp;nbsp;on.&lt;/p&gt;
-&lt;p&gt;In such an environment,
-it becomes nigh impossible to capitalize on the strengths of dynamic languages.
-Instead, the main priority is to protect from even further productivity losses,
-which is what bog-standard languages like Java, C#, or Go tend to be pretty good at.
-Rather than to move fast, the objective is to remain moving &lt;em&gt;at all&lt;/em&gt;.&lt;/p&gt;
-&lt;h4&gt;Freedom of&amp;nbsp;choice&lt;/h4&gt;
-&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;But that&amp;#8217;s backwards&amp;#8221;, the usual retort goes.
-&amp;#8220;Static typing and compilation checks are what &lt;em&gt;enables&lt;/em&gt; me to be&amp;nbsp;productive!&amp;#8221;&lt;/p&gt;
-&lt;p&gt;I have no doubt that most people saying this do indeed believe
-they&amp;#8217;re better off programming in static languages.
-Regardless of what they think, however,
-there exists &lt;a href="https://danluu.com/empirical-pl/"&gt;no conclusive evidence&lt;/a&gt;
-to back up such claims as a universal&amp;nbsp;rule.&lt;/p&gt;
-&lt;p&gt;This is of course the perennial problem with software engineering in general,
-and the project management aspect of it in particular.
-There is very little proper research on optimal and effective approaches to it,
-which is why any of the so-called &amp;#8220;best practices&amp;#8221;
-are quite likely to stem from &lt;a href="https://leanpub.com/leprechauns"&gt;unsubstantiated hearsay&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;We can lament this state of affairs, of course.
-But on the other hand, we can also find it &lt;em&gt;liberating&lt;/em&gt;.
-In the absence of rigid prescriptions and judgments about productivity,
-we are free to explore, within technical limitations,
-what language works best for us, our team, and our&amp;nbsp;projects.&lt;/p&gt;
-&lt;p&gt;Sometimes it&amp;#8217;ll be Go, Java, Rust, or even Haskell.&lt;br&gt;
-A different situation may be best handled by Python, Ruby, or even&amp;nbsp;JavaScript.&lt;/p&gt;
-&lt;p&gt;As the old adage goes, there is no silver bullet.
-We should not try to polish static typing into&amp;nbsp;one.&lt;/p&gt;</summary><category term="Python"></category><category term="Rust"></category><category term="dynamic languages"></category><category term="dynamic typing"></category><category term="static typing"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="Haskell"></category><category term="traits"></category><category term="typeclasses"></category><category term="monads"></category><category term="ADTs"></category><category term="FP"></category></entry></feed>

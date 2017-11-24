@@ -63,6 +63,105 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-optional-args.html#rust-optional-args">Optional arguments in Rust&nbsp;1.12</a></h2>
+    <p>
+      Posted on Thu 29 September 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/parameters.html">parameters</a>,      <a href="http://xion.io/tag/functions.html">functions</a>      &#8226; <a href="http://xion.io/post/code/rust-optional-args.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Today&#8217;s <a href="https://blog.rust-lang.org/2016/09/29/Rust-1.12.html">announcement of Rust 1.12</a> contains,
+among other things, this innocous little&nbsp;tidbit:</p>
+<blockquote>
+<p><code>Option</code> implements <code>From</code> for its contained&nbsp;type</p>
+</blockquote>
+<p>If you&#8217;re not very familiar with it,
+<code>From</code> is a basic <a href="https://doc.rust-lang.org/std/convert/trait.From.html">converstion trait</a>
+which any Rust type can implement.
+By doing so, it defines how to create its values <em>from</em> some other type &#8212; hence its&nbsp;name.</p>
+<p>Perhaps the most widespread application of this trait (and its <code>from</code> method)
+is allocating owned <code>String</code> objects from literal <code>str</code> values:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">hello</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Hello, world!&quot;</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>What the change above means is that we can do similar thing with the <code>Option</code> type:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">maybe_int</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>At a first glance, this doesn&#8217;t look like a big deal at all.
+For one, this syntax is much more wordy than the traditional <code>Some(42)</code>,
+so it&#8217;s not very clear what benefits it&nbsp;offers.</p>
+<p>But this first impression is rather deceptive.
+In many cases, this change can actually <em>reduce</em> the number of times we have to type <code>Some(x)</code>,
+allowing us to replace it with just <code>x</code>.
+That&#8217;s because this new <code>impl</code> brings Rust quite a bit closer to having <em>optional function arguments</em>
+as a first class feature in the&nbsp;language.</p>
+<p>Until now, a function defined like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>was the closest Rust had to default argument values.
+While this works perfectly &#8212; and is bolstered by compile-time checks! &#8212;
+callers are unfortunately required to build the <code>Option</code> objects&nbsp;manually:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="mi">42</span><span class="p">));</span><span class="w">  </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="nb">None</span><span class="p">);</span><span class="w">      </span><span class="c1">// OK</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w">        </span><span class="c1">// error!</span>
+</pre></div>
+
+
+<p>After <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>, however, this can change for the better.
+<em>Much</em> better, in fact, for the last line above can be made valid.
+All that is necessary is to take advantage of this new <code>impl</code> in the function&nbsp;definition:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Option</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="n">x</span><span class="p">).</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Unfortunately, this results in quite a bit of complexity,
+up to and including the <code>where</code> clause: a telltale sign of convoluted, generic code.
+Still, this trade-off may be well worth it,
+as a function defined once can be called many times throughout the code base,
+and possibly across multiple crates if it&#8217;s a part of the public <span class="caps">API</span>.</p>
+<p>But we can do better than this.
+Indeed, using the <code>From</code> trait to constrain argument types is just complicating things for no good reason.
+What we should so instead is use the symmetrical trait, <a href="https://doc.rust-lang.org/std/convert/trait.Into.html"><code>Into</code></a>,
+and take advantage of its standard <code>impl</code>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="n">U</span><span class="o">&gt;</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">T</span><span class="w"> </span><span class="n">where</span><span class="w"> </span><span class="n">U</span><span class="o">:</span><span class="w"> </span><span class="n">From</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"></span>
+</pre></div>
+
+
+<p>Once we translate it to the <code>Option</code> case (now that <code>Option&lt;T&gt;</code> implements <code>From&lt;T&gt;</code>),
+we can switch the trait bounds around and get rid of the <code>where</code> clause&nbsp;completely:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">maybe_plus_5</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="n">Into</span><span class="o">&lt;</span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">i32</span><span class="o">&gt;&gt;&gt;</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">x</span><span class="p">.</span><span class="n">into</span><span class="p">().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">5</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As a small bonus, the function body has also gotten a little&nbsp;simpler.</p>
+<hr />
+<p>So, should you go wild and change all your functions taking <code>Option</code>als to look like this?&#8230;
+Well, technically you can, although the benefits may not outweigh the downsides
+for small, private functions that are called&nbsp;infrequently.</p>
+<p>On the other hand, if you can afford to only support Rust 1.12 and up,
+this technique can make it much more pleasant to use the external <span class="caps">API</span> of your&nbsp;crates.</p>
+<p>What&#8217;s best is the <em>full backward compatibility</em> with any callers that still pass <code>Some(x)</code>:
+for them, the old syntax will continue to work exactly like before.
+Also note that the Rust compiler is smart about eliding the no-op conversion calls like the <code>Into::into</code> above,
+so you shouldn&#8217;t observe any changes in the performance department&nbsp;either.</p>
+<p>And who knows, maybe at some point Rust makes the final leap, and allows skipping the <code>None</code>s?&#8230;</p>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/bash-flappy-bird.html#bash-flappy-bird">Flappy Bird in 1234 bytes of&nbsp;Bash</a></h2>
     <p>
       Posted on Thu 25 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1365,116 +1464,6 @@ for extensions such as <a href="http://flask-script.readthedocs.io/en/latest/">F
 </li>
 <li id="fn:5">
 <p>This saying, there are some task runners which offer similar experience, like <a href="http://pyinvoke.org">Invoke</a>.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-mock-configure.html#python-mock-configure">Mock.configure_mock fix for&nbsp;Python</a></h2>
-    <p>
-      Posted on Sat 07 May 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/mock.html">mock</a>,      <a href="http://xion.io/tag/patching.html">patching</a>      &#8226; <a href="http://xion.io/post/code/python-mock-configure.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Python&#8217;s <a href="https://docs.python.org/3/library/unittest.mock.html">mocking library</a> is rather uncomplicated.
-Most of what it does is creating <em>mock objects</em>: veritable sponges that absorb every interaction with any code
-that we pass them&nbsp;to.</p>
-<p>This simplicity is also surfaced in the <span class="caps">API</span>, especially in the main part of it &#8212; the <code>mock.Mock</code> constructor:</p>
-<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="s">&#39;http://example.com&#39;</span><span class="p">)</span>
-<span class="k">assert</span> <span class="n">some_mock</span><span class="o">.</span><span class="n">url</span> <span class="o">==</span> <span class="s">&#39;http://example.com&#39;</span>
-</pre></div>
-
-
-<p>Any arguments that we pass there become attributes on the resulting mock object. This is really useful when
-<a href="https://docs.python.org/3/library/unittest.mock.html#the-patchers">patching</a>, because it allows us to completely specify
-the replacement object within a <code>@mock.patch</code> decorator:</p>
-<div class="highlight"><pre><span class="nd">@patch.object</span><span class="p">(</span><span class="n">requests</span><span class="p">,</span> <span class="s">&#39;get&#39;</span><span class="p">,</span> <span class="n">new</span><span class="o">=</span><span class="n">Mock</span><span class="p">(</span><span class="n">return_value</span><span class="o">=</span><span class="n">Mock</span><span class="p">(</span><span class="n">status_code</span><span class="o">=</span><span class="mi">400</span><span class="p">)))</span>
-<span class="k">def</span> <span class="nf">test_404</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">assertRaises</span><span class="p">(</span><span class="n">NotFoundError</span><span class="p">):</span>
-        <span class="n">do_stuff</span><span class="p">()</span>
-</pre></div>
-
-
-<p>You have to keep in mind, however, that the <code>mock.Mock</code> class also has some
-<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock">constructor arguments</a> of its own.
-For this reason, there exists some potential for name collision: some of the <code>Mock</code><span class="quo">&#8216;</span>s own arguments may have the same
-names as the <em>attributes</em> we&#8217;d like to set on the mock&nbsp;object:</p>
-<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>  <span class="c"># doesn&#39;t set the `name` attribute</span>
-<span class="k">assert</span> <span class="n">some_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s">&quot;John Doe&quot;</span>  <span class="c"># blows up!</span>
-</pre></div>
-
-
-<p>Here, the <code>name</code> argument is inherent to the <code>Mock</code> class. Its constructor will interpret it in a special way,
-and so it <em>won&#8217;t</em> set a <code>name</code> attribute on the resulting mock. Other possible culprits include the <code>spec</code> and <code>wraps</code>
-parameters, both of which have relatively common names that we may want to use as object attributes<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<h4>Collision&nbsp;avoidance</h4>
-<p>It&#8217;s trivial to fix the issue, of&nbsp;course:</p>
-<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">()</span>
-<span class="n">some_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;John Doe&quot;</span>
-<span class="k">assert</span> <span class="n">sock_mock</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s">&quot;John Doe&quot;</span>
-</pre></div>
-
-
-<p>but this approach has a downside. Creating and configuring a mock is no longer a single expression, which means we cannot
-use it with patchers as easily as&nbsp;before:</p>
-<div class="highlight"><pre><span class="nd">@patch.object</span><span class="p">(</span><span class="n">foo</span><span class="p">,</span> <span class="s">&#39;bar&#39;</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">test_something</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_bar</span><span class="p">):</span>
-    <span class="n">mock_bar</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s">&quot;John Doe&quot;</span>
-    <span class="c"># (...rest of the test...)</span>
-</pre></div>
-
-
-<p>We can either configure the mock after patching, like above, or perhaps introduce some utility functions to be called
-inside the <code>@patch</code> decorator.</p>
-<h4>The almost-there&nbsp;method</h4>
-<p>In any case, this is somewhat disappointing. And it is even more so when we discover that there is
-<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock.configure_mock">a method called <code>configure_mock</code></a>
-which <em>looks</em> like it was designed to solve this very issue. Its arguments are always interpreted as attributes
-of the mock: it has no &#8220;special&#8221; or &#8220;reserved&#8221; names. Indeed, this method is what allows us to actually
-write the mock setup as a single&nbsp;expression:</p>
-<div class="highlight"><pre><span class="n">some_mock</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Problem is, this expression returns <code>None</code>.</p>
-<p>Yes, <code>configure_mock</code> returns nothing.<br>
-Or in other words, it doesn&#8217;t return anything.<br>
-In fact, it has <a href="https://github.com/testing-cabal/mock/blob/286792b2cd5b5baa8338260538ed207391280e34/mock/mock.py#L671">no <code>return</code> statement</a>&nbsp;whatsoever.</p>
-<p>Most importantly, it doesn&#8217;t have the <code>return self</code> line that&#8217;d enable us to write&nbsp;this:</p>
-<div class="highlight"><pre><span class="n">some_mock</span> <span class="o">=</span> <span class="n">mock</span><span class="o">.</span><span class="n">Mock</span><span class="p">()</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s">&quot;John Doe&quot;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Well, that is <em>quite</em> a&nbsp;let-down.</p>
-<h4>Fixing&nbsp;it</h4>
-<p>But hey, this is Python! Shortcomings like that don&#8217;t necessarily mean we have to fork whole libraries.
-Let&#8217;s just add the missing <code>return</code>, shall&nbsp;we?</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">mock</span> <span class="kn">import</span> <span class="n">Mock</span> <span class="k">as</span> <span class="n">_Mock</span>
-
-<span class="k">class</span> <span class="nc">Mock</span><span class="p">(</span><span class="n">_Mock</span><span class="p">):</span>
-    <span class="k">def</span> <span class="nf">configure_mock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">Mock</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">configure_mock</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span>  <span class="c"># &lt;-- there!</span>
-</pre></div>
-
-
-<p>Whew, that was&nbsp;quick!</p>
-<p>&#8230;Alright, that&#8217;s actually the <em>whole</em> fix, but it&#8217;s close. To complete it, we need to apply the same treatment to
-three more <code>Mock</code> classes: <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.MagicMock"><code>MagicMock</code></a>,
-<a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMock"><code>NonCallableMock</code></a>,
-and <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.NonCallableMagicMock"><code>NonCallableMagicMock</code></a>.</p>
-<p>A complete solution can be seen in <a href="https://gist.github.com/Xion/8b98733d4b6be354be0ebae815ebd22d">this gist</a>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Collision may also occur with <code>mock.patch</code> constructs. The most likely offender there is probably
-the <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.patch"><code>new</code> parameter</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>
