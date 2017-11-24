@@ -2,8 +2,35 @@
  * Custom style enhancements & overrides, independent of the theme.
  */
 
+/* Post titles */
+h2 {
+  font-size: 40px;
+}
+
+/* Info line right under post title */
+h2 + p {
+  font-size: 14px !important;
+}
+
+/* Container for the above */
+article > header {
+  margin-bottom: 25px;
+}
+
+
+/* Top-level headers in posts */
+h4 {
+  font-size: 24px;
+}
+
+/* Second level headers in posts */
+h5 {
+  font-size: 20px;
+}
+
+/* Regular post text */
 p {
-  font-size: 1.04em;
+  font-size: 17px;
   line-height: 1.4em;
 }
 
