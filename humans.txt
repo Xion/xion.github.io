@@ -3,7 +3,7 @@
     Contact: karol.kuczmarski [at] gmail.com
     GitHub: Xion
     Twitter: @Xion__
-    From: San Francisco, CA, US
+    From: Zurich, Switzerland
 
 /* SITE */
     Language: English
