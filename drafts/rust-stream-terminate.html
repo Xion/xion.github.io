@@ -170,7 +170,7 @@ but without producing any errors&nbsp;afterwards.</p>
 <hr />
 <p>For a more reusable version of the trick, you can check
 <a href="https://play.rust-lang.org/?gist=1bf2199460258be6674c9c7a7a157f50&amp;version=stable">this gist</a>;
-it adds a <code>Stream::take_while_err</code> method through an <a href="{filename}/rust-extension-traits.md">extension trait</a>.</p>
+it adds a <code>Stream::take_while_err</code> method through an <a href="http://xion.io/post/code/rust-extension-traits.html">extension trait</a>.</p>
 <p>This isn&#8217;t a perfect solution, however, because it requires <code>Box</code>ing even on nightly Rust<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>;
 we can fix that by introducing a dedicated <code>TakeWhileErr</code> stream type
 (similarly to what native <code>Stream</code> methods do).
