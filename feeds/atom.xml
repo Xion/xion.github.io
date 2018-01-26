@@ -1,5 +1,384 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-12-16T21:17:00-08:00</updated><entry><title>Terminating a Stream in Rust</title><link href="http://xion.io/post/code/rust-stream-terminate.html" rel="alternate"></link><updated>2017-12-16T21:17:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-12-16:post/code/rust-stream-terminate.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a little trick that may be useful in dealing with
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2018-01-24T22:49:00-08:00</updated><entry><title>Unfolding a Stream of paginated items</title><link href="http://xion.io/post/code/rust-unfold-pagination.html" rel="alternate"></link><updated>2018-01-24T22:49:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-01-24:post/code/rust-unfold-pagination.html</id><summary type="html">&lt;p&gt;My &lt;a href="https://github.com/Xion/ezomyte"&gt;most recent Rust crate&lt;/a&gt;
+is an &lt;span class="caps"&gt;API&lt;/span&gt; client for &lt;a href="https://www.pathofexile.com/developer/docs/api-resource-public-stash-tabs"&gt;the Path of Exile&amp;#8217;s public stash tabs&lt;/a&gt;.
+One problem that I had to solve while writing it was to turn a sequence of &lt;em&gt;paginated&lt;/em&gt; items
+(in this case, player stash tabs) into a single, asynchronous &lt;code&gt;Stream&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;In this post, I&amp;#8217;ll explain how to use
+&lt;a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html"&gt;the &lt;code&gt;Stream&lt;/code&gt; interface&lt;/a&gt;,
+along with functions from &lt;a href="https://docs.rs/futures"&gt;the &lt;code&gt;futures&lt;/code&gt; crate&lt;/a&gt;,
+to create a single &lt;code&gt;Stream&lt;/code&gt; from multiple batches of&amp;nbsp;entities.&lt;/p&gt;
+&lt;h4&gt;Pagination&amp;nbsp;101&lt;/h4&gt;
+&lt;p&gt;To divide a long list of items into &lt;em&gt;pages&lt;/em&gt;
+is a very common pattern in many &lt;span class="caps"&gt;HTTP&lt;/span&gt;-based&amp;nbsp;APIs.&lt;/p&gt;
+&lt;p&gt;If the client requests a sequence of entities
+that would be too large to serve as a single response,
+there has to be some way to split it over multiple &lt;span class="caps"&gt;HTTP&lt;/span&gt; roundtrips.
+To accomplish that, &lt;span class="caps"&gt;API&lt;/span&gt; servers will often return a constant number of items at first (like 50),
+followed by some form of &lt;em&gt;continuation token&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;$ curl http://api.example.com/items
+{
+    &amp;quot;items&amp;quot;: [
+        {...},
+        {...},
+        {...}
+    ],
+    &amp;quot;continuationToken&amp;quot;: &amp;quot;e53c68db0ee412ac239173db147a02a0&amp;quot;
+}
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Such token is preferably an opaque sequence of bytes,
+though sometimes it can be an explicit offset (index) into the list of results&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.
+Regardless of its exact nature, clients need to pass the token with their next request
+in order to obtain another batch of&amp;nbsp;results:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;$ curl &amp;#39;http://api.example.com/items?after=e53c68db0ee412ac239173db147a02a0&amp;#39;
+{
+    &amp;quot;items&amp;quot;: [
+        {...},
+        {...}
+    ],
+    &amp;quot;continuationToken&amp;quot;: &amp;quot;4e3986e4c7f591b8cb17cf14addd40a6&amp;quot;
+}
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Repeat this procedure for as long as the response contains a continuation token,
+and you will eventually go through the entire sequence.
+If it&amp;#8217;s really, &lt;em&gt;really&lt;/em&gt; long (e.g. it&amp;#8217;s a Twitter firehose for a popular hashtag),
+then you may of course hit some problems due to the sheer number of requests.
+For many datasets, however, this pagination scheme is absolutely sufficient
+while remaining relatively simple for clients to&amp;nbsp;implement.&lt;/p&gt;
+&lt;h4&gt;Stream it in&amp;nbsp;Rust&lt;/h4&gt;
+&lt;p&gt;What the client code would typically do, however,
+is to hide the pagination details completely
+and present only the final, unified sequence of items.
+Such abstraction is useful even for end-user applications,
+but it&amp;#8217;s definitely expected from any shared library that wraps the third-party &lt;span class="caps"&gt;API&lt;/span&gt;.&lt;/p&gt;
+&lt;p&gt;Depending on your programming language of choice,
+this abstraction layer may be very simple to implement.
+Here&amp;#8217;s how it could be done in Python,
+whose concepts of &lt;em&gt;iterables&lt;/em&gt; and &lt;em&gt;generators&lt;/em&gt; are a perfect fit for this task&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;requests&lt;/span&gt;
+
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;iter_items&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;after&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yield items from an example API.&lt;/span&gt;
+&lt;span class="sd"&gt;    :param after: Optional continuation token&lt;/span&gt;
+&lt;span class="sd"&gt;    &amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
+    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;url&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://api.example.com/items&amp;quot;&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;after&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="ow"&gt;not&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="n"&gt;url&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;?after=&lt;/span&gt;&lt;span class="si"&gt;%s&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="n"&gt;after&lt;/span&gt;
+        &lt;span class="n"&gt;response&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;raise_for_status&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+        &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="p"&gt;()[&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;items&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;]:&lt;/span&gt;
+            &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt;
+        &lt;span class="n"&gt;after&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;response&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;json&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;continuationToken&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+        &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;after&lt;/span&gt; &lt;span class="ow"&gt;is&lt;/span&gt; &lt;span class="bp"&gt;None&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+            &lt;span class="k"&gt;break&lt;/span&gt;
+
+&lt;span class="c"&gt;# consumer&lt;/span&gt;
+&lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;item&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;iter_items&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
+    &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;In Rust, you can find their analogues in the &lt;code&gt;Iterator&lt;/code&gt; and &lt;code&gt;Stream&lt;/code&gt; traits,
+so we&amp;#8217;re off to a pretty good start.
+What&amp;#8217;s missing, however, is the equivalent of &lt;code&gt;yield&lt;/code&gt;:
+something to tell the consumer &amp;#8220;Here, have the next item!&amp;#8221;,
+and then &lt;em&gt;go back&lt;/em&gt; to the exact same place in the producer&amp;nbsp;function.&lt;/p&gt;
+&lt;p&gt;This ability to jump back and forth between two (or more) functions
+involves having a language support for &lt;em&gt;coroutines&lt;/em&gt;.
+Not many mainstream languages pass this requirement,
+although Python and C# would readily come to mind.
+In case of Rust, there have been some nightly
+&lt;a href="https://github.com/rust-lang/rfcs/blob/master/text/2033-experimental-coroutines.md"&gt;proposals&lt;/a&gt;
+and &lt;a href="https://docs.rs/futures-await"&gt;experiments&lt;/a&gt;,
+but nothing seems to be stabilizing anytime&amp;nbsp;soon.&lt;/p&gt;
+&lt;h4&gt;&lt;span class="caps"&gt;DIY&lt;/span&gt;&amp;nbsp;streaming&lt;/h4&gt;
+&lt;p&gt;But of course, if you do want a &lt;code&gt;Stream&lt;/code&gt; of paginated items,
+there is at least one straightforward solution:
+just implement the &lt;code&gt;Stream&lt;/code&gt; trait&amp;nbsp;directly.&lt;/p&gt;
+&lt;p&gt;This is actually quite a viable approach, very similar to rolling out a custom &lt;code&gt;Iterator&lt;/code&gt;.
+Some minor differences stem mostly from a more complicated state management in &lt;code&gt;Stream::poll&lt;/code&gt;
+compared to &lt;code&gt;Iterator::next&lt;/code&gt;.
+While an iterator is either exhausted or not,
+a stream can also be &lt;a href="https://docs.rs/futures/0.1.17/futures/enum.Async.html"&gt;waiting&lt;/a&gt;
+for the next item to &amp;#8220;arrive&amp;#8221; (&lt;code&gt;Ok(Async::NotReady)&lt;/code&gt;),
+or have errored out permanently (&lt;code&gt;Err(e)&lt;/code&gt;).
+As a consequence, the return value of &lt;code&gt;Stream::poll&lt;/code&gt; is
+&lt;a href="https://docs.rs/futures/0.1.17/futures/type.Poll.html"&gt;slightly more complex&lt;/a&gt;
+than just plain &lt;code&gt;Option&lt;/code&gt;, but nevertheless quite&amp;nbsp;manageable.&lt;/p&gt;
+&lt;p&gt;Irrespective of difficulty,
+writing a custom &lt;code&gt;Stream&lt;/code&gt; from scratch would inevitably involve a lot of boilerplate.
+You may find it necessary in more complicated applications, of course,
+but for something that&amp;#8217;s basically a glorified &lt;code&gt;while&lt;/code&gt; loop,
+it doesn&amp;#8217;t seem like a big ask to have a more concise&amp;nbsp;solution.&lt;/p&gt;
+&lt;h4&gt;The stream&amp;nbsp;unfolds&lt;/h4&gt;
+&lt;p&gt;Fortunately there is one!
+Its crucial element is the standalone
+&lt;a href="https://docs.rs/futures/0.1.17/futures/stream/fn.unfold.html"&gt;&lt;code&gt;stream::unfold&lt;/code&gt; function&lt;/a&gt;
+from the &lt;code&gt;futures&lt;/code&gt; crate.&lt;/p&gt;
+&lt;p&gt;Reading through the signature of this function can be a little intimidating at first.
+Part of it is Rust&amp;#8217;s verbose syntax for anything
+that involves both trait bounds and closures&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;,
+making &lt;code&gt;stream::unfold&lt;/code&gt; seem more complicated than it actually is.
+Indeed, if you&amp;#8217;ve ever used &lt;code&gt;Iterator&lt;/code&gt; adapters like &lt;code&gt;.filter_map&lt;/code&gt; or &lt;code&gt;.fold&lt;/code&gt;,
+the &lt;code&gt;unfold&lt;/code&gt; function will be pretty easy to understand.
+(And if you haven&amp;#8217;t, don&amp;#8217;t worry! It&amp;#8217;s really quite simple&amp;nbsp;:))&lt;/p&gt;
+&lt;p&gt;If you look closely, you&amp;#8217;ll see that &lt;code&gt;stream::unfold&lt;/code&gt; takes the following two&amp;nbsp;arguments:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;first one is essentially an arbitrary initial value, called a &lt;em&gt;seed&lt;/em&gt;&lt;/li&gt;
+&lt;li&gt;second one is a &lt;em&gt;closure&lt;/em&gt; that receives the seed and returns an optional &lt;em&gt;pair&lt;/em&gt; of&amp;nbsp;values&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;What are those values?&amp;#8230;
+Well, the entire purpose of the &lt;code&gt;unfold&lt;/code&gt; function is to create a &lt;code&gt;Stream&lt;/code&gt;,
+and a stream should inevitably produce some &lt;em&gt;items&lt;/em&gt;.
+Consequently, the first value in the returned pair will be the next item in the&amp;nbsp;stream.&lt;/p&gt;
+&lt;p&gt;And what about the second value? That&amp;#8217;s just the &lt;em&gt;next state&lt;/em&gt; of the seed!
+It will be received by the very same closure
+when someone asks the &lt;code&gt;Stream&lt;/code&gt; to produce its next item.
+By passing around a useful value &amp;#8212; say, a continuation token &amp;#8212;
+you can create something that&amp;#8217;s effectively a &lt;code&gt;while&lt;/code&gt; loop from the Python example&amp;nbsp;above.&lt;/p&gt;
+&lt;p&gt;&lt;div class="graphviz" style="text-align: center;"&gt;&lt;img src="data:image/png;base64,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xjpKL774YpyUjAorASo0YW05yk0CJEACJJA2ARgJY68xjNJgg1pspOzWk0o7M54QKAJUaALVHBSGBEiABEgg3wRgGAy7mnHjxukWFNgLjxuq5pt6/vOnQpN/xiyBBEiABEgggASwCjz2pqotq3HDDV4WVQyglBTJLwEqNH5JMR0JkAAJkEDREahevbqRleXVrRvbT/To0cN4t+wpugoXcYWo0BRx47JqJEACJEACqQlg7yjsJYW9oLBP1JFHHqn7uKU+kymCRIAKTZBag7KQAAmQAAkUjECHDh3M7NmzdZNjbHaJncwZwkOACk142oqSkgAJkAAJ5JkAdpDHTvNYWV42WTVTpkzJc4nMPlcEqNDkiiTzIQESIAESKAoC2DcKdjXHHXecLsZHY+FwNGuZ2vogHE1CKUmABEiABApNABvFPv300wab18JYeNmyZZGNiwstG8uPT4AKTXwujCUBEiABEijjBLBtwqBBg3RH9J49e5r169ebgQMHlnEqwa0+FZrgtg0lIwESIAESCACBCy+80FSpUsWcc8455vfff9cNLgMgFkWIIRBXoVmyZAl3I40BFeSfc+bMMS1btgyyiCllO/XUUw3ehhjKJoG5c+fq0H5Ya491S2A8yl2c/bXgTz/95C9hgFJ16dLFYBrqjDPOMBs2bDD33Xcf71kBah+IUkKh2WeffUyLFi0CJibFSUYAlviNGzdOliSwx3bZZRfTsWPHwMpHwUqHwIEHHmgaNWpUOoXluJS1a9fqarOFXozts88+M3///bfZc889c1zD3GfXtm1b06BBg9xnnOccO3XqZDbffHNVXNHe2OySL2J5hp5G9ptYCWmkZ1ISIAESIAEPgX79+umS+W+//bapU6eO50jpfsUoLQxYsUcRQ34JvPLKK7qx5fnnn2/uvvvu/BbG3H0ToNu2b1RMSAIkQAIlCdx4443m3XffLagyA6mwCFxYR7lKUg12DNy54QGFaadrrrkm2MKWIelKTDmVobqzqiRAAiSQNYEKFSro5oZZZ5RFBr/88otZsWKFadiwYRa58NR0CJx88sk65QRD4a222sr07ds3ndOZNg8EqNDkASqzJAESIIHSJOCW6OcITWlSN7o+DWyoLr74YlVqunfvXroCsLQoAlRoonDwBwmQAAmEjwAUGqxuu9NOO4VP+JBL3Lt3b7N69WrdpXvnnXc2bdq0CXmNwis+FZrwth0lJwESIAElMH/+fE43FbAvDBgwwHz99dcGy0/AOHy//fYroDRlt2gaBZfdtmfNSYAE0iRQaNfsROJSoUlEpvTiR4wYoctnwCX9u+++K72CWVKEABWaCAp+IQESIIHEBKZPn27q1atnfvjhh8SJCnRk4cKFoVh/pkB4SqVYGIePGTPGVK1a1UCpWbduXamUy0L+I0CF5j8W/EYCJEACcQlguftu3boZLDxao0aNuGkKFbly5UqDlXfDsKBeoRiVVrlbb721mThxolm+fLmuKMxl3kqL/L/lUKEpXd4sjQRIIIQEsAIv3rofeOCBwEmP0RkEKjTBaJrddtvNjB071mDxPW5kWbptwpWCS5c3SyMBEiCBnBLA8vuXXHKJgfswl+HPKdqsMrvnnntMnz59zKRJk8wxxxyTVV482R8BjtD448RUJEACJBBIAhihwb5IVGaC1TwXXXSRej117txZPaCCJV1xSkOFpjjblbUiARIoIwRoEBzchh45cqSuDdShQwfdoTu4khaHZFRoiqMdWQsSIIEySgC7bIdx5+qy0FyVK1dWe5olS5Zwa4RSaHAqNKUAmUWQAAmQQD4IYF2cpUuXmvr16+cje+aZAwJ169Y1WKNm+PDh6gGVgyyZRQICVGgSgGE0CZAACQSdwJdffmnggUWFJtgthRWEzzzzTIONLLGJKEN+CFChyQ9X5koCJJAFgSeeeCKLs7M/ddy4cebmm2/OPqM854DpJgQs+McQbAL33nuv2WKLLUzXrl0N16fJT1tRockPV+ZKAiSQIYG33nrL9O/fP8Ozc3Pa9ddfbxYsWJCbzPKYy+LFiw02RKxSpUoeS2HWuSCw5ZZbmqeeesq8/vrrBi7dDLknwM0pc8+UOZIACQiBd99918DGAwu+Pf744+aoo47SvW4AZ/LkyWbWrFm6Q3SnTp3Mdtttp8ygzBx//PHqgoxF7Nzu0V988YW+3Z577rnm119/NRjB+fPPP82OO+5ocL4L8co84IADDPItV66cOfTQQ8348eMNFAFMA8SbqkFZ2IsHMgc9YIQmXh2CLndZlQ/979prrzVXXXWVOe644wzsaxhyR4AL6+WOJXMiARIQAth1uEePHrpSau/evfX3G2+8YVq1amVGjRplevbsaVq0aKGKDqZ1pk6daqZNm2b22msv89FHH5levXoZPKhHjx5tsJQ8di5u1KiRWbNmjfn222+VMZSaXXbZRXeYhhKTqMxmzZoZvBmj3NNPP12H+rfffnv9DQXn008/Ndtuu22JdoMittlmm5WID1oE6geFJogrGAeNVVDkgSJ+0EEHab978803uX5QLhtG5vIYSIAESCCnBD7//HMr9ykroyP2r7/+sj/++KOV/YbssGHD7HXXXRcpSxQUTSfKTiTuhBNOsDVr1oz8xpeTTz7ZigITFYe85Y03EpeoTNmHScuQh7+Vh4mmf/nllzVORmsi54fxy6677mqHDBkSRtHLtMzvv/++LV++vBVFtExzyHXlOeWUS+2QeZEACSgBN1XUpk0bIzdug1ERhNtvv13fTjFK4wLWUMEGi96Qyaq3icpEvsivTp06ZtNN/73lYTQI4ZtvvtHPMP7buHGjWbZsmdYrjPKXZZkxQnPppZeaK664wuAagR0UQ/YEqNBkz5A5kAAJxBDAdA4ClBkXVq9erbsQww6mXbt2LjruZyYKTbwy42YukU4ueUNMlCTw8Vh/5p9//jG777574GWlgCUJ3HDDDQbedJiefemll0omYEzaBP6966R9Gk8gARIggfQIOIVj3rx5KU/MRKFJmWmRJYDxMgJGnhjCR6BSpUrmwQcfNDL9qX/hq0HwJKZCE7w2oUQkUJQEqlatanbbbTdz//33G7Friaoj3Fnd9A+UGSwW5w2YKtqwYYM3qsx/h0JTrVo1A64M4SQAo25422H6CVOIDNkRoEKTHT+eTQIkEIfA+vXrNfbnn3+OOtq3b1+1+2jevLl6N3344YdGjITVg0kMXDUtXLF/+OEHg1Vw8dBGXsccc4xBXo8++qj+xucvv/yiaVatWqXnJSpz3bp16t0EzyUXnFyxipU7HobPr776itNNYWioFDLeeuut5vvvv1f7shRJeTgFASo0KQDxMAmQQHoE4HKNN04EuF7fddddumYMfl9wwQWmX79+Zs6cOQZvp40bN9a1ai688EIc1tCxY0dVQA488EB1/caicYg75JBDdOn4gw8+WN25cRwu3WPGjFE373hlQsm5+uqrNV8saDZhwgS14xk4cKDGYWRo7ty55sknn1QDzX8lCMd/2NDUqlUrHMJSyoQEsPwArolbbrlF1z9KmJAHUhLgOjQpETEBCZBArglgZAQjMJiCwo7EsQFrzsDmBmvIeIO4fkc8pjAFtfnmm3sPZ/wdylX16tV1fZqMMynlE6HQYT2foUOHZlUyFins0qVLVnnw5OwIoC/D8+5///ufriacXW7FeTaufbx8HHvssQkryBGahGh4gARIIF8EYBDZsGHDuMoMytxqq61KKDOId+7f+J4rZQYPE4x2YBQoTCEXIzRB2GYiTMzzJSv68m233WaefvppI2vU5KuY0OYLm7rOnTvrdZqsEuVlz5LrkyXgMRIgARIoZgIwOO7Tp4/ZY489QrNqK+yCBgwYoC6/WCkYqyXD3giK4n333WcqVKgQWdtk+fLl5vnnn9ctH2SRw4jdjdtmArZFWC0ZdhwwMMaIDfLD6NgOO+yg20bArXjmzJm6FQWUTYREZWI158cee0ynE+fPn29GjhypKznvvffeoeFbiP6OLUIwLTpjxgzdmdsrA0Y0sV0IpnDBHSObXmNw2JHBrgzTsZMmTTJjx47VKVqMcqKvPPzwwxoHw3v0DWw1gmPYBgTpsWI2tgjBCtwPPfSQloHVt7FCtwsLFy7UdJjmfOWVV3T6FtNl6A9YPgByP/fcc7okAuK9IVEfRBr0ySlTpqiyUqNGDZUT8sOWDnLCWPq0004zEydO1LJg/4Z1e2JHb7W8XK/Ux/xIgARIgATyS0Bc33Wl49dee83KnkD6XbaZsLIPlpUpPHviiSeqALK0vj3vvPPsBx98YOVhaGW3ZyvrnugxMci2hx12mJVRLyvKjcVvBKSTh4OVB5v+xj9ZMyVSnowMJSwTKzAjP5x/xx13WNlZ2rZt21Z/i91SJD9+iU8A7QB2+HRBlAwrD3CNw6rbN910kxWlwv7222+aRJRHbXNRzK1semn33XdfzePjjz+2smClFYXXTp8+3Ypio/0C+YviY0WJ1/NlpDRqFe61a9daUZYiq3Dj92WXXaZ5nnTSSdp/xObHHnHEEbrasSgaVhQOTYPVvCGHKL9OfJusD0I+8fLSvGVrEiujMPbiiy+2Mv1rRaGxYvhvZf0qK0qxphGnAuUgClwkf+8XGN8xkAAJkAAJhIiAvCHrDV5sjWyiLR/wIJRF9/RB5qrWrVs3Pe+9997TqHjbTMjbuqbxKjRuqwgoUAiJysQx2XhRz5cRBfzUgG0qxObH/eRnEgJHH310RJlAMjFctzKaYsXzT8+S/c6U7+zZsyO5QBmAoiIjGxonoyn6CcUDyo8LYoOi6aBsuuBnWxGklZEYVYScIgVFR0Z7bJMmTSLKlRjhW9kDzcoebZq9nz4oo08qU7KtSVydZaTJiR33kysFSy9gIAESIIEwEcCWBxhyx7QDpswQYreZwFQPpiqwvL4LcIfHQnxLlizRKQnEZ7KIYbJtJjDthYApPBdg8CrKkPvJzyQE4O0E7z945Mnolk63YDoIRuuw98JGrgiiVOoUE7679sBO9QiOPaYhYUzrNluV0RsDr0G3yasm9vkPfQ19x7Uv+h/KrVevXiQOBv6yD5vBkgIIzz77bMo+CPsh9EE/W5Ok6qtUaHw2JpORAAmQQFAIfPfddxEbGdhCILjtHJyMsF+BHcK9997rouJ+pnpIxDspUZnx0iIOsskrdaLDjPcQgB2MTBmaa6+9VhUasIYyA5spPPxxHAF2Ky649nCfLh7ee7C7gX0L1n6CrQ2UGxkFckmy+qxYsWKJ82Gj49aE8tsHYzNxfTm2z6Tqq1RoYknyNwmQAAkEnABGaGINL2NFxkNh8eLFugYQHjKJQqqHRKLzGJ8/AlBe9t9/fx3VgtH3UUcdpYopRmywzpPfgH3TMBqHdZ5kGkgNvAcNGpTU9dlv3kiXqO+4eL990G+ZLt9E6em2nYgM40mABEggoAT8KDSYXsCb8ogRI6JqgU1C4QmFgAdEvG0mcAzTGwyFIYAFI7E69pAhQwwckf/8808drYE03pGZVNJhOhKjdI888ojZZ599jNjOGDHwjToNafLV1n76YJQwCX44RSa2r8Ymp0ITS4S/SYAEygQBMTQ0jz/+eCjr6p1ycsP7bjsHV6FOnTqpPcPll19usLw+3G4x/dC9e/eIWzAedrHbTGBEoHbt2rrIIFx3Fy1apG7fyBdbVeCBmqhMpBFjUXzo1IZ+kX+QDe63sVMI7jg/SxKA7ZN4O+lWIXCph6s0ODplFK7QUE4RXHtgOxBvwL5pL7zwgipEmGqC2zZcs73Bz7YiaDeUEbvfFFzCxVPJm52mcwqSnz6IPJA/5HPB9WXYgCGgnyKIMbum/eSTT/R3iX+SEQMJkAAJlDkCV155pZW1P0JZb1mfww4fPtzKlJKVVX7VS0TWjLF33nmnlQdDpE4LFixQt1258WsaWVdEXbhdArgHw8126623tnfffbeLVpdtxMHNGy65Yoiqrr1w9X311VcTljl16lT1rEJ5Mt1h5UFsxTBU3YARJ6MNVkYbIuXwS3IC8AyD9w88lcReRd2uRSlRj7FtttnGytoz2lZw6wbfU045xc6aNSuS6bhx46wYAesx1wfw2bJlS20bJIQnkmwromlwPcBTCu7ZrVq1UndpeDPBVRznwSV/1KhReo5Mi2mcGAeruzi8nwYPHqxx6DvysqByJOuDcCXHcgPIW9agsbIujhVlPeJeDhd02SZF85FVsTUdeIiirXGx/7j1gZBkIAESKHsEmjZtaho0aKALv4Wp9ph+gDEmFsvr0KGDL9Ex0oJhe7cBqPekRNtM4C0bZcGbBZ+wh4g1OvXmw++5J4ARNSwqh9E1LCYHDyUEeZBrm4iLdNJC33jjDd0f6vDDD9eROFE6dAQFozZY6FBc7CPn52tbEVdAsj7o0iT7RJ0xKgUOiQIVmkRkGE8CJFDUBGSBOH0wYNXVMAVMN8Eg+O233zZ4UDEULwHYjNStW9fAHVtG39KqKPY9at++vU4zOa8hlwGmqtz0o4srhk/a0BRDK7IOJEACaROAnUjYlBlUcsWKFVpXLBPPUNwEoIjAQ0lWAzYYXUknwM4EtjfYygDr0WCLAXg8PfPMM0amhgzsW4otUKEpthZlfUiABIqaAIx4EbA2CUPxEzjnnHPUGBeKSDrh7LPPNsOGDVPjbmwEK3YtagwOI9wbb7xR90VKJ78wpOWUUxhaiTKSAAmQwP8TwNs63tqdBwjBFD+BM844Q0dXsEFoJgE2UMnWIsokzyCewxGaILYKZSIBEiCBBATgJotdiBnKDgHZg8uI95LByruZhLKgzIALFZpMegfPIQESIIECEcBaI1RoCgS/QMVipWDZaNSIm3aBJAhHsVRowtFOlJIESIAElAAVmrLXEeByLztqqz1MOisFlzVSVGjKWouzviRQxgmkWj496Hg45RT0FsqPfJ07d9Y1ZaZPn56fAoogVyo0RdCIrAIJkIB/AtjPBvvahDVAoZFVYsMqPuXOkMAee+xhsMcT1o9hiE+ACk18LowlARIoUgLYrbhatWqhrR32SqpatWpo5afgmROQLQnMiy++qAtCZp5L8Z5JhaZ425Y1IwESiEOgTp06pk2bNnGOhCOKCk042ikfUkKhwWJ58HhiKElg05JRjCEBEiCB4iUgm1KGunLYLZkjNKFuwoyFxwJ5WN0aO2/LhpIZ51OsJ1KhKdaWZb1IgAR0JAZLxmNDO9kp2MiO1JFP73dswBiWAIUmTPKGhWtY5GzdurWRHc91td+wyFxaclKhKS3SLIcESKDUCWC9lkmTJmm5m266qe44DS+nWE8n2NRgN+DKlSuXuozpFIgdh7F0PRWadKgVV9pWrVqZESNGmFWrVtE4PKZpaUMTA4Q/SYAEiodAixYtVImBIoDl3//4448Syky5cuV0j5ugKzNoFciPumy++ebF00isSVoEmjZtqumx2zpDNAEqNNE8+IsESKCICDRv3tykWogMCkLv3r1DUeuNGzeqnBUrVgyFvBQy9wSwyeS+++5rpk2blvvMQ54jFZqQNyDFJwESSEygZs2aBn+JAqah4DlSu3btREkCFb9hwwaVhyM0gWqWUhfm0EMPpadTHOpUaOJAYRQJkEDxEIARZaLN+f766y/Tt2/f0FSWIzShaaq8Ctq4cWPz4Ycflpg+zWuhIcicCk0IGokikgAJZE4A005QXGIDbGfwYGjSpEnsocD+hh0QQiIFLbCCU7CcEjjggAMMvPcWL16c03zDnhkVmrC3IOUnARJISqBZs2ZxV1aFbU3Y1qSBvQ8CNitkKLsEsA0ClNr58+eXXQhxak6FJg4URpEACRQPAaw3U69evRIVgm3NCSecUCKeESQQdAJQZrDi9cKFC4MuaqnKR4WmVHGzMBIggUIQiLWjKV++vLniiisMpp3CGDhCE8ZWy63MUGi++uqr3GYa8tzCeTWHHDrFJwESKF0CsKNx9icouVKlSqZr166lKwRLI4EcEoBn3tKlS3OYY/izokIT/jZkDUiABFIQOPLIIyN2J3DV7tWrl6lSpUqKs4J32BkDY4E9hrJNoEaNGmbFihVlG0JM7anQxADhTxIggeIjgMXI9t57b60YDGsvuuiiUFbSrT/j1qMJZSUodE4IwDbsp59+yklexZIJFZpiaUnWgwRIICmBY489Vo+feuqpZqeddkqaNqgHnULj1qMJqpyUK/8EsJ/X2rVr819QiEqgQhOixqKoJBA2AljjBQasQfgbOnSo4nv66acDIY9jks7Cfk6h8TNC8+WXXwaqnq6+Ze1zl112yctli73HMPWYamuPvBQe0Ey523ZAG4ZikUCxEGjXrp1u/ljo+kAJuP32203//v0LLUqk/HRl2WyzzQz+0nkzHzx4sNl9990jZfJL6RGYOHGimTx5cl4KhGKIAIUmrN56uQZDhSbXRJkfCZBAFIEGDRqYjh07RsUV6geMg3fddddCFV+i3GHDhpWISxWxzTbbmFWrVqVKFjnesmVLc+CBB0Z+80vpEVi2bFneFBq3+jWM3Bn+JcApJ/YEEiCBMkMgSMpMptDTVWgyLYfnBZvAunXrdPmBYEtZutJRoSld3iyNBEiABLIisO2225qVK1dmlQdPDj8B9IHtttsu/BXJYQ2o0OQQJrMiARIggXwTwPojy5cvz3cxzD/gBDCdhb7A8B8BKjT/seA3EiABEgg8AexBhYcZQ9kmAC82GntH9wEqNNE8+IsESIAEAk0ACs23334baBkpXP4JfPLJJwa7bjP8R4AKzX8s+I0ESIAEAk8Ahs3ff/+9rkESeGEpYF4IwH4GIzT0XovGS4Ummgd/kQAJkECgCey5557m77//NosXLw60nBQufwTeeustXTTxsMMOy18hIcyZCk0IG40ikwAJlF0C9evXN1h7ZP78+VEQOA0VhaOof4wfP15HZ+jlFN3MVGiiefAXCZAACQSaAFYKhlIzb968iJxXXnmladu2beQ3vxQvgd9//92MGzfOnHzyycVbyQxrRoUmQ3A8jQRIgAQKReDggw827733ni57f95555lbb73VwEh02rRphRKJ5ZYSAexF9ttvv5nOnTuXUonhKYYKTXjaipKSAAmQgBI44ogjzMyZM02nTp3MI488Yqy1Og2VyVYKRBoeArCdQht36NDB5GvTy/DQKCkpN4EoyYQxJEACJBBoAo0bNzbYeXvs2LGR3Zaxtw82Q/ziiy9MnTp1Ai0/hcuMwEMPPWQ+//xz88ILL2SWQZGfxRGaIm9gVo8ESKC4CGCn7fPPP9/8+uuvEWXG1RDGwnfddZf7yc8iIgBX/auuusp069bNNGrUqIhqlruqUKHJHUvmRAIkQAJ5JfDTTz+Zww8/3Lz//vvG7bbsLfDPP/80I0eONGvWrPFG83vICWCq6fTTTzdVqlQxQ4cODXlt8ic+FZr8sWXOJEACJJAzAtju4JBDDjELFy6Mq8y4gqDUYGqCoXgI9OjRw8yYMcM899xzZuutty6eiuW4JlRocgyU2ZEACeSXAFZIPeecc8rcfkazZs0ymG6CAXCygLf52267TRffS5aOx4JP4J9//jG9evXSUTcoqVxIL3mbUaFJzodHSYAEAkbggw8+MI8++mjUOiwBEzEv4sCz5ZtvvjGDBg0yW265pXo1JSoI9havv/56osOMDwGBVatWmRNPPNGMGDFCFZouXbqEQOrCikiFprD8WToJkECaBLCgGGxJWrduHXXmE088EfW7GH9UqlTJ9O3bV0en+vXrp55OMASODeXKlTMPPvhgbHSgfqMNX3311ZzLlGm+Qeo/EyZMMPvtt5955513DL7DEJghNQEqNKkZMQUJkEDACFSrVi1KIuxt079//6i4Yv5RtWpVc+ONN+qIDaYkKlSoEDVig6kKLLQX1IBpMSwMt3Tp0pyKmGm+Qek/sJM55phjTLt27czee+9tPv74Y3PsscfmlFExZ1ZStS/m2rJuJEACoSeAhzVWxN1iiy0MVszFw+j444/XzfoeeOABs9NOO+kDwVV08uTJBvYn22yzjS5E593/Bga2P/zwgznyyCPNpEmTdMPHjh07mpo1a6pLNN6QsSJv06ZN1SDX5RmUz+23397ccccd5rLLLjPXX3+9TsWVL1/ewDAYn3jApxOwHxTWtrnooovMggULzEsvvWSwuzc8bDDq48Ly5ct1dAWGyrDraNGihR5CeTBc/eOPP/Q3OGIzTbQB2g2jDviN/BC3ww47aLu1b9/e7Ljjji77lJ8//vijrrmDT6y5c8ABB5idd945Yb7YLmDq1KkG05XgcuaZZ2p6FJSs/ySqZ0oB00gAmzBwfuyxx1QJxQ7aGJVp06ZNGrkwKQj810PJgwRIgAQCTgAPWayO27x5czN37lyVForKPvvsYypWrGgaNGigyggO4KGKbQF+/vln3ecID6499thDH9RYw+Xyyy83e+21lxk+fLg+wKG8vPjii2a33XYzr7zyijnjjDP0QXPPPfcYrMwLpSioAavGwmgUO3DD7gLBKTMrVqzwJbbb8LBPnz7m7rvvNrfffruuRgzbjSFDhkTyAEcoT/vvv78qJyeccILp2bOnHoeygNEFKFldu3Y1tWvXVgUTruSYLoNCs2HDhsioA5QQtBmO+Q2rV682xx13nIHiiTaEAgZFJVG+69atM/Xq1dMysI4L3N2hhEHJQUjUf5LV06+sSAcj7vXr1xvYNX300UcGnLHaL5SqunXrqkI2YMAAHZFBmXPmzKEykw5gb1qBzUACJEACeSEgK9paeejkNG+ZSoGbj73//vsj+cpD1cpoQOQ3vshDw1533XWROBl90PNatWoVidtqq62sjPJY2RtH48SLyMr0jW3SpEkkTh5GVjaEtDfffHPkvFx9yQcfyCZTFfaoo47S+p511lm+xZUHvp4joyeRc2T0w8qogf4WRdDuvvvuVpSEyHGx79BzZCQrEic7gVtRMG337t2tPMCtPLAjx/BFHux6zsMPPxwV7+eHKJhWRtQiSWWEwz7zzDP6O16+Tz31lJXRJSsjcVFpZs+eHckjtv/4rWckgwRfrrnmGq0n+qv3T0ajrIxq2auvvtq+9tprduPGjQlyYHQ6BDjl5NXu+J0ESCDwBDASEy9ssskmUdEYYTjooIMiowc4iNGAlStXRtLBFgVTFm6EAN5DmLJyb/RIWLlyZR31+eqrryLnBf0LRqxEWdC6wTMKmxmiHqmC44CRLBcwiiUPXf357LPP6sjGFVdc4Q7rlB0YLlmyJDIth3Mw6iAPdANuGPGKF2LbLF6a2DjIhilHjKBhJAgjamgzb/Dme9ppp+mUVPXq1XUUx23giS0EMGXpgvccv/V05yb6xLTotttua0Sp0ilSTLFBVvQzhtwToEKTe6bMkQRIoAAEvA8kTEvA/uHcc8+NsqfxI1Y8hQlGt5g2CGPATtzx6uS3LphGkrdkTS4jL2rrcu+996Y8HUoPpsFgZ4Ppr3jeWN42S5nh/yfAdCOmmrDWzssvv6xbPWB6yxu8+cL2B8oMFCzsf+WUGNj0eIP3nHTq6c0j9ruM7KmyHOuRF5uOv3NDgDY0ueHIXEiABApMwPtAcgas8+bNS1sqbz7ekxPFe9ME9TuUklwE5AM7HRgdpwowwsVIzaJFi8wNN9wQN3kmTNG2UNIwagRDYiyy6LXxQUHefDFCBHsfbOgJT7hatWqllCWdesbNjJEFIUCFpiDYWSgJkEAuCeAB5oxgkS+mkjAVIXY2EeNPVx6G/zENw5A+gX333VdHqrDYmzdgROy+++6LROE3lIwxY8aYCy+8UBUQZ8SNRE7h8LZZ5OQUXzCVhtGVo48+2nz44YfqYQXDbYR4+cKAGQpY27ZtNU3syIw7zyuL33pqhvwXGAJUaALTFBSEBEjADwExoNRk8F5yAW/qcL+GC+wXX3yhD123AB2mKDBagIefGAnrxo1wRcY0CqaRXH4uL3jFeO1sEI908KIp9oCtFRCc2zW+gzMYgRc8zOCKjSkfjJLA7X306NFGjH/VawfpEeD2jSkeTHUNHjxY7UgwLeQ8i5yLNlzikW86a+bA9uWNN97QcmAXBC8rty5RvHzRdvAwgh0P6uIUL0xJQvFCiO0/UH781FNP5r/gEJDOxEACJEACeSGQay+emTNnWlkpWD1GGjVqZGW9DpVb3F2t2GhY2bjPisuxxsmbuJXVdDVe7rj6CS8eeRO38Ga66aabNB9Zy8WOGjXKwrMF3jhIK0abFt408H6SB7LGIe/HH388p5xyzccrnCh2Kre4AXujE34XpU89mFB/sT2yogRYMY61Mtql+chIh5WRDiuu87Z+/foah7RoB3Gb1nzBVRb6s+KObUXZ0ThxG7fiJq3pZZE4KwqJxsPLB+c3a9bMfv311wnlij2ANhLDYG0feDf17t07Uj7Sxub77rvvWplmUq8rcWm3MjqnXlvirm1lCw3NPl7/SVZPPcnHPzFMVxY+kjJJDghsgjykUzGQAAmQQM4JiPuzLkqHt/l8hzVr1ujib7EeJBgVwMgNpqD8ePrkW05v/vnkgzrD+wjrmmCxtlwHUUJ0igejXZkEPHowSoK1aNIJWEcGBsZYVA8jQOJ6H3V6vHwxzYR+UKVKFU2LNJiGgtGuC4n6Tzb1hBcWjJdhGM2QfwL0cso/Y5ZAAiRQCgRiH2yuSLgiN2zY0P3kZ44IJDKu9Zs97F28ykyPHj1SnoqpLSzOhwAX6HghNl+kgSGxU2bwG2m8ygziEvWfbOuJvBlKhwAVmtLhzFJIgARIgASSEJCppyRH/z2ErR4YSCARASo0icgwngRIgARIoNQIYCsDBhLIhgC9nLKhx3NJgARIgARIgAQCQYAKTSCagUKQAAmQAAmQAAlkQ4AKTTb0eC4JkAAJkAAJkEAgCFChCUQzUAgSIAESIAESIIFsCFChyYYezyUBEiABEiABEggEASo0gWgGCkECJEACJEACJJANASo02dDjuSRAAiRAAiRAAoEgQIUmEM1AIUiABEiABEiABLIhQIUmG3o8lwRIgARIgARIIBAEqNAEohkoBAmQAAmQAAmQQDYEqNBkQ4/nkgAJkAAJkAAJBIIAFZpANAOFIAESIAESIAESyIYAFZps6PFcEiABEiABEiCBQBDgbtuBaAYKQQLFS2DYsGEGfwzxCTRt2jT+gRzFHnTQQTnKidlkQmDnnXfO5DSekwEBKjQZQOMpJEAC/ggMHDjQrFy50l/iMpqqQYMGeal59erVzejRo/OSNzP1T6By5cr+EzNlVgQ2sRKyyoEnkwAJkAAJkAAJkECBCdCGpsANwOJJgARIgARIgASyJ0CFJnuGzIEESIAESIAESKDABKjQFLgBWDwJkAAJkAAJkED2BP4PaDMay9okBEcAAAAASUVORK5CYII="&gt;&lt;/div&gt;&lt;/p&gt;
+&lt;p&gt;The last important bits about this pair of values is the&amp;nbsp;wrapping.&lt;/p&gt;
+&lt;p&gt;First, it is actually a &lt;code&gt;Future&lt;/code&gt;, allowing your stream to yield objects
+that it doesn&amp;#8217;t quite have yet &amp;#8212;
+for example, those which ultimately come from an &lt;span class="caps"&gt;HTTP&lt;/span&gt;&amp;nbsp;response.&lt;/p&gt;
+&lt;p&gt;Secondly, its outermost layer is an &lt;code&gt;Option&lt;/code&gt;.
+This enables you to &lt;em&gt;terminate&lt;/em&gt; the stream when the underlying source is exhausted
+by simply returning &lt;code&gt;None&lt;/code&gt;.
+Until then, however, you should return &lt;code&gt;Some&lt;/code&gt; with the (future of) aforementioned pair of&amp;nbsp;values.&lt;/p&gt;
+&lt;h4&gt;Paginate!&amp;nbsp;Paginate!&lt;/h4&gt;
+&lt;p&gt;If you have doubts about how all those pieces of &lt;code&gt;stream::unfold&lt;/code&gt; fit in,
+then looking at &lt;a href="https://docs.rs/futures/0.1.17/futures/stream/fn.unfold.html#example"&gt;the usage example in the docs&lt;/a&gt;
+may give you &lt;em&gt;some&lt;/em&gt; idea of what it enables you to do.
+It&amp;#8217;s a very artificial example, though:
+the resulting &lt;code&gt;Stream&lt;/code&gt; isn&amp;#8217;t waiting for any asynchronous &lt;code&gt;Future&lt;/code&gt;s,
+which is the very reason you&amp;#8217;d use a &lt;code&gt;Stream&lt;/code&gt; over an &lt;code&gt;Iterator&lt;/code&gt; in the first place&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;We can find a more natural application for &lt;code&gt;unfold&lt;/code&gt;
+if we go back to our original problem.
+To reiterate, we want to repeatedly query an &lt;span class="caps"&gt;HTTP&lt;/span&gt; &lt;span class="caps"&gt;API&lt;/span&gt; for a long list of items,
+giving our callers a &lt;code&gt;Stream&lt;/code&gt; of such items they can process at their leisure.
+At the same time, all details about pagination and handling of continuation tokens or offsets
+should be completely hidden from the&amp;nbsp;user.&lt;/p&gt;
+&lt;p&gt;To use &lt;code&gt;stream::unfold&lt;/code&gt; for this task, we need the initial seed and an appropriate closure.
+I have hinted already at using the continuation token as our seed,
+or the state that we pass around from one closure invocation to another.
+What remains is mostly making the actual &lt;span class="caps"&gt;HTTP&lt;/span&gt; request and interpreting the &lt;span class="caps"&gt;JSON&lt;/span&gt; response,
+for which we&amp;#8217;ll use the &lt;em&gt;defacto&lt;/em&gt; standard Rust crates:
+&lt;a href="https://docs.rs/hyper"&gt;&lt;code&gt;hyper&lt;/code&gt;&lt;/a&gt;, &lt;a href="https://serde.rs"&gt;Serde&lt;/a&gt;,
+and &lt;a href="https://docs.rs/serde_json"&gt;&lt;code&gt;serde_json&lt;/code&gt;&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;futures&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;future&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Future&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;stream&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Stream&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;Client&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Method&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;client&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;serde_json&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio_core&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;reactor&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Handle&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="kr"&gt;const&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;URL&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;http://api.example.com/items&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;handle&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Handle&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;after&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Stream&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Item&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Item&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;client&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Client&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;handle&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;stream&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unfold&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;after&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;cont_token&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;cont_token&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}?after={}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;URL&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;req&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Method&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Get&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;client&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;request&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;req&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;from_err&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;resp&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;concat2&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;from_err&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_success&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                    &lt;/span&gt;&lt;span class="n"&gt;serde_json&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from_slice&lt;/span&gt;&lt;span class="o"&gt;::&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;ItemsResponse&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                        &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map_err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;::&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                    &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;HTTP status: {}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;items_resp&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;stream&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;iter_ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;items_resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;items_resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;continuation_token&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;}))&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;flatten&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="cp"&gt;#[derive(Deserialize)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ItemsResponse&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Item&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="cp"&gt;#[serde(rename = &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;continuationToken&amp;quot;&lt;/span&gt;&lt;span class="cp"&gt;)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;continuation_token&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;While &lt;a href="https://play.rust-lang.org/?gist=556ff0d112272b3c2da36c3d03aac52e&amp;amp;version=stable"&gt;this code&lt;/a&gt;
+may be a little challenging to decipher at first,
+it&amp;#8217;s not out of line compared to how working with &lt;code&gt;Future&lt;/code&gt;s and &lt;code&gt;Stream&lt;/code&gt;s looks like in general.
+In either case, you can expect a lot of &lt;code&gt;.and_then&lt;/code&gt; callbacks&amp;nbsp;:)&lt;/p&gt;
+&lt;p&gt;There is one detail here that I haven&amp;#8217;t mentioned previously, though.
+It relates to the &lt;code&gt;stream::iter_ok&lt;/code&gt; and &lt;code&gt;Stream::flatten&lt;/code&gt; calls
+which you may have already noticed.&lt;br&gt;
+The issue with &lt;code&gt;stream::unfold&lt;/code&gt; is that it only allows to yield an item &lt;em&gt;once&lt;/em&gt; per closure invocation.
+For us, this is too limiting: a single batch response from the &lt;span class="caps"&gt;API&lt;/span&gt; will contain many such items,
+but we have no way of &amp;#8220;splitting&amp;#8221;&amp;nbsp;them.&lt;/p&gt;
+&lt;p&gt;What we can do instead is to produce a &lt;code&gt;Stream&lt;/code&gt; of entire &lt;em&gt;batches&lt;/em&gt; of items,
+at least at first, and then &lt;code&gt;flatten&lt;/code&gt; it.
+What &lt;code&gt;Stream::flatten&lt;/code&gt; does here is to turn a nested &lt;code&gt;Stream&amp;lt;Stream&amp;lt;Item&amp;gt;&amp;gt;&lt;/code&gt;
+into a flat &lt;code&gt;Stream&amp;lt;Item&amp;gt;&lt;/code&gt;. The latter is what we eventually want to return,
+so all we need now is to create this nested &lt;em&gt;stream of streams&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;How? Well, that&amp;#8217;s actually pretty&amp;nbsp;easy.&lt;/p&gt;
+&lt;p&gt;We can already deserialize a &lt;code&gt;Vec&amp;lt;Item&amp;gt;&lt;/code&gt;
+from the &lt;span class="caps"&gt;JSON&lt;/span&gt; response &amp;#8212; that&amp;#8217;s our item batch! &amp;#8212;
+which is essentially an &lt;em&gt;iterable&lt;/em&gt; of &lt;code&gt;Item&lt;/code&gt;s&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;.
+Another utility function from the &lt;code&gt;stream&lt;/code&gt; module,
+namely &lt;a href="https://docs.rs/futures/*/futures/stream/fn.iter_ok.html"&gt;&lt;code&gt;stream::iter_ok&lt;/code&gt;&lt;/a&gt;,
+can readily turn such iterable into a &amp;#8220;immediate&amp;#8221; &lt;code&gt;Stream&lt;/code&gt;.
+Such &lt;code&gt;Stream&lt;/code&gt; won&amp;#8217;t be asynchronous at all
+&amp;#8212; its items will have been ready from the very beginning &amp;#8212;
+but it will still conform to the &lt;code&gt;Stream&lt;/code&gt; interface,
+enabling it to be &lt;code&gt;flatten&lt;/code&gt;ed as we&amp;nbsp;request.&lt;/p&gt;
+&lt;h4&gt;But wait! There is a&amp;nbsp;bug!&lt;/h4&gt;
+&lt;p&gt;So in the end, is this the solution we&amp;#8217;re looking&amp;nbsp;for?&amp;#8230;&lt;/p&gt;
+&lt;p&gt;Well, almost. First, here&amp;#8217;s the expected usage of the function we just&amp;nbsp;wrote:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;core&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio_core&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;reactor&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Core&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;core&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;run&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;continuation_token&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;// start from the beginning&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;core&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;handle&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;continuation_token&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;for_each&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{:?}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;item&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Ok&lt;/span&gt;&lt;span class="p"&gt;(())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;While this is more complicated than the plain &lt;code&gt;for&lt;/code&gt; loop in Python,
+most of it is just Tokio boilerplate.
+The notable part is the invocation of &lt;code&gt;items()&lt;/code&gt;,
+where we pass &lt;code&gt;None&lt;/code&gt; as a continuation token to indicate that
+we want the entire sequence, right from its&amp;nbsp;beginning.&lt;/p&gt;
+&lt;p&gt;And since we&amp;#8217;re talking about fetching long sequences,
+we would indeed expect a &lt;em&gt;lot&lt;/em&gt; of items.
+So it is probably quite surprising to hear
+that the stream we&amp;#8217;ve created here will be completely &lt;em&gt;empty&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;&amp;#8230;What?&amp;nbsp;How?!&lt;/p&gt;
+&lt;p&gt;If you look again at the source code of &lt;code&gt;items()&lt;/code&gt;,
+the direct reason should be pretty easy to find.
+The culprit lies in the &lt;code&gt;return None&lt;/code&gt; branch of the first &lt;code&gt;match&lt;/code&gt;.
+If we don&amp;#8217;t pass &lt;code&gt;Some(continuation_token)&lt;/code&gt; as a parameter to &lt;code&gt;items()&lt;/code&gt;,
+this branch will be hit &lt;em&gt;immediately&lt;/em&gt;,
+terminating the stream before it had a chance to produce&amp;nbsp;anything.&lt;/p&gt;
+&lt;p&gt;It may not be very clear how to fix this problem.
+After all, the purpose of the &lt;code&gt;match&lt;/code&gt; was to detect the &lt;em&gt;end&lt;/em&gt; of the sequence,
+but it apparently prevents us from &lt;em&gt;starting&lt;/em&gt; it in the first&amp;nbsp;place!&lt;/p&gt;
+&lt;p&gt;Looking at the problem from another angle,
+we can see we&amp;#8217;ve conflated two distinct states of our stream
+&amp;#8212; &amp;#8220;before it has started&amp;#8221; and &amp;#8220;after it&amp;#8217;s ended&amp;#8221; &amp;#8212; into a single one (&amp;#8220;no continuation token&amp;#8221;).
+Since we obviously don&amp;#8217;t want to make the &lt;code&gt;after&lt;/code&gt; parameter mandatory
+&amp;#8212; users should be able to say &amp;#8220;Give me everything!&amp;#8221; &amp;#8212;
+we need another way of telling those two states&amp;nbsp;apart.&lt;/p&gt;
+&lt;p&gt;In terms of Rust types, it seems that &lt;code&gt;Option&amp;lt;String&amp;gt;&lt;/code&gt; is no longer sufficient
+for encoding all possible states of our &lt;code&gt;Stream&lt;/code&gt;.
+Although we could try to fix that in some ad-hoc way (e.g. by adding another &lt;code&gt;bool&lt;/code&gt; flag),
+it feels cleaner to just define a new, dedicated type.
+For one, this allows us to designate a name for each of the states in question,
+improving the readability and maintainability of our&amp;nbsp;code:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;State&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Start&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;End&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Note that we can put this definition directly inside the &lt;code&gt;items()&lt;/code&gt; function,
+without cluttering the module namespace.
+All the relevant details of our &lt;code&gt;Stream&lt;/code&gt; are thus nicely contained
+&lt;a href="https://play.rust-lang.org/?gist=42af60531f18509e181c4e30a46eb077&amp;amp;version=stable"&gt;within a single function&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;handle&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;Handle&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;after&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Stream&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Item&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Item&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// (definition of State enum can go here)&lt;/span&gt;
+
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;client&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Client&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;handle&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;stream&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;unfold&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;State&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Start&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;after&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;state&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;cont_token&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;state&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;State&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Start&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;opt_ct&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;opt_ct&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;State&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;State&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;End&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;return&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;cont_token&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{}?after={}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;URL&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;URL&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;req&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Method&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Get&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;client&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;request&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;req&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;from_err&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;resp&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;concat2&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;from_err&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_success&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                    &lt;/span&gt;&lt;span class="n"&gt;serde_json&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from_slice&lt;/span&gt;&lt;span class="o"&gt;::&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;ItemsResponse&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                        &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map_err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;::&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                    &lt;/span&gt;&lt;span class="nb"&gt;Err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;HTTP status: {}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;status&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;items_resp&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;next_state&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;items_resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;continuation_token&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                    &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;State&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ct&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                    &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;State&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;End&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;stream&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;iter_ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;items_resp&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;next_state&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;}))&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;flatten&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Sure, there is a little more bookkeeping required now,
+but at least all the items are being emitted by the &lt;code&gt;Stream&lt;/code&gt; as&amp;nbsp;intended.&lt;/p&gt;
+&lt;hr /&gt;
+&lt;p&gt;You can see the complete source in
+&lt;a href="https://play.rust-lang.org/?gist=42af60531f18509e181c4e30a46eb077&amp;amp;version=stable"&gt;the playground here&lt;/a&gt;.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;Furthermore, the token doesn&amp;#8217;t have to come as part of the &lt;span class="caps"&gt;HTTP&lt;/span&gt; response body.
+Some &lt;span class="caps"&gt;API&lt;/span&gt; providers (such as GitHub) may use the &lt;code&gt;Link:&lt;/code&gt; header
+to point directly to the next &lt;span class="caps"&gt;URL&lt;/span&gt; to query.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;This example uses &amp;#8220;traditional&amp;#8221;, synchronous Python code.
+However, it should be easy to convert it to the asynchronous equivalent
+that works in Python 3.5 and above,
+provided you can replace &lt;code&gt;requests&lt;/code&gt; with some async &lt;span class="caps"&gt;HTTP&lt;/span&gt; library.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;If you are curious whether other languages could express it better,
+you can check the
+&lt;a href="https://hackage.haskell.org/package/conduit-1.2.13/docs/Data-Conduit-List.html#v:unfold"&gt;&lt;code&gt;Data.Conduit.List.unfold&lt;/code&gt; function&lt;/a&gt;
+from the Haskell&amp;#8217;s &lt;a href="https://hackage.haskell.org/package/conduit"&gt;&lt;code&gt;conduit&lt;/code&gt; package&lt;/a&gt;.
+For most intents and purposes, it is their equivalent of &lt;code&gt;stream::unfold&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;Coincidentally, you can create iterators in the very same manner
+through the &lt;a href="https://docs.rs/itertools/0.7.6/itertools/fn.unfold.html"&gt;&lt;code&gt;itertools::unfold&lt;/code&gt; function&lt;/a&gt;
+from the &lt;a href="https://docs.rs/itertools/"&gt;&lt;code&gt;itertools&lt;/code&gt; crate&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:5"&gt;
+&lt;p&gt;In more technical Rust terms, it means &lt;code&gt;Vec&lt;/code&gt; implements the &lt;code&gt;IntoIterator&lt;/code&gt; trait,
+allowing anyone to get an &lt;code&gt;Iterator&lt;/code&gt; from it.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="Tokio"></category><category term="streams"></category><category term="HTTP"></category></entry><entry><title>Terminating a Stream in Rust</title><link href="http://xion.io/post/code/rust-stream-terminate.html" rel="alternate"></link><updated>2017-12-16T21:17:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-12-16:post/code/rust-stream-terminate.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a little trick that may be useful in dealing with
 &lt;a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html"&gt;asynchronous &lt;code&gt;Stream&lt;/code&gt;s&lt;/a&gt; in&amp;nbsp;Rust.&lt;/p&gt;
 &lt;p&gt;When you consume a &lt;code&gt;Stream&lt;/code&gt; using
 &lt;a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.for_each"&gt;the &lt;code&gt;for_each&lt;/code&gt; method&lt;/a&gt;,
@@ -1640,283 +2019,4 @@ for the complete code from this&amp;nbsp;post.&lt;/p&gt;
   if we didn&amp;#8217;t have control over its definition.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Haskell"></category><category term="Writer"></category><category term="monads"></category><category term="monad transformers"></category><category term="WriterT"></category></entry><entry><title>Extension traits in Rust</title><link href="http://xion.io/post/code/rust-extension-traits.html" rel="alternate"></link><updated>2017-06-21T19:38:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-06-20:post/code/rust-extension-traits.html</id><summary type="html">&lt;p&gt;In a few object-oriented languages,
-it is possible to add methods to a class &lt;em&gt;after&lt;/em&gt; it&amp;#8217;s already been&amp;nbsp;defined.&lt;/p&gt;
-&lt;p&gt;This feature arises quite naturally if the language has a dynamic type system
-that&amp;#8217;s modifiable at runtime.
-In those cases, even &lt;em&gt;replacing&lt;/em&gt; existing methods is perfectly possible&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;In addition to that,
-some statically typed languages &amp;#8212; most notably in C# &amp;#8212;
-offer &lt;em&gt;extension methods&lt;/em&gt; as a &lt;a href="cs-ext-methods"&gt;dedicated feature&lt;/a&gt; of their type systems.
-The premise is that you would write standalone functions whose
-first argument is specially designated (usually by &lt;code&gt;this&lt;/code&gt; keyword)
-as a receiver of the resulting method&amp;nbsp;call:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;public&lt;/span&gt; &lt;span class="k"&gt;static&lt;/span&gt; &lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="nf"&gt;WordCount&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;this&lt;/span&gt; &lt;span class="n"&gt;String&lt;/span&gt; &lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt;
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;str&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;Split&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="k"&gt;new&lt;/span&gt; &lt;span class="kt"&gt;char&lt;/span&gt;&lt;span class="p"&gt;[]&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="sc"&gt;&amp;#39; &amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="sc"&gt;&amp;#39;.&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="sc"&gt;&amp;#39;?&amp;#39;&lt;/span&gt; &lt;span class="p"&gt;},&lt;/span&gt;
-                     &lt;span class="n"&gt;StringSplitOptions&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;RemoveEmptyEntries&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;Length&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;At the call site,
-the new method is indistinguishable from any of the existing&amp;nbsp;ones:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kt"&gt;string&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt; &lt;span class="p"&gt;=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;Alice has a cat.&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;
-&lt;span class="kt"&gt;int&lt;/span&gt; &lt;span class="n"&gt;n&lt;/span&gt; &lt;span class="p"&gt;=&lt;/span&gt; &lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;WordCount&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;That&amp;#8217;s assuming you have imported both the original class
-(or it&amp;#8217;s a built-in like &lt;code&gt;String&lt;/code&gt;),
-as well as the module in which the extension method is&amp;nbsp;defined.&lt;/p&gt;
-&lt;h4&gt;Rewrite it in&amp;nbsp;Rust&lt;/h4&gt;
-&lt;p&gt;The curious thing about &lt;a href="http://rust-lang.org"&gt;Rust&lt;/a&gt;&amp;#8216;s type system is
-that it permits extension methods solely as a side effect of its core building block: &lt;em&gt;traits&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;In this post, I&amp;#8217;m going to describe a certain design pattern in Rust
-which involves third-party types and user-defined traits.
-Several popular crates &amp;#8212;
-like &lt;a href="https://docs.rs/itertools"&gt;itertools&lt;/a&gt; or &lt;a href="https://docs.rs/unicode-normalization/"&gt;unicode-normalization&lt;/a&gt; &amp;#8212;
-utilize it very successfully to add new, useful methods to the language standard&amp;nbsp;types.&lt;/p&gt;
-&lt;p&gt;I&amp;#8217;m not sure if this pattern has an official or widely accepted name.
-Personally, I&amp;#8217;ve taken to calling it &lt;strong&gt;extension traits&lt;/strong&gt;.&lt;/p&gt;
-&lt;p&gt;Let&amp;#8217;s have a look at how they are commonly&amp;nbsp;implemented.&lt;/p&gt;
-&lt;h4&gt;Ingredients&lt;/h4&gt;
-&lt;p&gt;We can use the extension trait pattern if we want to have additional methods in a type
-that we don&amp;#8217;t otherwise control (or don&amp;#8217;t want to&amp;nbsp;modify).&lt;/p&gt;
-&lt;p&gt;Common cases&amp;nbsp;include:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;Rust standard library types, like &lt;code&gt;Result&lt;/code&gt;, &lt;code&gt;String&lt;/code&gt;,
-  or anything else inside the &lt;code&gt;std&lt;/code&gt; namespace&lt;/li&gt;
-&lt;li&gt;types imported from &lt;a href="https://crates.io"&gt;third-party&amp;nbsp;libraries&lt;/a&gt;&lt;/li&gt;
-&lt;li&gt;types from the current crate if additional methods only make sense in certain scenarios
-  (e.g. conditional compilation / testing)&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;The crux of this technique is really simple.
-Like with most design patterns, however,
-it involves a certain degree of boilerplate and&amp;nbsp;duplication.&lt;/p&gt;
-&lt;p&gt;So without further ado&amp;#8230;
-In order to &amp;#8220;patch&amp;#8221; some new method(s) into an external type you will need&amp;nbsp;to:&lt;/p&gt;
-&lt;ol&gt;
-&lt;li&gt;Define a trait with signatures of all the methods you want to&amp;nbsp;add.&lt;/li&gt;
-&lt;li&gt;Implement it for the external&amp;nbsp;type.&lt;/li&gt;
-&lt;li&gt;&lt;em&gt;There is no step three&lt;/em&gt;.&lt;/li&gt;
-&lt;/ol&gt;
-&lt;p&gt;As an important note on the usage side,
-the calling code needs to &lt;em&gt;import your new trait&lt;/em&gt; in addition to the external type.
-Once that&amp;#8217;s done, it can proceed to use the new methods is if they were there to begin&amp;nbsp;with.&lt;/p&gt;
-&lt;p&gt;I&amp;#8217;m sure you are keen on seeing some&amp;nbsp;examples!&lt;/p&gt;
-&lt;h4&gt;Broadening your &lt;code&gt;Option&lt;/code&gt;s&lt;/h4&gt;
-&lt;p&gt;We&amp;#8217;re going to add two new methods to Rust&amp;#8217;s &lt;a href="https://doc.rust-lang.org/std/option/enum.Option.html"&gt;standard &lt;code&gt;Option&lt;/code&gt; type&lt;/a&gt;.
-The goal is to make it more convenient to operate on mutable &lt;code&gt;Option&lt;/code&gt;s
-by allowing to easily replace an existing value with another one&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;Here&amp;#8217;s the appropriate extension trait&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c-Doc"&gt;/// Additional mutation methods for `Option`.&lt;/span&gt;
-&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;trait&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OptionMutExt&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// Replace the existing `Some` value with a new one.&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;///&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// Returns the previous value if it was present, or `None` if no replacement was made.&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;replace&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// Replace the existing `Some` value with the result of given closure.&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;///&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// Returns the previous value if it was present, or `None` if no replacement was made.&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;replace_with&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;F&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FnOnce&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;F&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It may feel at little bit weird to implement it.&lt;br&gt;
-You will basically have to pretend you are &lt;em&gt;inside the &lt;code&gt;Option&lt;/code&gt; type itself&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;OptionMutExt&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;replace&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;replace_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;move&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;||&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;val&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;replace_with&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;F&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;FnOnce&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;F&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;T&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_some&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;take&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;result&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;else&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Unfortunately, this is just an illusion.
-Extension traits grant no special powers
-that&amp;#8217;d allow you to bypass any of the regular visibility rules.
-All you can use inside the new methods is still
-just the &lt;em&gt;public interface&lt;/em&gt; of the type you&amp;#8217;re augmenting (here, &lt;code&gt;Option&lt;/code&gt;).&lt;/p&gt;
-&lt;p&gt;In our case, however, this is good enough,
-mostly thanks to &lt;a href="option_take"&gt;the recently introduced &lt;code&gt;Option::take&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;To use our shiny new methods in other places,
-all we have to do is import the extension&amp;nbsp;trait:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ext&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;rust&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;OptionMutExt&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;// assuming you put it in ext/rust.rs&lt;/span&gt;
-
-&lt;span class="c1"&gt;// ...somewhere...&lt;/span&gt;
-&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;opt&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;...;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;match&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;opt&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;replace&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;debug&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Option had a value of {} before replacement&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;assert_eq&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;None&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;opt&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It doesn&amp;#8217;t matter where it was defined either,
-meaning we can ship it away to &lt;a href="https://crates.io"&gt;crates.io&lt;/a&gt;
-and let it accrue as many happy users as &lt;code&gt;Itertools&lt;/code&gt; has&amp;nbsp;;-)&lt;/p&gt;
-&lt;h4&gt;Are you &lt;code&gt;hyper::Body&lt;/code&gt; ready?&lt;/h4&gt;
-&lt;p&gt;Our second example will demonstrate attaching more methods to a third-party&amp;nbsp;type.&lt;/p&gt;
-&lt;p&gt;Last week, there was a new release of &lt;a href="https://hyper.rs/"&gt;Hyper&lt;/a&gt;,
-a popular Rust framework for &lt;span class="caps"&gt;HTTP&lt;/span&gt; servers &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; clients.
-It was notable because it marked a switch from synchronous, straightforward &lt;span class="caps"&gt;API&lt;/span&gt;
-to a more complex, asynchronous one
-(which I incidentally &lt;a href="http://xion.io/post/programming/rust-async-closer-look.html"&gt;wrote about a few weeks ago&lt;/a&gt;).&lt;/p&gt;
-&lt;p&gt;Predictably, &lt;a href="https://www.reddit.com/r/rust/comments/6hksa0/problems_with_understanding_hypers_async/"&gt;there has been some confusion&lt;/a&gt;
-among its new and existing&amp;nbsp;users.&lt;/p&gt;
-&lt;p&gt;We&amp;#8217;re going to help by pinning a more convenient interface on
-&lt;a href="https://hyper.rs/hyper/master/hyper/struct.Body.html"&gt;hyper&amp;#8217;s &lt;code&gt;Body&lt;/code&gt; type&lt;/a&gt;.
-&lt;code&gt;Body&lt;/code&gt; here is a struct representing the content of an &lt;span class="caps"&gt;HTTP&lt;/span&gt; request or response.
-After the &amp;#8216;asyncatastrophe&amp;#8217;,
-it doesn&amp;#8217;t allow to access the raw incoming bytes as easily as it did&amp;nbsp;before.&lt;/p&gt;
-&lt;p&gt;Thanks to extension traits, we can fix this rather&amp;nbsp;quickly:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;futures&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;BoxFuture&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;future&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Future&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Stream&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Body&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;trait&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BodyExt&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// Collect all the bytes from all the `Chunk`s from `Body`&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// and return it as `Vec&amp;lt;u8&amp;gt;`.&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;into_bytes&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BoxFuture&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// Collect all the bytes from all the `Chunk`s from `Body`,&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c-Doc"&gt;/// decode them as UTF8, and return the resulting `String`.&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;into_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BoxFuture&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Send&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BodyExt&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Body&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;into_bytes&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BoxFuture&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;concat&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;bytes&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;future&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="o"&gt;::&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;bytes&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_vec&lt;/span&gt;&lt;span class="p"&gt;()))&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;boxed&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;into_string&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BoxFuture&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Send&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_bytes&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map_err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;as&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Send&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;bytes&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from_utf8&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;bytes&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;                &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;map_err&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;as&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Send&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;boxed&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;With these new methods in hand,
-it is relatively straightforward to implement, say, a simple character-counting&amp;nbsp;service:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;error&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;futures&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;BoxFuture&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;future&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Future&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;server&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="n"&gt;Service&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Response&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ext&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;hyper&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;BodyExt&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;// assuming the above is in ext/hyper.rs&lt;/span&gt;
-
-&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Length&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Service&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Length&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Response&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Response&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Box&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;+&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Send&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;type&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Future&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;BoxFuture&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Self&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Response&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Self&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Error&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;call&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;request&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Request&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Self&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Future&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;request&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;deconstruct&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;body&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_string&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;and_then&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;future&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="n"&gt;Response&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;with_body&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;len&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;boxed&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Replacing &lt;code&gt;Box&amp;lt;Error + Send&amp;gt;&lt;/code&gt; with an idiomatic &lt;a href="https://docs.rs/crate/derive-error/"&gt;error enum&lt;/a&gt;
-is left as an exercise for the reader&amp;nbsp;:)&lt;/p&gt;
-&lt;h4&gt;Extra credit bonus&amp;nbsp;explanation&lt;/h4&gt;
-&lt;p&gt;&lt;small&gt;Reading this section is not necessary to use extension traits.&lt;/small&gt;&lt;/p&gt;
-&lt;p&gt;So far, we have seen what extension traits are capable of.
-It is only right to mention what they &lt;em&gt;cannot do&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Indeed, this technique has some limitations.
-They are a conscious choice on the part of Rust authors,
-and they were decided upon in an effort to keep the type system &lt;em&gt;coherent&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Coherence isn&amp;#8217;t an everyday topic in Rust,
-but it becomes important when working with traits and types that cross package boundaries.
-Rules of trait coherence
-(described briefly towards the end of &lt;a href="coherence-in-book"&gt;this section of the Rust book&lt;/a&gt;)
-state that the following combinations of &amp;#8220;local&amp;#8221; (this crate) and &amp;#8220;external&amp;#8221; (other crates&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;) are&amp;nbsp;legal:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;implement a &lt;em&gt;local&lt;/em&gt; trait for a &lt;em&gt;local&lt;/em&gt; type.&lt;br&gt;
-  This is common in larger programs that use polymorphic&amp;nbsp;abstractions.&lt;/li&gt;
-&lt;li&gt;implement an &lt;em&gt;external&lt;/em&gt; trait for a &lt;em&gt;local&lt;/em&gt; type.&lt;br&gt;
-  We do this often to integrate with third-party libraries and frameworks,
-  just like with &lt;code&gt;hyper&lt;/code&gt; above.&lt;/li&gt;
-&lt;li&gt;implement a &lt;em&gt;local&lt;/em&gt; trait for an &lt;em&gt;external&lt;/em&gt; type.&lt;br&gt;
-  That&amp;#8217;s extension traits for&amp;nbsp;you!&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;What is &lt;em&gt;not&lt;/em&gt; possible, however, is&amp;nbsp;to:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;implement an &lt;em&gt;external&lt;/em&gt; trait for an &lt;em&gt;external&lt;/em&gt;&amp;nbsp;type&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;This case is prohibited in order to make the choice of trait implementations more predictable,
-both for the compiler and for the programmer.
-Without this rule in place, you could introduce many instances of &lt;code&gt;impl Trait for Type&lt;/code&gt;
-(same &lt;code&gt;Trait&lt;/code&gt; and same &lt;code&gt;Type&lt;/code&gt;),
-each one with different functionality,
-leaving the compiler to &amp;#8220;guess&amp;#8221; the right &lt;code&gt;impl&lt;/code&gt; for any given situation&lt;sup id="fnref:6"&gt;&lt;a class="footnote-ref" href="#fn:6" rel="footnote"&gt;6&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;The decision was thus made to disallow the &lt;code&gt;impl ExternalTrait for ExternalType&lt;/code&gt; case altogether.
-If you like, you can read &lt;a href="rust-orphans"&gt;some more extensive backstory&lt;/a&gt; behind&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;Bear in mind, however, that this isn&amp;#8217;t the unequivocally &amp;#8220;correct&amp;#8221; solution.
-&lt;a href="hs-orphans"&gt;Some languages&lt;/a&gt; choose to allow this so-called &lt;em&gt;orphan&lt;/em&gt; case,
-and try to resolve the potential ambiguities in various different ways.
-It is a genuinely useful feature, too, as it makes easier it to glue together two unrelated libraries&lt;sup id="fnref:7"&gt;&lt;a class="footnote-ref" href="#fn:7" rel="footnote"&gt;7&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;Thankfully for extension traits,
-the coherence restriction doesn&amp;#8217;t apply as long as you keep those traits and their &lt;code&gt;impl&lt;/code&gt;s in the same&amp;nbsp;crate.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;This practice is often referred to as &lt;em&gt;monkeypatching&lt;/em&gt;, especially in Python and Ruby.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;In this case, a more common solution is to just open another &lt;code&gt;impl Foo&lt;/code&gt; block,
-annotated with &lt;code&gt;#[cfg(test)]&lt;/code&gt; or similar.
-An extension trait, however, makes it easier
-to extract &lt;code&gt;Foo&lt;/code&gt; into a separate crate along with some handy, test-only &lt;span class="caps"&gt;API&lt;/span&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;Note that this is &lt;em&gt;not&lt;/em&gt; the same as the unstable (as of 1.18) &lt;code&gt;Option&lt;/code&gt; methods
-guarded behind &lt;a href="https://github.com/rust-lang/rust/issues/39288"&gt;the &lt;code&gt;options_entry&lt;/code&gt; feature gate&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:4"&gt;
-&lt;p&gt;My own convention is to call those traits &lt;code&gt;FooExt&lt;/code&gt;
-if they are meant to enhance the interface of type &lt;code&gt;Foo&lt;/code&gt;.
-The other practice is to mirror the name of the crate that the trait is packaged in;
-both &lt;code&gt;Itertools&lt;/code&gt; and &lt;code&gt;UnicodeNormalization&lt;/code&gt; are examples of this style.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:5"&gt;
-&lt;p&gt;Standard library (&lt;code&gt;std&lt;/code&gt; or &lt;code&gt;core&lt;/code&gt; namespaces) counts as external crate for this purpose.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:6"&gt;
-&lt;p&gt;Or throw an error. However, trait &lt;code&gt;impl&lt;/code&gt;s are always imported implicitly,
-so this could essentially prevent some combination of different modules/libraries in the ecosystem from being used together,
-and generally create an unfathomable mess.&amp;#160;&lt;a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:7"&gt;
-&lt;p&gt;The usual workaround for coherence/orphan rules in Rust involves creating a wrapper
-around the external type in order to make it &amp;#8220;local&amp;#8221;, and therefore allow external trait &lt;code&gt;impl&lt;/code&gt;s for it.
-This is called &lt;a href="https://github.com/rust-unofficial/patterns/blob/master/patterns/newtype.md"&gt;the &lt;em&gt;newtype&lt;/em&gt; pattern&lt;/a&gt;
-and there are &lt;a href="https://docs.rs/newtype_derive"&gt;some crates&lt;/a&gt; to support it.&amp;#160;&lt;a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="C#"></category><category term="methods"></category><category term="extension methods"></category><category term="traits"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Haskell"></category><category term="Writer"></category><category term="monads"></category><category term="monad transformers"></category><category term="WriterT"></category></entry></feed>
