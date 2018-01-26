@@ -63,6 +63,133 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-stream-terminate.html#rust-stream-terminate">Terminating a Stream in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Sat 16 December 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/streams.html">streams</a>,      <a href="http://xion.io/tag/tokio.html">Tokio</a>,      <a href="http://xion.io/tag/async.html">async</a>      &#8226; <a href="http://xion.io/post/code/rust-stream-terminate.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a little trick that may be useful in dealing with
+<a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html">asynchronous <code>Stream</code>s</a> in&nbsp;Rust.</p>
+<p>When you consume a <code>Stream</code> using
+<a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.for_each">the <code>for_each</code> method</a>,
+its default behavior is to finish early should an error be produced by the&nbsp;stream:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">futures</span><span class="o">::</span><span class="n">prelude</span><span class="o">::*</span><span class="p">;</span><span class="w"></span>
+<span class="kn">use</span><span class="w"> </span><span class="n">futures</span><span class="o">::</span><span class="n">stream</span><span class="p">;</span><span class="w"></span>
+<span class="kn">use</span><span class="w"> </span><span class="n">tokio_core</span><span class="o">::</span><span class="n">reactor</span><span class="o">::</span><span class="n">Core</span><span class="p">;</span><span class="w"></span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stream</span><span class="o">::</span><span class="n">iter_result</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="nb">Ok</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="kc">false</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">3</span><span class="p">)]);</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">fut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">for_each</span><span class="p">(</span><span class="o">|</span><span class="n">n</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span><span class="w"></span>
+<span class="p">});</span><span class="w"></span>
+</pre></div>
+
+
+<p>In more precise terms, it means that
+<a href="https://docs.rs/futures/0.1.17/futures/future/trait.Future.html">the <code>Future</code></a>
+returned by <code>for_each</code> will resolve with the first error
+from the underlying&nbsp;stream:</p>
+<div class="highlight"><pre><span class="c1">// Prints 1, 2, and then panics with &quot;false&quot;.</span>
+<span class="n">Core</span><span class="o">::</span><span class="n">new</span><span class="p">().</span><span class="n">unwrap</span><span class="p">().</span><span class="n">run</span><span class="p">(</span><span class="n">fut</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>For most purposes, this is perfectly alright;
+errors are generally meant to propagate, after&nbsp;all.</p>
+<p>Certain <em>kinds</em> of errors, however, are better off silenced.
+Perhaps they are expected to pop up during normal program operation,
+or maybe their occurrence should merely <em>affect</em> program execution in a particular way,
+and not halt it outright.
+In a simple case like above, you can of course check what <code>for_each</code> itself has returned,
+but that doesn&#8217;t scale to building larger <code>Stream</code> pipelines.</p>
+<p>I encountered a situation like this myself when using
+<a href="https://docs.rs/crate/hubcaps/0.4.2">the <em>hubcaps</em> library</a>.
+The code I was writing was meant to
+<a href="https://docs.rs/hubcaps/0.4.2/hubcaps/search/struct.SearchIssues.html#method.iter">search for GitHub issues</a>
+within a specific repository.
+In GitHub <span class="caps">API</span>, this is accomplished by sending a search query like <code>repo:$OWNER/$NAME</code>,
+which may result in a rather obscure <span class="caps">HTTP</span> error (<a href="https://httpstatuses.com/422">422 Unprocessable Entity</a>)
+if the given repository doesn&#8217;t actually exist.
+But I didn&#8217;t care about this error; should it occur, I&#8217;d simply return an empty stream,
+because doing so was more convenient for the larger bit of logic that was consuming&nbsp;it.</p>
+<p>Unfortunately, the <code>Stream</code> trait offers no interface that&#8217;d target this use case.
+There are only a few methods that even allow to look at errors mid-stream,
+and even fewer that can end it prematurely.
+On the flip side, at least we don&#8217;t have to consider <em>too</em> many combinations
+when looking for the solution&nbsp;;)</p>
+<p>Indeed, it seems there are only two <code>Stream</code> methods that are worthy of our&nbsp;attention:</p>
+<ul>
+<li><a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.then"><code>Stream::then</code></a>,
+  because it allows for a closure to receive all stream values (items <em>and</em>&nbsp;errors)</li>
+<li><a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.take_while"><code>Stream::take_while</code></a>,
+  because it accepts a closure that can end the stream early (but only based on items, not&nbsp;errors)</li>
+</ul>
+<p>Combining them both, we arrive at the following&nbsp;recipe:</p>
+<ul>
+<li>
+<p>Inside a <code>.then</code> closure, look for <code>Err</code>ors that you consider non-fatal
+  and replace them with a special item value.
+  The natural choice for such a value is <code>None</code>.
+  As a side effect, this forces us to convert the regular (&#8220;successful&#8221;) <code>item</code>s into <code>Some(item)</code>,
+  effectively transforming a <code>Stream&lt;Item=T&gt;</code> into <code>Stream&lt;Item=Option&lt;T&gt;&gt;</code>.</p>
+</li>
+<li>
+<p>Looks for the special value (i.e. <code>None</code>) in the <code>.take_while</code> closure
+  and terminate the stream when it&#8217;s been&nbsp;found.</p>
+</li>
+<li>
+<p>Finally, convert the wrapped items back into their original form using <code>.map</code>,
+  thus giving us back a <code>Stream</code> of <code>T</code><span class="quo">&#8216;</span>s.</p>
+</li>
+</ul>
+<p>Applying this technique to our initial example,
+we get something that looks like&nbsp;this:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stream</span><span class="o">::</span><span class="n">iter_result</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="nb">Ok</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="kc">false</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">3</span><span class="p">)])</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">then</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="n">r</span><span class="p">)),</span><span class="w">  </span><span class="c1">// no-op passthrough of items</span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="nb">None</span><span class="p">)</span><span class="w"> </span><span class="c1">// non-fatal error, terminate the stream</span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">),</span><span class="w">      </span><span class="c1">// no-op passthrough of other errors</span>
+<span class="w">    </span><span class="p">})</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">take_while</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">future</span><span class="o">::</span><span class="n">ok</span><span class="p">(</span><span class="n">x</span><span class="p">.</span><span class="n">is_some</span><span class="p">()))</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="nb">Option</span><span class="o">::</span><span class="n">unwrap</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>If we now try to consume this stream like&nbsp;before:</p>
+<div class="highlight"><pre><span class="n">Core</span><span class="o">::</span><span class="n">new</span><span class="p">().</span><span class="n">run</span><span class="p">(</span><span class="w"></span>
+<span class="w">    </span><span class="n">s</span><span class="p">.</span><span class="n">for_each</span><span class="p">(</span><span class="o">|</span><span class="n">n</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(())</span><span class="w"> </span><span class="p">})</span><span class="w"></span>
+<span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>it will still end after the first two items,
+but without producing any errors&nbsp;afterwards.</p>
+<hr />
+<p>For a more reusable version of the trick, you can check
+<a href="https://play.rust-lang.org/?gist=1bf2199460258be6674c9c7a7a157f50&amp;version=stable">this gist</a>;
+it adds a <code>Stream::take_while_err</code> method through an <a href="http://xion.io/post/code/rust-extension-traits.html">extension trait</a>.</p>
+<p>This isn&#8217;t a perfect solution, however, because it requires <code>Box</code>ing even on nightly Rust<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.
+We can fix that by introducing a dedicated <code>TakeWhileErr</code> stream type,
+similarly to what native <code>Stream</code> methods do.
+I leave that as an exercise for the reader&nbsp;;-)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This is due to a limitation in <a href="https://github.com/rust-lang/rust/issues/34511">the <code>impl Trait</code> feature</a>
+which prevents it from being used as a return type of trait methods.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-stream-terminate.html#rust-stream-terminate">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/gisht-recap.html#gisht-recap">Recap of the gisht&nbsp;project</a></h2>
     <p>
       Posted on Fri 24 November 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -2173,228 +2300,6 @@ or both.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-iter-patterns.html#rust-iter-patterns">Continue reading</a>
   </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-let-unit.html#rust-let-unit">The &#8220;let&#8221; type trick in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Wed 01 February 2017 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/types.html">types</a>,      <a href="http://xion.io/tag/pattern-matching.html">pattern matching</a>      &#8226; <a href="http://xion.io/post/code/rust-let-unit.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Here&#8217;s a neat little trick
-that&#8217;s especially useful if you&#8217;re just starting out with&nbsp;Rust.</p>
-<p>Because the language uses <a href="https://en.wikipedia.org/wiki/Type_inference">type inference</a> all over the place
-(or at least within a single function),
-it can often be difficult to figure out the type of an expression by yourself.
-Such knowledge is very handy in resolving compiler errors,
-which may be rather complex when generics and traits are&nbsp;involved.</p>
-<p>The formula itself is very simple.
-Its shortest, most common version &#8212; and arguably the cleverest one, too &#8212;
-is the following <code>let</code> binding:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>In virtually all cases, this binding will cause a type error on its own,
-so it&#8217;s not something you&#8217;d leave permanently in your regular&nbsp;code.</p>
-<p>But the important part here is the exact error message you&nbsp;get:</p>
-<div class="highlight"><pre>error[E0308]: mismatched types
-  --&gt; &lt;anon&gt;:42:13
-   |
-42 |         let () = some_expression;
-   |             ^^ expected f64, found ()
-   |
-   = note: expected type `f64`
-   = note:    found type `()`
-</pre></div>
-
-
-<p>The type expected by Rust here (in this example, <code>f64</code>)
-is also the type of <code>some_expression</code>. No more, no&nbsp;less.</p>
-<p>There is nothing particularly wrong with using this technique
-and not caring too much how it works under the hood.
-But if you do want to know a little more what exactly is going on here,
-the rest of this post covers it in some&nbsp;detail.</p>
-<h4>The&nbsp;unit</h4>
-<p>Firstly, you may be wondering about this curious <code>()</code> type
-that the compiler has apparently found in the statement above.
-The official name for it is the <em>unit type</em>,
-and it has several notable&nbsp;characteristics:</p>
-<ol>
-<li>There exists only one value<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> of this type: <code>()</code> (same symbol as the type&nbsp;itself).</li>
-<li>It represents an empty tuple and has therefore the size of&nbsp;zero.</li>
-<li>It is the type of any expression that&#8217;s turned into a <em>statement</em>.</li>
-</ol>
-<p>That last fact is particularly interesting,
-as it makes <code>()</code> appear in error messages that are more indicative of syntactic mishaps
-rather than mismatched&nbsp;types:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">positive_signum</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="mi">1</span><span class="k">i32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="mi">0</span><span class="k">i32</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>error[E0308]: mismatched types
- --&gt; &lt;anon&gt;:2:17
-  |
-2 |     if x &gt; 0 { 1i32 }
-  |                ^^^^ expected (), found i32
-  |
-  = note: expected type `()`
-  = note:    found type `i32`
-</pre></div>
-
-
-<p>If you think about it, however, it makes perfect sense.
-The last expression inside a function body is the return value.
-This also means that everything <em>before</em> it has to be a statement:
-an expression of type <code>()</code>.</p>
-<p>Working its way backward,
-Rust will therefore expect only such expressions before the final <code>0i32</code>.
-This, in turn, puts the same constraint on the body of the <code>if</code> statement.
-The expression <code>1i32</code> (with its type of <code>i32</code>) clearly violates it,
-causing the above error<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
-<h4><span class="dquo">&#8220;</span>Expanded&#8221;&nbsp;version</h4>
-<p>A natural question now arises:
-is <code>()</code> inside of the <code>let () = ...</code> formula a <em>type</em> <code>()</code> or a <em>value</em> <code>()</code>?&#8230;</p>
-<p>To answer that,
-it&#8217;s quite helpful to compare and contrast the original binding with its longer&nbsp;&#8220;equivalent&#8221;:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="o">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>This statement is conceptually very similar to our original one.
-The error message it causes can also be used to debug issues with type&nbsp;inference.</p>
-<p>Despite some cryptic symbols, the syntax here should also be more familiar.
-It occurs in many typical, ordinary bindings you can see in everyday Rust code.
-Here&#8217;s an&nbsp;example:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>where it&#8217;s abundantly clear that <code>i32</code> is the type of variable <code>x</code>.</p>
-<p>Analogously above, you can see that
-an unnamed symbol (<code>_</code>, the underscore) is declared to be of type <code>()</code>.</p>
-<p>So in this alternate phrasing, <code>()</code> denotes a <em>type</em>.</p>
-<h4>Let a pattern&nbsp;emerge</h4>
-<p>What about the original form, <code>let () = ...</code>?
-There is no explicit type declaration here (i.e. no colon),
-and a pair of empty parentheses isn&#8217;t a name that could be assigned a new&nbsp;value.</p>
-<p>What exactly is happening there,&nbsp;then?&#8230;</p>
-<p>Well, it isn&#8217;t really anything special.
-While it may look exceptional, and totally unlike common usages of <code>let</code>,
-it is in fact exactly the same thing as a mundane <code>let x = 5</code>.
-The potential misconception here is about the exact meaning of <code>x</code>.</p>
-<p>The simple version is that it&#8217;s a name for the bound expression.<br>
-But the actual truth is that it&#8217;s a <em>pattern</em> which is matched against that&nbsp;expression.</p>
-<p>The terms &#8220;pattern&#8221; and &#8220;matching&#8221; here refer to the same mechanism
-that occurrs within <a href="https://doc.rust-lang.org/book/match.html">the <code>match</code> statement</a>.
-You could even imagine a peculiar form of desugaring,
-where a <code>let</code> statement is converted into a semantically equivalent <code>match</code>:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">original</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">desugared</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="n">x</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="mi">6</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="n">y</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
-<span class="w">        </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>This analogy works perfectly<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>, because the patterns here are <em>irrefutable</em>:
-any value can match them, as all we&#8217;re doing is giving the value a name.
-Should the case be any different, Rust would reject our <code>let</code> statement &#8212;
-just like it rejects a <code>match</code> block that doesn&#8217;t include branches for all possible&nbsp;outcomes.</p>
-<h4>An empty&nbsp;pattern</h4>
-<p>But just because a pattern has to always match the expression,
-it doesn&#8217;t mean only simple identifiers like <code>x</code> or <code>y</code> are permitted in <code>let</code>.
-If Rust is able to statically ensure a match,
-it is perfectly <span class="caps">OK</span> to use a pattern with an internal structure<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">num</span><span class="o">::</span><span class="n">Wrapping</span><span class="p">;</span><span class="w"></span>
-<span class="kd">let</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
-</pre></div>
-
-
-<p>Of course, something like this is just superfluous and silly.
-Same mechanism, however, is also behind the ability to &#8220;initialize multiple&nbsp;variables&#8221;:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w"></span>
-</pre></div>
-
-
-<p>What really happens is that we take a <em>tuple expression</em> <code>(0, 1)</code>
-and match it against a pattern <code>(x, y)</code>.
-Because it is trivially satisified,
-we have the symbols <code>x</code> and <code>y</code> bound to the tuple elements.
-For all intents and purposes, this is equivalent to having two separate <code>let</code> statements:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
-<span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>Of course, a 2-tuple is not the only pattern of this kind we can use in <code>let</code>.
-Others possible patterns include, for example, the <em>0-tuple</em>.</p>
-<p>Or, as we express it in Rust, <code>()</code>:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>Now that&#8217;s a truly useless statement!
-But it also harkens straight to our debug binding.
-It should be pretty clear now how it&nbsp;works:</p>
-<ul>
-<li>The <code>()</code> stanza on the left is neither a type nor a name, but a <em>pattern</em>.</li>
-<li>The expression on the right is being <em>matched</em> against this&nbsp;pattern.</li>
-<li>Because the types of both of those things differ, the compiler signals an appropriate&nbsp;error.</li>
-</ul>
-<p>The curious thing is that there is nothing inherently magical about using <code>()</code> on the left hand side.
-It&#8217;s simply the shortest pattern we can put after <code>let</code>.
-It&#8217;s also one that&#8217;s extremely unlikely to actually match the right hand side,
-which ensures we get the desired error.
-But if you substituted something equally exotic and rare &#8212; say, <code>(x, ((y, z), Wrapping(w)))</code> &#8212;
-it would work equally well as a rudimentary type&nbsp;detector.</p>
-<p>Except for one thing, of course: nobody wants to type this much!
-Borne out of this frugality (and/or laziness), a custom thus emerged to use <code>()</code>.</p>
-<p>Short, sweet, and <em>clever</em>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>A more formal, type-theoretic formulation of this fact
-is saying that <code>()</code> is <em>inhabited</em> by only one value.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>In case you are wondering, one possible fix here is to <code>return 1i32;</code> inside the <code>if</code>.
-An (arguably more idiomatic) alternative is to put <code>0i32</code> in an <code>else</code> branch,
-turning the entire <code>if</code> construct into the last &#8212; and only &#8212; expression in the function body.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>Note how each nested <code>match</code> is also introducing a new scope,
-exactly like the
-<a href="https://doc.rust-lang.org/1.10.0/book/references-and-borrowing.html#thinking-in-scopes">canonical desugaring</a>
-of <code>let</code> which is often used to explain lifetimes and borrowing.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-<li id="fn:4">
-<p>Unfortunately, Rust isn&#8217;t currently capable of proving that the pattern is irrefutable in all obvious cases.
-For example, <code>let Some(x) = Some(42);</code> will be rejected due to the existence of a <code>None</code> variant in <code>Option</code>,
-even though it isn&#8217;t actually used in the (constant) expression on the right.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-let-unit.html#rust-let-unit">Continue reading</a>
-  </div>
 </article>
 
   <div class="pagination">
@@ -2405,7 +2310,7 @@ even though it isn&#8217;t actually used in the (constant) expression on the rig
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2018 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

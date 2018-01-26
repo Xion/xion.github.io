@@ -63,6 +63,99 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/js-mailto-urls.html#js-mailto-urls">mailto: URLs in&nbsp;JavaScript</a></h2>
+    <p>
+      Posted on Tue 15 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/email.html">email</a>,      <a href="http://xion.io/tag/url.html">URL</a>      &#8226; <a href="http://xion.io/post/code/js-mailto-urls.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Though not as popular as back in the days, <code>mailto:</code> URLs are sometimes still the best way
+&#8212; and most certainly the easiest &#8212; to enable users to send emails from a web application. Typically, they are used
+in plain regular links that are created with the <code>&lt;a&gt;</code> tag:</p>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com&quot;</span><span class="nt">&gt;</span>Send email<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>Depending on the operating system and browser settings, clicking on such a link could invoke a different mail client.
+In the past, this could cause much confusion if the user has never used its local email application (e.g. Outlook),
+but nowadays browsers are increasingly doing the right thing and presenting a choice of possible options.
+This includes the various web applications from popular email providers. User can thus choose &#8212; say &#8212; Gmail, and have
+all subsequent <code>mailto:</code> links take them to a <em>Compose Mail</em> view&nbsp;there.</p>
+<p>Given those developments, it&#8217;s possible that soon those URLs won&#8217;t be as quaint as they used to be ;)
+In any case, I think it&#8217;s worthwhile to have a few <code>mailto:</code> tricks up our sleeve for when they turn out to be
+an appropriate solution for the task at&nbsp;hand.</p>
+<h4>Triggering them in&nbsp;JavaScript</h4>
+<p>In the example above, I&#8217;ve used a <code>mailto:</code> <span class="caps">URL</span> directly in some <span class="caps">HTML</span> markup. For the most part, however, those URLs
+behave like any other and support a lot of the same functionality that <code>http://</code> URLs&nbsp;do:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">sendEmail</span><span class="p">(</span><span class="nx">address</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">window</span><span class="p">.</span><span class="nx">location</span><span class="p">.</span><span class="nx">href</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nx">address</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Predictably, calling this <code>sendEmail</code> function is equivalent to clicking on a <code>mailto:</code> link. This additional level
+of indirection, however, may be enough to fool some web crawlers that look for email addresses to spam. Its effectiveness
+depends largely on how radically we&#8217;re going to obfuscate the <code>address</code> argument in the actual&nbsp;invocation.</p>
+<p>More importantly, though, a function like that can be part of some more complicated logic. The only limitation is
+the same one that restricts where and when it&#8217;s possible to <code>window.open</code> another browser window. Namely, it has to be
+called in a direct response to a <span class="caps">UI</span> action triggered by the user (a button click would be a good&nbsp;example).</p>
+<h4>Customization</h4>
+<p>In their simplest form, <code>mailto:</code> URLs aren&#8217;t terribly interesting, since their only parameter is the address of a sole recipient. Fortunately, this isn&#8217;t where their capabilities end: it&#8217;s possible to customize other email fields as well,
+such as the subject or even body<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>Somewhat surprisingly, all this can be done in a manner that&#8217;s more typical for <code>http://</code> <span class="caps">URL</span>: with query string
+parameters. Right after the recipient&#8217;s address, we can drop a question mark and add some ampersand-separated
+key-value&nbsp;pairs:</p>
+<div class="highlight"><pre><span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">&quot;mailto:john.doe@example.com?subject=Hi&amp;amp;body=Hello%20John!&quot;</span><span class="nt">&gt;</span>
+  Say hello to John!
+<span class="nt">&lt;/a&gt;</span>
+</pre></div>
+
+
+<p>A more programmatic approach is of course also possible. One thing we need to remember, though, is the proper escaping
+of input values in order to make them safe to put inside an <span class="caps">URL</span><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+The <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent"><code>encodeURIComponent</code> function</a> can be used for this&nbsp;purpose:</p>
+<div class="highlight"><pre><span class="kd">function</span> <span class="nx">getMailtoUrl</span><span class="p">(</span><span class="nx">to</span><span class="p">,</span> <span class="nx">subject</span><span class="p">,</span> <span class="nx">body</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kd">var</span> <span class="nx">args</span> <span class="o">=</span> <span class="p">[];</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">subject</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;subject=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">subject</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">typeof</span> <span class="nx">body</span> <span class="o">!==</span> <span class="s1">&#39;undefined&#39;</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">args</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s1">&#39;body=&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">body</span><span class="p">))</span>
+    <span class="p">}</span>
+
+    <span class="kd">var</span> <span class="nx">url</span> <span class="o">=</span> <span class="s1">&#39;mailto:&#39;</span> <span class="o">+</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">to</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nx">args</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">url</span> <span class="o">+=</span> <span class="s1">&#39;?&#39;</span> <span class="o">+</span> <span class="nx">args</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s1">&#39;&amp;&#39;</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">url</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>In theory, almost any of the numerous <a href="https://en.wikipedia.org/wiki/Email#Header_fields">email headers</a> can be specified
+this way. However, support may vary across browsers, especially since some of the headers
+(like <a href="https://en.wikipedia.org/wiki/Blind_carbon_copy">the <code>Bcc:</code> one</a>) are subject to certain security
+or privacy considerations. Personally, I wouldn&#8217;t recommend relying on anything besides
+<code>subject=</code> and <code>body=</code>, with a possible addition of <code>cc=</code> for
+<a href="https://en.wikipedia.org/wiki/Carbon_copy">the <code>Cc:</code>header </a>.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>By <a href="http://www.ietf.org/rfc/rfc2368.txt"><span class="caps">RFC</span> 2368</a>, only <em>text/plain</em> email body can be specified this way.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Note that this is unrelated to the <em><span class="caps">HTML</span></em> escaping of <code>&amp;</code> character as <code>&amp;amp;</code> entity in the previous example.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Query string authentication in&nbsp;Requests</a></h2>
     <p>
       Posted on Fri 11 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -987,7 +1080,7 @@ have a look at <a href="https://gist.github.com/Xion/47c85671cdfb481fd925">this 
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2018 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

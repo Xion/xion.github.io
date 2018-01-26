@@ -63,6 +63,132 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-stream-terminate.html#rust-stream-terminate">Terminating a Stream in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Sat 16 December 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/streams.html">streams</a>,      <a href="http://xion.io/tag/tokio.html">Tokio</a>,      <a href="http://xion.io/tag/async.html">async</a>      &#8226; <a href="http://xion.io/post/code/rust-stream-terminate.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a little trick that may be useful in dealing with
+<a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html">asynchronous <code>Stream</code>s</a> in&nbsp;Rust.</p>
+<p>When you consume a <code>Stream</code> using
+<a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.for_each">the <code>for_each</code> method</a>,
+its default behavior is to finish early should an error be produced by the&nbsp;stream:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">futures</span><span class="o">::</span><span class="n">prelude</span><span class="o">::*</span><span class="p">;</span><span class="w"></span>
+<span class="kn">use</span><span class="w"> </span><span class="n">futures</span><span class="o">::</span><span class="n">stream</span><span class="p">;</span><span class="w"></span>
+<span class="kn">use</span><span class="w"> </span><span class="n">tokio_core</span><span class="o">::</span><span class="n">reactor</span><span class="o">::</span><span class="n">Core</span><span class="p">;</span><span class="w"></span>
+
+<span class="kd">let</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stream</span><span class="o">::</span><span class="n">iter_result</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="nb">Ok</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="kc">false</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">3</span><span class="p">)]);</span><span class="w"></span>
+<span class="kd">let</span><span class="w"> </span><span class="n">fut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">s</span><span class="p">.</span><span class="n">for_each</span><span class="p">(</span><span class="o">|</span><span class="n">n</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Ok</span><span class="p">(())</span><span class="w"></span>
+<span class="p">});</span><span class="w"></span>
+</pre></div>
+
+
+<p>In more precise terms, it means that
+<a href="https://docs.rs/futures/0.1.17/futures/future/trait.Future.html">the <code>Future</code></a>
+returned by <code>for_each</code> will resolve with the first error
+from the underlying&nbsp;stream:</p>
+<div class="highlight"><pre><span class="c1">// Prints 1, 2, and then panics with &quot;false&quot;.</span>
+<span class="n">Core</span><span class="o">::</span><span class="n">new</span><span class="p">().</span><span class="n">unwrap</span><span class="p">().</span><span class="n">run</span><span class="p">(</span><span class="n">fut</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>For most purposes, this is perfectly alright;
+errors are generally meant to propagate, after&nbsp;all.</p>
+<p>Certain <em>kinds</em> of errors, however, are better off silenced.
+Perhaps they are expected to pop up during normal program operation,
+or maybe their occurrence should merely <em>affect</em> program execution in a particular way,
+and not halt it outright.
+In a simple case like above, you can of course check what <code>for_each</code> itself has returned,
+but that doesn&#8217;t scale to building larger <code>Stream</code> pipelines.</p>
+<p>I encountered a situation like this myself when using
+<a href="https://docs.rs/crate/hubcaps/0.4.2">the <em>hubcaps</em> library</a>.
+The code I was writing was meant to
+<a href="https://docs.rs/hubcaps/0.4.2/hubcaps/search/struct.SearchIssues.html#method.iter">search for GitHub issues</a>
+within a specific repository.
+In GitHub <span class="caps">API</span>, this is accomplished by sending a search query like <code>repo:$OWNER/$NAME</code>,
+which may result in a rather obscure <span class="caps">HTTP</span> error (<a href="https://httpstatuses.com/422">422 Unprocessable Entity</a>)
+if the given repository doesn&#8217;t actually exist.
+But I didn&#8217;t care about this error; should it occur, I&#8217;d simply return an empty stream,
+because doing so was more convenient for the larger bit of logic that was consuming&nbsp;it.</p>
+<p>Unfortunately, the <code>Stream</code> trait offers no interface that&#8217;d target this use case.
+There are only a few methods that even allow to look at errors mid-stream,
+and even fewer that can end it prematurely.
+On the flip side, at least we don&#8217;t have to consider <em>too</em> many combinations
+when looking for the solution&nbsp;;)</p>
+<p>Indeed, it seems there are only two <code>Stream</code> methods that are worthy of our&nbsp;attention:</p>
+<ul>
+<li><a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.then"><code>Stream::then</code></a>,
+  because it allows for a closure to receive all stream values (items <em>and</em>&nbsp;errors)</li>
+<li><a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.take_while"><code>Stream::take_while</code></a>,
+  because it accepts a closure that can end the stream early (but only based on items, not&nbsp;errors)</li>
+</ul>
+<p>Combining them both, we arrive at the following&nbsp;recipe:</p>
+<ul>
+<li>
+<p>Inside a <code>.then</code> closure, look for <code>Err</code>ors that you consider non-fatal
+  and replace them with a special item value.
+  The natural choice for such a value is <code>None</code>.
+  As a side effect, this forces us to convert the regular (&#8220;successful&#8221;) <code>item</code>s into <code>Some(item)</code>,
+  effectively transforming a <code>Stream&lt;Item=T&gt;</code> into <code>Stream&lt;Item=Option&lt;T&gt;&gt;</code>.</p>
+</li>
+<li>
+<p>Looks for the special value (i.e. <code>None</code>) in the <code>.take_while</code> closure
+  and terminate the stream when it&#8217;s been&nbsp;found.</p>
+</li>
+<li>
+<p>Finally, convert the wrapped items back into their original form using <code>.map</code>,
+  thus giving us back a <code>Stream</code> of <code>T</code><span class="quo">&#8216;</span>s.</p>
+</li>
+</ul>
+<p>Applying this technique to our initial example,
+we get something that looks like&nbsp;this:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stream</span><span class="o">::</span><span class="n">iter_result</span><span class="p">(</span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="nb">Ok</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="kc">false</span><span class="p">),</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="mi">3</span><span class="p">)])</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">then</span><span class="p">(</span><span class="o">|</span><span class="n">r</span><span class="o">|</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="n">r</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="nb">Some</span><span class="p">(</span><span class="n">r</span><span class="p">)),</span><span class="w">  </span><span class="c1">// no-op passthrough of items</span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="kc">false</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="nb">None</span><span class="p">)</span><span class="w"> </span><span class="c1">// non-fatal error, terminate the stream</span>
+<span class="w">        </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="n">e</span><span class="p">),</span><span class="w">      </span><span class="c1">// no-op passthrough of other errors</span>
+<span class="w">    </span><span class="p">})</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">take_while</span><span class="p">(</span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">future</span><span class="o">::</span><span class="n">ok</span><span class="p">(</span><span class="n">x</span><span class="p">.</span><span class="n">is_some</span><span class="p">()))</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="nb">Option</span><span class="o">::</span><span class="n">unwrap</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>If we now try to consume this stream like&nbsp;before:</p>
+<div class="highlight"><pre><span class="n">Core</span><span class="o">::</span><span class="n">new</span><span class="p">().</span><span class="n">run</span><span class="p">(</span><span class="w"></span>
+<span class="w">    </span><span class="n">s</span><span class="p">.</span><span class="n">for_each</span><span class="p">(</span><span class="o">|</span><span class="n">n</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(())</span><span class="w"> </span><span class="p">})</span><span class="w"></span>
+<span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>it will still end after the first two items,
+but without producing any errors&nbsp;afterwards.</p>
+<hr />
+<p>For a more reusable version of the trick, you can check
+<a href="https://play.rust-lang.org/?gist=1bf2199460258be6674c9c7a7a157f50&amp;version=stable">this gist</a>;
+it adds a <code>Stream::take_while_err</code> method through an <a href="http://xion.io/post/code/rust-extension-traits.html">extension trait</a>.</p>
+<p>This isn&#8217;t a perfect solution, however, because it requires <code>Box</code>ing even on nightly Rust<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.
+We can fix that by introducing a dedicated <code>TakeWhileErr</code> stream type,
+similarly to what native <code>Stream</code> methods do.
+I leave that as an exercise for the reader&nbsp;;-)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This is due to a limitation in <a href="https://github.com/rust-lang/rust/issues/34511">the <code>impl Trait</code> feature</a>
+which prevents it from being used as a return type of trait methods.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/gisht-recap.html#gisht-recap">Recap of the gisht&nbsp;project</a></h2>
     <p>
       Posted on Fri 24 November 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -2309,116 +2435,6 @@ I&#8217;ve heard that Scala fills that niche quite well.&#160;<a class="footnote
 </ol>
 </div>
   </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/long-live-dynamic-languages.html#long-live-dynamic-languages">Long Live Dynamic&nbsp;Languages!</a></h2>
-    <p>
-      Posted on Wed 24 May 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/dynamic-languages.html">dynamic languages</a>,      <a href="http://xion.io/tag/dynamic-typing.html">dynamic typing</a>,      <a href="http://xion.io/tag/static-typing.html">static typing</a>      &#8226; <a href="http://xion.io/post/programming/long-live-dynamic-languages.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>If you followed the few (or a dozen) of my recent posts,
-you&#8217;ve probably noticed a sizable bias in the choice of topics.
-The vast majority were about <a href="http://rust-lang.org">Rust</a> &#8212;
-a native, bare metal, statically typed language with powerful compile time semantics
-but little in the way of runtime&nbsp;flexibility.</p>
-<p>Needless to say, Rust is radically different than (almost the exact opposite of) Python,
-the other language that I&#8217;m covering sometimes.
-Considering this topical shift,
-it would fair to assume that I, too, have subscribed to the whole Static Typing™&nbsp;trend.</p>
-<p>But that wouldn&#8217;t be very&nbsp;accurate.</p>
-<p>Don&#8217;t get me wrong.
-As far as fashion cycles in the software industry go,
-the current trend towards static/compiled languages is difficult to disparage.
-Strong in both hype <em>and</em> merit,
-it has given us some <a href="http://rust-lang.org">really innovative</a>
-<span class="amp">&amp;</span> <a href="https://www.typescriptlang.org/">promising</a> solutions
-(as well as some <a href="http://golang.org">not-so-innovative</a> ones)
-that are poised to shape the future of programming for years, if not decades to come.
-In many ways, it is also correcting mistakes of <a href="https://www.java.com/en/">the previous generation</a>:
-excessive boilerplate, byzantine abstractions, and software&nbsp;bloat.</p>
-<p>What about dynamic languages, then?
-Are they slowly going the way of the&nbsp;dodo?</p>
-<h4>Trigger warning: <code>TypeError</code></h4>
-<p>Some programmers would certainly wish&nbsp;so.</p>
-<p>Indeed, it&#8217;s not hard at all to find
-<a href="https://arstechnica.com/information-technology/2014/06/why-do-dynamic-languages-make-it-difficult-to-maintain-large-codebases/">articles</a>
-and <a href="https://www.reddit.com/r/rust/comments/6aqksm/rust_productivity_compared_to_other_languages/dhgp037/">opinions</a>
-about dynamic languages that are, well, less than&nbsp;flattering.</p>
-<p>The common argument echoed in those accounts points to supposed unsuitability of Python et al.
-for any large, multi-person project.
-The reasoning can be summed up as &#8220;good for small scripts and not much else&#8221;.
-Without statically checked types, the argument goes,
-anything bigger than a quick hack or a prototype
-shall inevitably become hairy and dangerous&nbsp;monstrosity.</p>
-<p>And when that happens,
-<em>a single typo</em> can go unchecked and bring down the entire&nbsp;system!&#8230;</p>
-<p>At the very end of this spectrum of beliefs,
-some pundits may eventually make the leap from languages to <em>people</em>.
-If dynamically typed languages (or &#8220;untyped&#8221; ones, as they&#8217;re often mislabeled)
-are letting even trivial bugs through,
-then obviously anyone who wants to use them is
-<a href="https://danluu.com/images/empirical-pl/pl_godwin.png">dangerously irresponsible</a>.
-It must follow that all they <em>really</em> want is to hack up some shoddy code,
-<em>yolo</em> it over to production, and let others worry about the&nbsp;consequences.</p>
-<h4>Mind the&nbsp;gap</h4>
-<p>It&#8217;s likely unproductive to engage with someone who&#8217;s that extreme.
-If the rhetoric is dialed down, however, we can definitely find the edge of&nbsp;reason.</p>
-<p>In my opinion, this fine line goes right through the &#8220;good in small quantities&#8221; argument.
-I can certainly understand the apprehension towards large projects
-that utilize dynamically typed languages throughout their codebases.
-The prospect of such a project <em>is</em> scary,
-because it contains an additional element of uncertainty.
-More so than with many other technologies,
-you ought to <em>know what you&#8217;re doing</em>.</p>
-<p>Some people (and teams) do. Others, not so&nbsp;much.</p>
-<p>I would therefore refine the argument
-so that it better reflects the strengths and weaknesses of dynamic languages.
-They are perfectly suited for at least the following&nbsp;cases:</p>
-<ul>
-<li>anyone writing small, standalone applications or&nbsp;scripts</li>
-<li><em>any project</em> (large or small) with a well-functioning team of talented&nbsp;individuals</li>
-</ul>
-<p>The sad reality of the software industry is the vast, gaping chasm of calamity and despair
-that stretches between those two&nbsp;scenarios.</p>
-<p>Within lies the bulk of commercial software projects,
-consistently hamstrung by the usual suspects:
-incompetent management, unclear and shifting requirements, under- or overstaffing,
-ancient development practices, lack of coding standards, rampant bureaucracy,
-<a href="http://www.daedtech.com/how-developers-stop-learning-rise-of-the-expert-beginner/">inexperienced developers</a>,
-and so&nbsp;on.</p>
-<p>In such an environment,
-it becomes nigh impossible to capitalize on the strengths of dynamic languages.
-Instead, the main priority is to protect from even further productivity losses,
-which is what bog-standard languages like Java, C#, or Go tend to be pretty good at.
-Rather than to move fast, the objective is to remain moving <em>at all</em>.</p>
-<h4>Freedom of&nbsp;choice</h4>
-<p><span class="dquo">&#8220;</span>But that&#8217;s backwards&#8221;, the usual retort goes.
-&#8220;Static typing and compilation checks are what <em>enables</em> me to be&nbsp;productive!&#8221;</p>
-<p>I have no doubt that most people saying this do indeed believe
-they&#8217;re better off programming in static languages.
-Regardless of what they think, however,
-there exists <a href="https://danluu.com/empirical-pl/">no conclusive evidence</a>
-to back up such claims as a universal&nbsp;rule.</p>
-<p>This is of course the perennial problem with software engineering in general,
-and the project management aspect of it in particular.
-There is very little proper research on optimal and effective approaches to it,
-which is why any of the so-called &#8220;best practices&#8221;
-are quite likely to stem from <a href="https://leanpub.com/leprechauns">unsubstantiated hearsay</a>.</p>
-<p>We can lament this state of affairs, of course.
-But on the other hand, we can also find it <em>liberating</em>.
-In the absence of rigid prescriptions and judgments about productivity,
-we are free to explore, within technical limitations,
-what language works best for us, our team, and our&nbsp;projects.</p>
-<p>Sometimes it&#8217;ll be Go, Java, Rust, or even Haskell.<br>
-A different situation may be best handled by Python, Ruby, or even&nbsp;JavaScript.</p>
-<p>As the old adage goes, there is no silver bullet.
-We should not try to polish static typing into&nbsp;one.</p>
-  </div>
 </article>
 
   <div class="pagination">
@@ -2429,7 +2445,7 @@ We should not try to polish static typing into&nbsp;one.</p>
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2018 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"

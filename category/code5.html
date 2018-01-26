@@ -63,6 +63,214 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/requirejs-optional.html#requirejs-optional">Optional loading of RequireJS&nbsp;modules</a></h2>
+    <p>
+      Posted on Tue 29 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/javascript.html">JavaScript</a>,      <a href="http://xion.io/tag/requirejs.html">RequireJS</a>,      <a href="http://xion.io/tag/modules.html">modules</a>,      <a href="http://xion.io/tag/web-workers.html">Web Workers</a>,      <a href="http://xion.io/tag/dom.html">DOM</a>,      <a href="http://xion.io/tag/ajax.html">AJAX</a>      &#8226; <a href="http://xion.io/post/code/requirejs-optional.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p><a href="http://requirejs.org/">RequireJS</a> is a module loader for JavaScript. Similar to its alternatives such as
+<a href="http://browserify.org/">Browserify</a>, it tries to solve an important problem on the web front(end):
+dividing JavaScript code into modules for better maintainability while still loading them correctly and efficiently
+without manual curation of the <code>&lt;script&gt;</code> tags.</p>
+<p>Once it&#8217;s configured correctly (which can be rather <a href="http://requirejs.org/docs/api.html#config">non-trivial</a>, though),
+modules in RequireJS are simply <code>define</code>d as functions that return arbitrary JavaScript&nbsp;objects:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;jquery&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;lodash&#39;</span><span class="p">,</span>
+
+    <span class="s1">&#39;myapp/dep1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;myapp/dep2&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">$</span><span class="p">,</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">dep1</span><span class="p">,</span> <span class="nx">dep2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... all of the module&#39;s code ...</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="nx">exportedSymbol1</span><span class="o">:</span> <span class="p">...,</span>
+        <span class="nx">exportedSymbol2</span><span class="o">:</span> <span class="p">...,</span>
+    <span class="p">};</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Before executing the function, RequireJS loads all the specified dependencies, repeating the process recursively
+and asynchronously. Return values from module functions are passed as parameters to the next module function,
+and thus the whole mechanism clicks, serving as a crafty workaround for the lack of proper <code>import</code> functionality<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<h4>Relative&nbsp;failures</h4>
+<p>If, at some point in the chain, the desired module cannot be found or loaded, the entire process grinds to a halt
+with an error. Most of the time, this is perfectly acceptable (or even desirable) behavior, equivalent to an incorrect
+<code>import</code> statement, invalid <code>#include</code> directive, or similar mistake in other&nbsp;languages.</p>
+<p>But there are situations when we&#8217;d like to proceed with a missing module, because the dependent code is prepared
+to handle it. The canonical example are
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers">Web Workers</a>.
+Unlike traditional web application code, Web Worker scripts operate outside of a context of any single page,
+having no access to the <abbr title="Document Object Model"><span class="caps">DOM</span></abbr> tree (because <em>which</em> <span class="caps">DOM</span> tree would it be?).
+Correspondingly, they have no <code>document</code> nor <code>window</code> objects in their global&nbsp;scope.</p>
+<p>Unfortunately, some libraries (<em>*cough*</em> jQuery <em>*cough*</em>) require those objects as a hard (and usually implicit)
+dependency. This doesn&#8217;t exactly help if we&#8217;d like to use them in worker code for other features, not related to <span class="caps">DOM</span>.
+In case of jQuery, for example, it could be the <span class="caps">API</span> for making <span class="caps">AJAX</span> calls, which is still decidedly more pleasant
+than dealing with bare <code>XMLHTTPRequest</code> if we&#8217;re doing anything&nbsp;non-trivial.</p>
+<p>Due to this hard dependency on <span class="caps">DOM</span>, however, Web Workers cannot <code>require</code> jQuery. No biggie, you may think: browsers
+supporting workers also offer an excellent, promise-based
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API">Fetch <span class="caps">API</span></a> that largely replaces the old <span class="caps">AJAX</span>,
+so we may just use it in worker code. Good thinking indeed, but it doesn&#8217;t solve the issue of <em>sharing code</em> between
+main (&#8220;<span class="caps">UI</span>&#8221;) part of the app and Web&nbsp;Workers.</p>
+<p>Suppose you have the following dependency&nbsp;graph:</p>
+<p><div class="graphviz" style="text-align: center;"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAD7CAYAAAAvttudAAAAAXNSR0IArs4c6QAAMvxJREFUeAHtnQe0FEXWx8ucM4IiCuaECTOiYM7ZVUExR9wVzPoZcA3HHNawrgrmiIqCWVAxiwkzKggoCiq65hzqu7+71tgzb6bfvJnumQ51z+nXbzpUuF23wg3/ms5aO8R48hzwHCjLgelEQGzZO/6i54DngJne88BzwHOgMge8gFTmjb/jOeBHEN8GPAfCODBj2M24733++efmzTff1GPChAlmypQpekydOtV899135scffzQ//fST+fXXX82ss86qx2yzzWbmnXde07FjRz0WWWQRs9xyy5muXbua5ZdfXp+Ju9x5SP/33383H330kZk4caLh20yaNMlMmzbN8M3c8fXXX5tffvnF/Pzzz4UzvJllllnMzDPPXDjPM888pl27doVjwQUXNF26dDFLLLGEWXzxxU2nTp3MDDPMkEi2NnSRjjA88cQTejz99NMGQYDmn39+s/TSSxsaOw1/4YUXNnPNNVdBIGaaaSYVFIQFofnvf/9bECY+4nvvvacfCSYjJBtssIHp2bOnHh06dEgk45NUqM8++8yMGTPGvPrqq4Xj/fff146Jcs4+++zaoOHlAgssUGjodFQIQ1AgeD4oMPz/1VdfFYTqiy++MJ9++qkK3A8//MDjhu+71FJLmVVWWcWsuuqqeqy22mqmffv2er+Zf2IVkD/++MM888wzZujQoXp8+OGHht6kR48eZv311zfdunXTnh+BqIfo7caNG6cj0ejRo82TTz5pXnnlFcP1ddZZx+y0005m55131t6qnnyy8i4j9ahRowqd1bvvvqtVoyenkXKsuOKKhR4+rk4GQXEj1FtvvWVee+01FdCPP/5Yy7PssssWOrpevXpp59nwb4CaN2r65JNP7Jlnnmk7d+6MCtmusMIK9sQTT7QvvviilUYbdXZl0/v222/t8OHD7T777GNlhNJyCJPtbbfdZmVaUPadLF+U0cGeeuqpVnpm5YX02nbddde1xx9/vH3ggQesTJsSU33KQpkoG2WkrLQjyk4dqEujyESZkfTidu+999YK0SiPOOIIKz1DlFnUlJasYZTh22+/vZVpmJUe0Z5zzjlW1jk1pZeWl2TdYAcOHGhlnq8NTKav9pBDDlFefP/992mphqWsCAxlpw4IC3WibtQxTopEQGTqpIJB41tmmWXstddea2WtEGe5a05b1iz2uOOOs3POOaeVxaI9//zzrcyTa04vaS8yQt9xxx12k002sdNNN52Vebw98sgjdfSWKW/Sitvm8lAHZiLUibpRR+pKneOYndQlIPTM5557rp1jjjnskksuaW+66Sb722+/tbnSzXiBYfyEE06wohWzogWzjz32WDOKEVmeosCwV155pZXFrp1++untdtttZ4cNG2b5Rlkl6kYdt912W60zdYcH8CIqqllA3n77bbvyyitrAzvttNMiLVRUlasmHVkkamNi2D7ggAN0OK/mvaQ8Q685aNAgK4oOK9oke+CBB1pZdCeleA0rB3Wm7vAAXsCTKEaUmgTkmmuusaL6s2uvvbYVdWDDmBBnRnfddZcu5lEovPHGG3FmFVnajHqicbIzzjij7devn0U5kneCB/ACnsCbemcGbRIQ5n8svJn3oWHI2vDNWkpU0Lo+efjhhxPb1tDQMdox6jG9GDt2bGLL2qyCwRN442YG8KwWqlpAUI327t3bioXU3nLLLbXklYp3qGffvn1VE3fjjTcmrsxiYFUNjlimdWGauAImrEAs3uEVWi9411aqSkAYOfr06aM9a71DVlsL2Kznjz32WF34weCk0NVXX62CywJcjGxJKVbiywGv4Bn2FHjYFqpKQJhWMXKMGDGiLWmn/tm///3vuuh7/PHHm1oXOqhjjjlGp7Ynn3yy5bentnEAnsE7lgfwsloetiogt956q87jOOeNYOIuu+yi9hLxG2tK9SkD2hl6vzx+g6iZDg/hJTytRkhCBQQrpfhOqVYg6oKmJb1vvvlGbTybbbZZVQyNul4YNTHADhkyJOqkc5sevISnKJpao1ABQQuA2jOpVvHWKhfVfXGA1PXIDTfcEFWSVaVz88036+iNZ4KnaDkAT9FwweMwqigg4pauCTz00ENh7+fm3v77728XW2yxhhlEGb1xhxkwYEBueNzoisJbeBzmz1XR3X3DDTdUP/1HHnlEBM0TLuLELIjvlhFDVOwMkdFbA5Vw2yfewlP0HCBWhZALArfuvffeshmUFZDx48drANN9991ntt5667IvRnFRVMYaPBNMi+hAgmUgItbEizN426y33noaY1J0UX4QY7LooouWXo70t7jOG7Gym5dffjnSdEsTe+qppzToS7SGRhzxSm+n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aj744APz/vvvmwkTJpgPP/zQfP7553pMmzZNz99995355ZdfzM8//2x++ukn/R8VL+sPFuqMLPyPvaRdu3aFo2PHjmaJJZYoHHPPPXcEJfZJVMsBLyDVcurP56ZMmWLGjBlTOF599VUzadKkgn1j3nnnNV26dDELLrhgoZHT4Oeaay4VBCcMI0eO1OkVwoXQIDw//PCD+eKLLwrChZBNnjzZkKfz4SKtlVde2ay22moG71/Oyy+/fEU3ljZWzz9ewgEvICUMKf350Ucfmccff9yMGjVKD0YIaPHFF9cGSiNdYYUV9Dc9/XzzzVeaRNnfNHgcFKshBAghJO/33nvPvPbaawbBfOutt1SwEEpc6nv16qUHZcI676l+DngBKcPD119/3dx999160BiZ/qy99tqmZ8+eeqy55pqGBXazidEHIXnyySfNE088oWdGnfbt26u9ZccddzQbb7xxC+Nks8udpvy9gPz5tRgprrvuOj1YSzD3x6i3ww47qKftrLPOmvjvyqj0xhtvmHvvvdfcc8895qWXXjKsWXCU3H///U337t0TX4fEFVCYmlsSNw9733332a222srKgtnK/N7279/fjh492nIv7STrF3vRRRdZWbMQhGJlrWIvvPBC+80336S9ag0rP4u/3JEY6OzNN99sV1ppJW04m222mb3jjjuszPUzywsZTeyhhx5qxd3FyjrJnnzyyVY0bJmtb1QVy52AyNrCLrXUUlbcPKzYI6ysMaLiZSrSES2ZPe2006xo2ezss89uTznlFPv999+nouzNKGRuBARB2HDDDXXEEEu2FY1QM/idmDxFpWzPPvtsK2sUKygq9sYbb0xM2ZJUkMwLCNMpekxGjHXWWcdKXHiS+N/0snz22Wf2kEMOsaIWtptvvrkVm0vTy5SkAmRaQEQbpUIhGihdnGZh4R1X43nmmWd06imWfHvXXXfFlU3q0s2sgIhtwM4///xWLM127NixqfswzSgwaxFGEzReAwcObEYREpdnJgUEDZUY96zEefsFaA1N7sorr9QpqbjiW3GBqSGF7LySOQG59dZbdT59zDHHZMKW0aym9uijj1qBRrW77bab/f3335tVjKbnmykBeeihh+xMM81kjzjiiKYzNgsFeOyxxyzrN+wneaXMCIg48VnxmLX77rtvXr9lLPUWTGEdkS+55JJY0k96opnwxZIp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"></div></p>
+<p>The <code>common</code> module has some logic that we&#8217;d want reused between regular <code>&lt;script&gt;</code>-based code and a Web Worker,
+but its dependency on jQuery makes it impossible. It would work, however, if this dependency was a <em>soft</em> one.
+If <code>common</code> could <em>detect</em> that jQuery is not available and fall back to other solutions (like the Fetch <span class="caps">API</span>),
+we would be able to <code>require</code> it in both execution&nbsp;environments.</p>
+<h4>The <code>optional</code> plugin</h4>
+<p>What we need, it seems, is an ability to say that some dependencies (like <code>'jquery'</code>) are <em>optional</em>. They can be loaded
+if they&#8217;re available but otherwise, they shouldn&#8217;t cause the whole dependency structure to crumble. RequireJS does not
+support this functionality by default, but it&#8217;s easy enough to add it via a <em>plugin</em>.</p>
+<p>There are already <a href="https://github.com/jrburke/requirejs/wiki/Plugins">several useful plugins</a> available for RequireJS
+that offer some interesting features. As of this writing, however, optional module loading doesn&#8217;t seem to be among them.
+That&#8217;s not a big problem: rolling out our own<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> plugin turns out to be relatively&nbsp;easy.</p>
+<p><a href="http://requirejs.org/docs/plugins.html">RequireJS plugins</a> are themselves modules: you create them as separate JavaScript
+files having code wrapped in <code>define</code> call. They can also declare their own dependencies like any other module.
+The only requirement is that they export an object with <a href="http://requirejs.org/docs/plugins.html#api">certain <span class="caps">API</span></a>:
+at minimum, it has to include the <code>load</code> method. Since our <code>optional</code> plugin is very simple, <code>load</code> is in fact
+the only method we have to&nbsp;implement:</p>
+<div class="highlight"><pre><span class="cm">/* Skeleton of a simple RequireJS plugin module. */</span>
+
+<span class="nx">define</span><span class="p">([],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+
+<span class="kd">function</span> <span class="nx">load</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">,</span> <span class="nx">parentRequire</span><span class="p">,</span> <span class="nx">onload</span><span class="p">,</span> <span class="nx">config</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+
+<span class="k">return</span> <span class="p">{</span>
+    <span class="nx">load</span><span class="o">:</span> <span class="nx">load</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As its name would hint, <code>load</code> carries out the actual module loading which a plugin is allowed to influence, modify,
+or even replace with something altogether different. In our case, we don&#8217;t want to be too invasive, but we need to
+detect failure in the original loading procedure and step&nbsp;in.</p>
+<p>I mentioned previously that module loading is asynchronous, which JavaScript often translates to &#8220;callbacks&#8221;.
+Here, <code>load</code> receives the <code>onload</code> callback which we eventually need to invoke. It also get the mysterious
+<code>parentRequire</code> argument; this is simply a regular <code>require</code> function that&#8217;d normally be used if our plugin didn&#8217;t
+stand in the&nbsp;way.</p>
+<p>Those two are the most important pieces of the puzzle, which overall has a pretty succinct&nbsp;solution:</p>
+<div class="highlight"><pre><span class="cm">/**</span>
+<span class="cm"> * RequireJS plugin for optional module loading.</span>
+<span class="cm"> */</span>
+<span class="nx">define</span> <span class="p">([],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+
+
+<span class="cm">/** Default value to return when a module failed to load. */</span>
+<span class="kd">var</span> <span class="nx">DEFAULT</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+
+<span class="kd">function</span> <span class="nx">load</span><span class="p">(</span><span class="nx">moduleName</span><span class="p">,</span> <span class="nx">parentRequire</span><span class="p">,</span> <span class="nx">onload</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">parentRequire</span><span class="p">([</span><span class="nx">moduleName</span><span class="p">],</span> <span class="nx">onload</span><span class="p">,</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="p">{</span>
+        <span class="kd">var</span> <span class="nx">failedModule</span> <span class="o">=</span> <span class="nx">err</span><span class="p">.</span><span class="nx">requireModules</span> <span class="o">&amp;&amp;</span> <span class="nx">requireModules</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">warn</span><span class="p">(</span><span class="s2">&quot;Could not load optional module: &quot;</span> <span class="o">+</span> <span class="nx">failedModule</span><span class="p">);</span>
+        <span class="nx">requirejs</span><span class="p">.</span><span class="nx">undef</span><span class="p">(</span><span class="nx">failedModule</span><span class="p">);</span>
+
+        <span class="nx">define</span><span class="p">(</span><span class="nx">failedModule</span><span class="p">,</span> <span class="p">[],</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">DEFAULT</span><span class="p">;</span> <span class="p">});</span>
+        <span class="nx">parentRequire</span><span class="p">([</span><span class="nx">failedModule</span><span class="p">],</span> <span class="nx">onload</span><span class="p">);</span>
+    <span class="p">});</span>
+<span class="p">}</span>
+
+<span class="k">return</span> <span class="p">{</span>
+    <span class="nx">load</span><span class="o">:</span> <span class="nx">load</span><span class="p">,</span>
+<span class="p">};</span>
+
+<span class="p">});</span>
+</pre></div>
+
+
+<p>The logic here is as&nbsp;follows:</p>
+<ul>
+<li>First, try to load the module normally (via the outer <code>parentRequire</code> call).</li>
+<li>If it succeeds, <code>onload</code> is called and there is nothing for us to&nbsp;do.</li>
+<li>If it fails, we log the <code>failedModule</code> and cleanup some internal RequireJS state with <code>requirejs.undef</code>.</li>
+<li>Most importantly, we <code>define</code> the module as a trivial shim that returns some <code>DEFAULT</code> (here, <code>null</code>).</li>
+<li>As a result, when we require it again (through the inner <code>parentRequire</code> call), we <em>know</em> it&#8217;ll be loaded&nbsp;successfully.</li>
+</ul>
+<h4>Usage</h4>
+<p>Plugins in RequireJS are invoked on a per-module basis. You can specify that a certain dependency <code>'bar'</code> shall be loaded
+through a plugin <code>'foo'</code> by putting <code>'foo!bar'</code> on the dependency&nbsp;list:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span> <span class="s1">&#39;foo!bar&#39;</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">bar</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Both <code>'foo'</code> and <code>'bar'</code> represent module paths here: the first one is the path to the <em>plugin</em> module,
+while the second one is the actual dependency. In a more realistic example &#8212; like when our optional loader is involved &#8212;
+both of them would most likely be multi-segments&nbsp;paths:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;myapp/ext/require/optional!myapp/common/buttons/awesome-button&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">});</span>
+</pre></div>
+
+
+<p>As you can see, they can get pretty unreadable rather quickly. It would be better if the plugin prefix consisted
+of just one segment (i.e. <code>optional!</code>) instead. We can make that happen by adding
+<a href="http://requirejs.org/docs/api.html#config-map">a mapping</a> to the RequireJS&nbsp;config:</p>
+<div class="highlight"><pre><span class="nx">requirejs</span><span class="p">.</span><span class="nx">config</span><span class="p">({</span>
+    <span class="c1">// ...</span>
+    <span class="nx">map</span><span class="o">:</span> <span class="p">{</span>
+        <span class="s1">&#39;*&#39;</span><span class="o">:</span> <span class="p">{</span>
+            <span class="s1">&#39;optional&#39;</span><span class="o">:</span> <span class="s1">&#39;myapp/ext/require/optional&#39;</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">})</span>
+</pre></div>
+
+
+<p>With this renaming in place, the loading of non-mandatory dependencies becomes quite a bit&nbsp;clearer:</p>
+<div class="highlight"><pre><span class="nx">define</span><span class="p">([</span>
+    <span class="s1">&#39;optional!myapp/common/buttons/awesome-button&#39;</span><span class="p">,</span>
+<span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+
+<span class="c1">// ...</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">AwesomeButtonController</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// ... (some work around) ...</span>
+<span class="p">}</span>
+
+<span class="p">});</span>
+</pre></div>
+
+
+<p>Of course, you still need to actually code around the potential lack of an optional dependency.
+The <code>if</code> statement above is just an illustrative example; you may find it more sensible to provide some shim&nbsp;instead:</p>
+<div class="highlight"><pre><span class="nx">AwesomeButtonController</span> <span class="o">=</span> <span class="nx">AwesomeButtonController</span> <span class="o">||</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// ...</span>
+<span class="p">};</span>
+</pre></div>
+
+
+<p>Either way, I recommend trying to keep the size of such conditional logic to a minimum.
+Ideally, it should be confined to a single place, or &#8212; better yet &#8212; abstracted behind a&nbsp;function.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>An actual <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/import"><code>import</code> statement</a>
+has made it into the <span class="caps">ES6</span> (ECMAScript 2015) standard but, as of this writing, no browser implements it.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Most of the code for the plugin presented here is based on
+<a href="http://stackoverflow.com/a/27422370/434799">this StackOverflow answer</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/requirejs-optional.html#requirejs-optional">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/jinja-reload-macro-files.html#jinja-reload-macro-files">Reload Jinja macro&nbsp;files</a></h2>
     <p>
       Posted on Thu 24 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1331,7 +1539,7 @@ have a look at <a href="https://gist.github.com/Xion/47c85671cdfb481fd925">this 
 
     <footer>
 <p>
-  &copy; Karol Kuczmarski 2017 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
+  &copy; Karol Kuczmarski 2018 - This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>
 </p>
 <p>Built using <a href="http://getpelican.com" target="_blank">Pelican</a> - <a href="https://github.com/alexandrevicenzi/flex" target="_blank">Flex</a> theme by <a href="http://alexandrevicenzi.com" target="_blank">Alexandre Vicenzi</a></p><p>
   <a rel="license"
