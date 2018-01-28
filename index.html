@@ -238,10 +238,11 @@ which is the very reason you&#8217;d use a <code>Stream</code> over an <code>Ite
 if we go back to our original problem.
 To reiterate, we want to repeatedly query an <span class="caps">HTTP</span> <span class="caps">API</span> for a long list of items,
 giving our callers a <code>Stream</code> of such items they can process at their leisure.
-At the same time, all details about pagination and handling of continuation tokens or offsets
-should be completely hidden from the&nbsp;user.</p>
-<p>To use <code>stream::unfold</code> for this task, we need the initial seed and an appropriate closure.
-I have hinted already at using the continuation token as our seed,
+At the same time, all the details about pagination and handling of continuation tokens or offsets
+should be completely hidden from the&nbsp;caller.</p>
+<p>To employ <code>stream::unfold</code> for this task,
+we need two things: the initial seed, and an appropriate&nbsp;closure.</p>
+<p>I have hinted already at using the continuation token as our seed,
 or the state that we pass around from one closure invocation to another.
 What remains is mostly making the actual <span class="caps">HTTP</span> request and interpreting the <span class="caps">JSON</span> response,
 for which we&#8217;ll use the <em>defacto</em> standard Rust crates:

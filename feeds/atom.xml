@@ -166,10 +166,11 @@ which is the very reason you&amp;#8217;d use a &lt;code&gt;Stream&lt;/code&gt; o
 if we go back to our original problem.
 To reiterate, we want to repeatedly query an &lt;span class="caps"&gt;HTTP&lt;/span&gt; &lt;span class="caps"&gt;API&lt;/span&gt; for a long list of items,
 giving our callers a &lt;code&gt;Stream&lt;/code&gt; of such items they can process at their leisure.
-At the same time, all details about pagination and handling of continuation tokens or offsets
-should be completely hidden from the&amp;nbsp;user.&lt;/p&gt;
-&lt;p&gt;To use &lt;code&gt;stream::unfold&lt;/code&gt; for this task, we need the initial seed and an appropriate closure.
-I have hinted already at using the continuation token as our seed,
+At the same time, all the details about pagination and handling of continuation tokens or offsets
+should be completely hidden from the&amp;nbsp;caller.&lt;/p&gt;
+&lt;p&gt;To employ &lt;code&gt;stream::unfold&lt;/code&gt; for this task,
+we need two things: the initial seed, and an appropriate&amp;nbsp;closure.&lt;/p&gt;
+&lt;p&gt;I have hinted already at using the continuation token as our seed,
 or the state that we pass around from one closure invocation to another.
 What remains is mostly making the actual &lt;span class="caps"&gt;HTTP&lt;/span&gt; request and interpreting the &lt;span class="caps"&gt;JSON&lt;/span&gt; response,
 for which we&amp;#8217;ll use the &lt;em&gt;defacto&lt;/em&gt; standard Rust crates:
