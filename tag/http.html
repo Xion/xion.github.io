@@ -190,7 +190,13 @@ it doesn&#8217;t seem like a big ask to have a more concise&nbsp;solution.</p>
 <p>Fortunately there is one!
 Its crucial element is the standalone
 <a href="https://docs.rs/futures/0.1.17/futures/stream/fn.unfold.html"><code>stream::unfold</code> function</a>
-from the <code>futures</code> crate.</p>
+from the <code>futures</code> crate:</p>
+<div class="highlight"><pre><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">unfold</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">F</span><span class="p">,</span><span class="w"> </span><span class="n">Fut</span><span class="p">,</span><span class="w"> </span><span class="n">It</span><span class="o">&gt;</span><span class="p">(</span><span class="n">init</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="o">:</span><span class="w"> </span><span class="n">F</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Unfold</span><span class="o">&lt;</span><span class="n">T</span><span class="p">,</span><span class="w"> </span><span class="n">F</span><span class="p">,</span><span class="w"> </span><span class="n">Fut</span><span class="o">&gt;</span><span class="w"> </span><span class="n">where</span><span class="w"></span>
+<span class="w">    </span><span class="n">F</span><span class="o">:</span><span class="w"> </span><span class="n">FnMut</span><span class="p">(</span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">Fut</span><span class="o">&gt;</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">Fut</span><span class="o">:</span><span class="w"> </span><span class="n">IntoFuture</span><span class="o">&lt;</span><span class="n">Item</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">It</span><span class="p">,</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="o">&gt;</span><span class="p">,</span><span class="w"></span>
+</pre></div>
+
+
 <p>Reading through the signature of this function can be a little intimidating at first.
 Part of it is Rust&#8217;s verbose syntax for anything
 that involves both trait bounds and closures<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>,
