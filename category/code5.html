@@ -63,6 +63,202 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
+    <p>
+      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
+in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
+<code>div.content</code>, and other presentational elements are still a common fact of life.
+Unless you&#8217;re one of the cool kids who use <a href="http://webcomponents.org/">Web Components</a> with
+<a href="https://www.polymer-project.org">Polymer</a>, your main option for abstracting this boilerplate away
+is defining some more general <a href="http://jinja.pocoo.org/docs/dev/templates/#macros">template macros</a>.</p>
+<p>As with any kind of abstraction, it&#8217;s crucial to balance broad applicability with a potential for finely-tuned
+customization. In the case of wrapping <span class="caps">HTML</span> snippets in Jinja macros, an easy way to maintain flexibility is to allow
+the caller to specify some crucial attributes of the root&nbsp;element:</p>
+<div class="highlight"><pre><span class="c">{#</span>
+<span class="c">  Renders the markup for a &lt;button&gt; from Twitter Bootstrap.</span>
+<span class="c">#}</span><span class="x"></span>
+<span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;</span>
+<span class="x">        class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}{%</span> <span class="k">if</span> <span class="nv">class</span> <span class="cp">%}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">class</span> <span class="cp">}}{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x">&quot;</span>
+<span class="x">        </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+<span class="x">    </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
+<span class="x">  &lt;/button&gt;</span>
+<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>An element <code>id</code> would be a good example, and in the above macro it&#8217;s handled implicility
+thanks to the <code>{{ kwargs|xmlattr }}</code> stanza.</p>
+<p><code>class</code>, however, is not that simple, because a macro like that usually needs to supply some <span class="caps">CSS</span> classes of its own.
+The operation of combining them with additional ones, passed by the caller, is awfully textual and error-prone.
+It&#8217;s easy, for example, to forget about the crucial space and run two class names&nbsp;together.</p>
+<p>As if <span class="caps">CSS</span> wasn&#8217;t difficult enough to debug&nbsp;already!</p>
+<h4>Let them have&nbsp;list</h4>
+<p>The root cause for any of those problems is working at a level that&#8217;s too low for the task.
+The value for a <code>class</code> attribute may be <em>encoded</em> as string, but it&#8217;s fundamentally a <em>list of tokens</em>.
+In the modern <span class="caps">DOM</span> <span class="caps">API</span>, for example, it is represented
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/classList">as exactly that</a>: a <code>DOMTokenList</code>.</p>
+<p>I&#8217;ve found it helpful to replicate a similar mechanism in Jinja templates. The result is a <code>ClassList</code> wrapper
+whose code I quote here in&nbsp;full:</p>
+<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
+ 2
+ 3
+ 4
+ 5
+ 6
+ 7
+ 8
+ 9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">MutableSet</span>
+
+
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Data structure for holding, and ultimately returning as a single string,</span>
+<span class="sd">    a set of identifiers that should be managed like CSS classes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Constructor.</span>
+<span class="sd">        :param arg: A single class name or an iterable thereof.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
+            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span>
+        <span class="k">elif</span> <span class="n">arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s">&quot;expected a string or string iterable, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">class_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span>
+
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">discard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">))</span>
+
+    <span class="k">def</span> <span class="nf">__html__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s">&#39;class=&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
+</pre></div>
+</td></tr></table>
+
+<p>To make it work with <a href="http://flask.pocoo.org">Flask</a>, adorn the class with
+<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.template_global"><code>Flask.template_global</code> decorator</a>:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">myflaskapp</span> <span class="kn">import</span> <span class="n">app</span>
+
+<span class="nd">@app.template_global</span><span class="p">(</span><span class="s">&#39;classlist&#39;</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Otherwise, if you&#8217;re working with a raw <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment">Jinja <code>Environment</code></a>,
+simply add <code>ClassList</code> to its <a href="http://jinja.pocoo.org/docs/dev/api/#global-namespace">global namespace</a>&nbsp;directly:</p>
+<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">globals</span><span class="p">[</span><span class="s">&#39;classlist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ClassList</span>
+</pre></div>
+
+
+<p>In either case, I recommend following the apparent Jinja convention of naming template symbols
+as <code>lowercasewithoutspaces</code>.</p>
+<h4>Becoming&nbsp;classy</h4>
+<p>Usage of this new <code>classlist</code> helper is relatively straightforward. Since it accepts both a space-separated string
+or an iterable of <span class="caps">CSS</span> class names, a macro can wrap anything the caller would pass it as a value for <code>class</code> attribute:</p>
+<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="cp">{%</span> <span class="k">set</span> <span class="nv">classes</span> <span class="o">=</span> <span class="nv">classlist</span><span class="o">(</span><span class="nv">class</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+<span class="x">  </span><span class="c">{# ... #}</span><span class="x"></span>
+</pre></div>
+
+
+<p>The <code>classlist</code> is capable of producing the complete <code>class</code> attribute syntax (i.e. <code>class="..."</code>), or omit it entirely
+if it would be empty. All we need to do is evaluate it using the normal Jinja expression&nbsp;syntax:</p>
+<div class="highlight"><pre><span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot; </span><span class="cp">{{</span> <span class="nv">classes</span> <span class="cp">}}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
+</pre></div>
+
+
+<p>Before that, though, we may want to include some additional classes that are specific to our macro.
+The <code>button</code> macro, for example, needs to add the <a href="http://getbootstrap.com/css/#buttons">Bootstrap-specific</a>
+<code>btn</code> and <code>btn-$STYLE</code> classes to the <code>&lt;button&gt;</code> element it produces<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">classes.add</span><span class="o">(</span><span class="s1">&#39;btn&#39;</span><span class="o">,</span> <span class="s1">&#39;btn-&#39;</span> <span class="o">+</span> <span class="nv">style</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
+</pre></div>
+
+
+<p>After executing this statement, the final <code>class</code> attribute contains both the caller-provided classes,
+as well those two that were added&nbsp;explicitly.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Believe it or not, we can finally
+<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content">center the content vertically</a>
+without much of an issue!&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>The <code>{% do %}</code> block in Jinja allows to execute statements (such as function calls) without evaluating values
+they return. It is not exposed by default,
+but <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment.add_extension">adding</a> a standard
+<a href="http://jinja.pocoo.org/docs/dev/extensions/#expression-statement"><code>jinja2.ext.do</code> extension</a> to the <code>Environment</code>
+makes it available.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/sqlalchemy-regex-filters.html#sqlalchemy-regex-filters">Regular expression filters in&nbsp;SQLAlchemy</a></h2>
     <p>
       Posted on Wed 14 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1253,169 +1449,6 @@ since Python 3.4, so you will most likely need to get <a href="https://pypi.pyth
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/flask-auto-error-pages.html#flask-auto-error-pages">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/go-decorated-functions.html#go-decorated-functions">Decorated functions in&nbsp;Go</a></h2>
-    <p>
-      Posted on Fri 04 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/go.html">Go</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/decorators.html">decorators</a>      &#8226; <a href="http://xion.io/post/code/go-decorated-functions.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>One of the downsides of working with a simple and minimalistic programming language such as <a href="http://golang.org">Go</a>
-is that <a href="http://blog.atte.ro/2015/08/29/golang-code-reuse.html">abstracting for code reuse</a>
-is often rather challenging. What&#8217;s brought up most often in this context is Go&#8217;s lack of support for generics
-(higher order&nbsp;types).</p>
-<p>But here I wanted to talk about a different mechanism that &#8212; unlike generics &#8212; can be transplanted to Go
-quite successfully: function&nbsp;decorators.</p>
-<h4>Canonical&nbsp;example</h4>
-<p>Decorators are most commonly found in Python (where they can be applied not just to functions, but also classes),
-but have syntactical analogues in Java (annotations), C# (attributes), and a few other&nbsp;languages.</p>
-<p>A <em>decorator</em> looks like a modifier adorning a function definition, distinguished by its initial <code>@</code> sign:</p>
-<div class="highlight"><pre><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/home&#39;</span><span class="p">)</span>
-<span class="nd">@login_required</span>
-<span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Even if you&#8217;re not familiar with the <a href="http://flask.pocoo.org">particular web framework</a> this request handler is meant for
-&#8212; or indeed, the Python language itself &#8212; it shouldn&#8217;t be too difficult to figure out what purpose the two decorators&nbsp;serve.</p>
-<p>What&#8217;s really important is that their goals are neatly separated from essential logic of the request&nbsp;handler:</p>
-<ul>
-<li>it doesn&#8217;t have to explicitly check if the user is logged in &#8212; it has the <code>@login_required</code> decorator</li>
-<li>it doesn&#8217;t have to be separately registered in some
-<a href="https://docs.djangoproject.com/en/1.8/topics/http/urls/#example">centalized <span class="caps">URL</span> routing choke point</a> &#8212;
-it has the <code>@app.route</code> decorator&nbsp;instead</li>
-</ul>
-<p>Such <em>separation of concerns</em> is a desirable quality in software, because it makes it easier
-to reason about different aspects of the&nbsp;system.</p>
-<h4>Under the&nbsp;hood</h4>
-<p>Behind this synctactic sugar and lofty phrasing, the code above is still perfectly equivalent
-to its undecorated&nbsp;version:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
-        <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="s">&quot;Login Required&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
-
-<span class="n">app</span><span class="o">.</span><span class="n">add_url_route</span><span class="p">(</span><span class="s">&#39;/home&#39;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">home</span><span class="p">)</span>
-</pre></div>
-
-
-<p>No source code transformations take place, either: <code>@login_required</code> doesn&#8217;t actually &#8220;inject&#8221; the <code>if</code> statement
-at the beginning of <code>home</code> function. What happens instead is that it takes the whole function and <em>wraps it</em>
-in a new one which also contains the crucial&nbsp;check:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">login_required</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Grossly simplified version of a decorator enforcing user login.&quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
-            <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="s">&quot;Login Required&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">wrapped</span>
-</pre></div>
-
-
-<p>Given this definition, decorating <code>home</code> simply means passing it to the <code>login_required</code> function, and calling its result
-a new <code>home</code>:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
-
-<span class="n">home</span> <span class="o">=</span> <span class="n">login_required</span><span class="p">(</span><span class="n">home</span><span class="p">)</span>
-</pre></div>
-
-
-<p>As you&#8217;ve probably guessed, the <code>@</code> syntax is nothing else than a syntatic sugar for the above.
-But how sweet a sugar it&nbsp;is!</p>
-<p><small>(The <code>@app.route</code> decorator is simultaneously simpler and more complicated. I recommend having a direct look at
-<a href="https://github.com/mitsuhiko/flask/blob/2446ca63a8d840a35ea4eac02672b24a6fcf406f/flask/app.py#L1040">its source code</a>
-for more insight).</small></p>
-<h4>What gophers can&nbsp;learn</h4>
-<p>Unlike Python, in Go, we are out of luck when it comes to dedicated language support for decorators.
-However, the general principle still applies: we can decorate functions by writing &#8212; <em>ahem</em> &#8212; decorator&nbsp;functions.</p>
-<p>Consider, for example, a trivial <code>net/http</code> request&nbsp;handler:</p>
-<div class="highlight"><pre><span class="kd">func</span> <span class="nx">hello</span><span class="p">(</span><span class="nx">w</span> <span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span> <span class="nx">r</span> <span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="p">{</span>
-    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Fprint</span><span class="p">(</span><span class="nx">w</span><span class="p">,</span> <span class="s">&quot;Hello, world!\n&quot;</span><span class="p">)</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>Any real web application will have many similar handlers. They are usually wired to their corresponding <span class="caps">URL</span> paths
-during program&nbsp;startup:</p>
-<div class="highlight"><pre><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
-    <span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/hello&quot;</span><span class="p">,</span> <span class="nx">hello</span><span class="p">)</span>
-    <span class="c1">// ...</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>This approach to routing configuration provides an opportunity to decorate some (or all) of the request handlers with
-any auxiliary functionality that the application may&nbsp;require.</p>
-<h4>Handler in, handler&nbsp;out</h4>
-<p>To do that, though, we need to write the necessary decorator functions first. For a simplest possible example,
-let&#8217;s create one that automatically fills in the <code>Server:</code> header of <span class="caps">HTTP</span> response with the name and version
-of our web&nbsp;application:</p>
-<div class="highlight"><pre><span class="kd">func</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">h</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="kd">func</span><span class="p">(</span><span class="nx">w</span> <span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span> <span class="nx">r</span> <span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="p">{</span>
-        <span class="nx">w</span><span class="p">.</span><span class="nx">Header</span><span class="p">().</span><span class="nx">Set</span><span class="p">(</span><span class="s">&quot;Server&quot;</span><span class="p">,</span> <span class="s">&quot;HelloServer v0.0.1&quot;</span><span class="p">)</span>
-        <span class="nx">h</span><span class="p">(</span><span class="nx">w</span><span class="p">,</span> <span class="nx">r</span><span class="p">)</span>
-    <span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>Using it is then a simple matter of wrapping the original handler in a decorator&nbsp;call:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/hello&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">hello</span><span class="p">))</span>
-</pre></div>
-
-
-<p>As it both accepts and returns a <code>http.HandlerFunc</code> &#8212; a function type matching request handlers&#8217; signatures &#8212;
-we don&#8217;t need anything else to be able to wrap our handlers in as many decorators as&nbsp;necessary:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">index</span><span class="p">))</span>
-<span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/home&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">LoginRequired</span><span class="p">(</span><span class="nx">home</span><span class="p">)))</span>
-<span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/share&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">LoginRequired</span><span class="p">(</span><span class="nx">CsrfProtected</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Share</span><span class="p">))))</span>
-</pre></div>
-
-
-<p>It&#8217;s possible simply by the means of ordinary function&nbsp;composition.</p>
-<h4>Going&nbsp;meta</h4>
-<p>Looking at the last line of the example above &#8212; which is made-up but could very well come from actual production code
-&#8212; you probably can&#8217;t help but notice that stacking function calls like that creates a somewhat messy amalgamation
-of parentheses. Beyond three or four items, a decorator chain such as this one becomes rather unwieldy to&nbsp;follow.</p>
-<p>If we&#8217;re concerned about readability, it&#8217;s possible to alleviate the issue by taking another step up
-the abstraction ladder. Rather than composing the decorators explicitly, we can write a function that does it for&nbsp;us:</p>
-<div class="highlight"><pre><span class="kd">type</span> <span class="nx">HttpHandlerDecorator</span> <span class="kd">func</span><span class="p">(</span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span>
-
-<span class="kd">func</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">h</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">,</span> <span class="nx">decors</span> <span class="o">...</span><span class="nx">HttpHandlerDecorator</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span> <span class="p">{</span>
-    <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">decors</span> <span class="p">{</span>
-        <span class="nx">d</span> <span class="o">:=</span> <span class="nx">decors</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="nx">decors</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="nx">i</span><span class="p">]</span>  <span class="c1">// iterate in reverse</span>
-        <span class="nx">h</span> <span class="p">=</span> <span class="nx">d</span><span class="p">(</span><span class="nx">h</span><span class="p">)</span>
-    <span class="p">}</span>
-    <span class="k">return</span> <span class="nx">h</span>
-<span class="p">}</span>
-</pre></div>
-
-
-<p>and thus eliminate all the&nbsp;parentheses:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/share&quot;</span><span class="p">,</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Share</span><span class="p">,</span>
-    <span class="nx">WithServerHeader</span><span class="p">,</span> <span class="nx">LoginRequired</span><span class="p">,</span> <span class="nx">CsrfProtected</span><span class="p">))</span>
-</pre></div>
-
-
-<p>This technique proves especially valuable if the decorators themselves are&nbsp;parameterized:</p>
-<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/notifications&quot;</span><span class="p">,</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Notifications</span><span class="p">,</span>
-    <span class="nx">WithServerHeader</span><span class="p">,</span> <span class="nx">LoginRequired</span><span class="p">,</span> <span class="nx">Cached</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Duration</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">*</span><span class="nx">time</span><span class="p">.</span><span class="nx">Minute</span><span class="p">)))</span>
-</pre></div>
-
-
-<p>In practice, you may find it valuable to wrap the complete <code>http.HandleFunc</code> call to accept a request handler
-along with its decorator chain, or the equivalent of such a call in any of the numerous
-<a href="https://corner.squareup.com/2014/05/evaluating-go-frameworks.html">Go web frameworks</a>.</p>
-      <a class="btn" href="http://xion.io/post/code/go-decorated-functions.html#go-decorated-functions">Continue reading</a>
   </div>
 </article>
 

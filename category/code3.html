@@ -63,6 +63,84 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">str.startswith() with tuple&nbsp;argument</a></h2>
+    <p>
+      Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/tuples.html">tuples</a>      &#8226; <a href="http://xion.io/post/code/python-startswith-tuple.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Here&#8217;s a little known trick that&#8217;s applicable to Python&#8217;s <a href="http://bugs.python.org/issue1491485"><code>startswith</code></a>
+and <a href="http://bugs.python.org/issue1491485"><code>endswith</code></a> methods of <code>str</code> (and <code>unicode</code>).</p>
+<p>Suppose you&#8217;re checking whether a string starts with some&nbsp;prefix:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">):</span>
+    <span class="c"># totally an URL</span>
+</pre></div>
+
+
+<p>You eventually add more possible prefixes (or suffixes) to your&nbsp;condition:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;https://&#39;</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Later on you notice the repetition and refactor it into something like&nbsp;this:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">]</span>
+<span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>or if you&#8217;re feeling extra&nbsp;functional:</p>
+<div class="highlight"><pre><span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">,</span> <span class="n">SCHEMES</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Turns out, however, that <code>startswith</code> (and <code>endswith</code>) support this use case natively.
+Rather than passing just a single string as the argument,
+you can provide a <em>tuple</em> of strings&nbsp;instead:</p>
+<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SCHEMES</span><span class="p">):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>Either method will then check the original string against every element of the passed tuple.
+Both will only return <code>True</code> if <em>at least one</em> of the strings is recognized as prefix/suffix.
+As you can see, that&#8217;s exactly what we would previously do with <code>any</code>.</p>
+<p>Somewhat surprisingly, however, the feature only works for actual <em>tuples</em>.
+Trying to pass a seemingly equivalent iterable &#8212; a <code>list</code> or <code>set</code>, for example &#8212;
+will be met with interpreter&#8217;s&nbsp;refusal:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">is_jpeg</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">([</span><span class="s">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s">&#39;.jpeg&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<!---->
+
+<div class="highlight"><pre>TypeError: endswith first arg must be str, unicode, or tuple, not list
+</pre></div>
+
+
+<p>If you dig into it, there doesn&#8217;t seem to be a compelling reason for this behavior.
+The <a href="http://bugs.python.org/issue1491485">relevant feature request</a> talks about
+consistency with the built-in <code>isinstance</code> function,
+but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
+<p>In any case, this can be worked around without much&nbsp;difficulty:</p>
+<div class="highlight"><pre><span class="n">PROTOCOLS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http&#39;</span><span class="p">,</span> <span class="s">&#39;https&#39;</span><span class="p">,</span> <span class="s">&#39;ftp&#39;</span><span class="p">,</span> <span class="s">&#39;git&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="s">&#39;://&#39;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">PROTOCOLS</span><span class="p">)):</span>
+    <span class="c"># ...</span>
+</pre></div>
+
+
+<p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
+      <a class="btn" href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-or-lambda.html#python-or-lambda">&#8230;or&nbsp;lambda?</a></h2>
     <p>
       Posted on Mon 20 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1162,168 +1240,6 @@ are permitted as long as nothing in the public interface changes.&#160;<a class=
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Moving out of a container in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Fri 05 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/vector.html">vector</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/references.html">references</a>      &#8226; <a href="http://xion.io/post/code/rust-move-out-of-container.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>To prevent the kind of memory errors that plagues many C programs,
-the <a href="https://doc.rust-lang.org/book/ownership.html"><em>borrow checker</em> in Rust</a> tracks how data is moved between variables,
-or accessed via references. This is all done at compile time, with zero runtime overhead, and is a sizeable part
-of Rust&#8217;s value&nbsp;offering.</p>
-<p>Like all rigid and automated systems, however, it is necessarily constrained and cannot handle all situations perfectly.
-One of its limitations is treating all objects as <em>atomic</em>. It&#8217;s impossible for a variable to own a part of some bigger
-structure, neither is it possible to maintain mutable references to two or more elements of a&nbsp;collection.</p>
-<p>If we nonetheless <a href="http://is.gd/yWCYmJ">try</a>:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="o">&amp;</span><span class="n">b</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>we&#8217;ll be served with a classic borrow checker&nbsp;error:</p>
-<div class="highlight"><pre>&lt;anon&gt;:3:25: 3:33 error: cannot move out of indexed content [E0507]
-&lt;anon&gt;:3     let fullname = join(names[0], names[1]);
-                                 ^~~~~~~~
-</pre></div>
-
-
-<p>Behind its rather cryptic verbiage, it informs us that we tried to move a <em>part</em> of the <code>names</code> vector &#8212; its first
-element &#8212; to a new variable (here, a function parameter). This isn&#8217;t allowed, because in principle it would
-render the vector invalid from the standpoint of strict memory safety. Rust would no longer guarantee <code>names[0]</code> to be
-a legal <code>String</code>: its internal pointer could&#8217;ve been invalidated by the code which the element moved to
-(the <code>join</code> function)<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
-there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
-it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
-the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
-by the borrow&nbsp;checker.</p>
-<h4>Pointers to the&nbsp;rescue?</h4>
-<p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
-As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
-(structs, hashmaps, etc.), it&#8217;s been recognized and countermeasures are&nbsp;available.</p>
-<p>However, the <a href="http://is.gd/o3GRnw">idiomatic practice</a> is to actually leave the elements be and access them
-solely through&nbsp;references:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
-pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
-the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
-In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
-the call stacks and abstraction&nbsp;layers.</p>
-<h4>Vector&nbsp;solution</h4>
-<p>If we still insist on moving the elements out, at least in case of vector we aren&#8217;t <em>completely</em> out of luck.
-The <code>Vec</code> type offers several specialized methods that can slice, dice, and splice the collection in various ways.
-Those&nbsp;include:</p>
-<ul>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_first"><code>split_first</code></a> (and <code>split_first_mut</code>)
-for cutting right after the first&nbsp;element</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_last"><code>split_last</code></a> (and <code>split_last_mut</code>)
-for a similar cut right before the last&nbsp;element</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_at"><code>split_at</code></a> (and <code>split_at_mut</code>),
-generalized versions of the above&nbsp;methods</li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_off"><code>split_off</code></a>, a partially-in-place version
-of <code>split_at_mut</code></li>
-<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain"><code>drain</code></a> for moving all elements from a specified&nbsp;range</li>
-</ul>
-<p>Other types may offer different methods, depending on their particular data layout, though <code>drain</code> should be available
-on any data structure that can be iterated&nbsp;over.</p>
-<h4>Structural&nbsp;advantage</h4>
-<p>What about user-defined types, such as <code>struct</code>s?</p>
-<p>Fortunately, these are covered by the compiler itself. Since accessing <code>struct</code> fields is a fully compile-time
-operation, it is possible to track the ownership of each individual object that makes up the structure.
-Thus there are no obstacles to simply <a href="http://is.gd/ZUI2Mn">moving all the fields</a>:</p>
-<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="p">{</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"></span>
-<span class="w">                   </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()};</span><span class="w"></span>
-<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first_name</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">last_name</span><span class="p">)</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<h4>If all else&nbsp;fails&#8230;</h4>
-<p>This leaves us with some rare cases when the container&#8217;s interface doesn&#8217;t <em>quite</em> support the exact subset of elements
-we want to move out. If we don&#8217;t want to <code>drain</code> them all and inspect every item for potential preservation,
-it may be time to skirt around the more dangerous areas of the&nbsp;language.</p>
-<p>But I don&#8217;t necessarily mean going all out with <code>unsafe</code> blocks, pointers, and (let&#8217;s be honest) segfaults.
-Instead, we can look at the gray zone between them and the regular, borrow-checked Rust&nbsp;code.</p>
-<p>Some of the functions inside the <a href="https://doc.rust-lang.org/std/mem/index.html"><code>std::mem</code> module</a> can be said
-to fall into this category. Most notably, <a href="https://doc.rust-lang.org/std/mem/fn.swap.html"><code>mem::swap</code></a> and
-<a href="https://doc.rust-lang.org/std/mem/fn.replace.html"><code>mem::replace</code></a> allow us to operate directly on the memory blocks
-that back every Rust object, albeit without the dangerous ability to freely modify&nbsp;them.</p>
-<p>What those functions enable is a small sleight of hand &#8212; a quick exchange of two variables or objects
-while the borrow checker &#8220;isn&#8217;t looking&#8221;. Possessing such an ability, we can smuggle any item out of a container
-as long as we&#8217;re able to provide a suitable&nbsp;replacement:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="p">;</span><span class="w"></span>
-
-<span class="c-Doc">/// Pick only the items under indices that are powers of two.</span>
-<span class="k">fn</span><span class="w"> </span><span class="n">pick_powers_of_2</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Default</span><span class="o">&gt;</span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Vec</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">elem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mem</span><span class="o">::</span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">T</span><span class="o">::</span><span class="n">default</span><span class="p">());</span><span class="w"></span>
-<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">elem</span><span class="p">);</span><span class="w"></span>
-<span class="w">        </span><span class="n">i</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="n">result</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p style="text-align: center">
-    <img src="http://xion.io/images/indyswap.jpg" alt="Swap!"></br>
-    <small>Pictured: implementation of <code>mem::replace</code>.</small>
-</p>
-
-<p><a href="https://doc.rust-lang.org/std/default/trait.Default.html#tymethod.default">The <code>Default</code> value</a>,
-if available, is usually a great choice here. Alternately, a <code>Copy</code> or <code>Clone</code> of some other element can also work
-if it&#8217;s cheap to&nbsp;obtain.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
-on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the language itself,
-it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
-is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
-instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Continue reading</a>
   </div>
 </article>
 

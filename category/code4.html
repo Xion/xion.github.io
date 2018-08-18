@@ -63,6 +63,168 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Moving out of a container in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Fri 05 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/vector.html">vector</a>,      <a href="http://xion.io/tag/borrow-checker.html">borrow checker</a>,      <a href="http://xion.io/tag/references.html">references</a>      &#8226; <a href="http://xion.io/post/code/rust-move-out-of-container.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>To prevent the kind of memory errors that plagues many C programs,
+the <a href="https://doc.rust-lang.org/book/ownership.html"><em>borrow checker</em> in Rust</a> tracks how data is moved between variables,
+or accessed via references. This is all done at compile time, with zero runtime overhead, and is a sizeable part
+of Rust&#8217;s value&nbsp;offering.</p>
+<p>Like all rigid and automated systems, however, it is necessarily constrained and cannot handle all situations perfectly.
+One of its limitations is treating all objects as <em>atomic</em>. It&#8217;s impossible for a variable to own a part of some bigger
+structure, neither is it possible to maintain mutable references to two or more elements of a&nbsp;collection.</p>
+<p>If we nonetheless <a href="http://is.gd/yWCYmJ">try</a>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="o">&amp;</span><span class="n">b</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>we&#8217;ll be served with a classic borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>&lt;anon&gt;:3:25: 3:33 error: cannot move out of indexed content [E0507]
+&lt;anon&gt;:3     let fullname = join(names[0], names[1]);
+                                 ^~~~~~~~
+</pre></div>
+
+
+<p>Behind its rather cryptic verbiage, it informs us that we tried to move a <em>part</em> of the <code>names</code> vector &#8212; its first
+element &#8212; to a new variable (here, a function parameter). This isn&#8217;t allowed, because in principle it would
+render the vector invalid from the standpoint of strict memory safety. Rust would no longer guarantee <code>names[0]</code> to be
+a legal <code>String</code>: its internal pointer could&#8217;ve been invalidated by the code which the element moved to
+(the <code>join</code> function)<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>But while commendable, this guarantee isn&#8217;t exactly <em>useful</em> here. Even though <code>names[0]</code> would technically be invalid,
+there isn&#8217;t anyone to actually notice this fact. The <code>names</code> vector is inaccessible outside of the function
+it&#8217;s defined in, and even the function itself doesn&#8217;t look at it after the move. In its present form,
+the program <del>is inarguably correct</del><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> could&#8217;ve been accepted if partial moves from <code>Vec</code> were allowed
+by the borrow&nbsp;checker.</p>
+<h4>Pointers to the&nbsp;rescue?</h4>
+<p>Vectors wouldn&#8217;t be very useful or efficient, though, if we could only obtain <a href="https://doc.rust-lang.org/std/marker/trait.Copy.html">copies</a> or <a href="https://doc.rust-lang.org/std/clone/trait.Clone.html">clones</a> of their elements.
+As this is an inherent limitation of Rust&#8217;s memory model, and applies to <em>all</em> compound types
+(structs, hashmaps, etc.), it&#8217;s been recognized and countermeasures are&nbsp;available.</p>
+<p>However, the <a href="http://is.gd/o3GRnw">idiomatic practice</a> is to actually leave the elements be and access them
+solely through&nbsp;references:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">names</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()];</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="o">&amp;</span><span class="n">names</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s">&quot; &quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">b</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The obvious downside of this approach is that it requires an interface change to <code>join</code>: it now has to accept
+pointers instead of actual objects<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>. And since the result is a completely new <code>String</code>, we have to either bite
+the bullet and <code>clone</code>, or write a more awkward <code>join_into(a: &amp;mut String, b: &amp;String)</code> function.<br/>
+In general, making an <span class="caps">API</span> switch from actual objects to references has an annoying tendency to percolate up
+the call stacks and abstraction&nbsp;layers.</p>
+<h4>Vector&nbsp;solution</h4>
+<p>If we still insist on moving the elements out, at least in case of vector we aren&#8217;t <em>completely</em> out of luck.
+The <code>Vec</code> type offers several specialized methods that can slice, dice, and splice the collection in various ways.
+Those&nbsp;include:</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_first"><code>split_first</code></a> (and <code>split_first_mut</code>)
+for cutting right after the first&nbsp;element</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_last"><code>split_last</code></a> (and <code>split_last_mut</code>)
+for a similar cut right before the last&nbsp;element</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_at"><code>split_at</code></a> (and <code>split_at_mut</code>),
+generalized versions of the above&nbsp;methods</li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.split_off"><code>split_off</code></a>, a partially-in-place version
+of <code>split_at_mut</code></li>
+<li><a href="https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain"><code>drain</code></a> for moving all elements from a specified&nbsp;range</li>
+</ul>
+<p>Other types may offer different methods, depending on their particular data layout, though <code>drain</code> should be available
+on any data structure that can be iterated&nbsp;over.</p>
+<h4>Structural&nbsp;advantage</h4>
+<p>What about user-defined types, such as <code>struct</code>s?</p>
+<p>Fortunately, these are covered by the compiler itself. Since accessing <code>struct</code> fields is a fully compile-time
+operation, it is possible to track the ownership of each individual object that makes up the structure.
+Thus there are no obstacles to simply <a href="http://is.gd/ZUI2Mn">moving all the fields</a>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Person</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">get_name</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Person</span><span class="p">{</span><span class="n">first_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;John&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">(),</span><span class="w"></span>
+<span class="w">                   </span><span class="n">last_name</span><span class="o">:</span><span class="w"> </span><span class="s">&quot;Smith&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">()};</span><span class="w"></span>
+<span class="w">    </span><span class="n">join</span><span class="p">(</span><span class="n">p</span><span class="p">.</span><span class="n">first_name</span><span class="p">,</span><span class="w"> </span><span class="n">p</span><span class="p">.</span><span class="n">last_name</span><span class="p">)</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>If all else&nbsp;fails&#8230;</h4>
+<p>This leaves us with some rare cases when the container&#8217;s interface doesn&#8217;t <em>quite</em> support the exact subset of elements
+we want to move out. If we don&#8217;t want to <code>drain</code> them all and inspect every item for potential preservation,
+it may be time to skirt around the more dangerous areas of the&nbsp;language.</p>
+<p>But I don&#8217;t necessarily mean going all out with <code>unsafe</code> blocks, pointers, and (let&#8217;s be honest) segfaults.
+Instead, we can look at the gray zone between them and the regular, borrow-checked Rust&nbsp;code.</p>
+<p>Some of the functions inside the <a href="https://doc.rust-lang.org/std/mem/index.html"><code>std::mem</code> module</a> can be said
+to fall into this category. Most notably, <a href="https://doc.rust-lang.org/std/mem/fn.swap.html"><code>mem::swap</code></a> and
+<a href="https://doc.rust-lang.org/std/mem/fn.replace.html"><code>mem::replace</code></a> allow us to operate directly on the memory blocks
+that back every Rust object, albeit without the dangerous ability to freely modify&nbsp;them.</p>
+<p>What those functions enable is a small sleight of hand &#8212; a quick exchange of two variables or objects
+while the borrow checker &#8220;isn&#8217;t looking&#8221;. Possessing such an ability, we can smuggle any item out of a container
+as long as we&#8217;re able to provide a suitable&nbsp;replacement:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="p">;</span><span class="w"></span>
+
+<span class="c-Doc">/// Pick only the items under indices that are powers of two.</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">pick_powers_of_2</span><span class="o">&lt;</span><span class="n">T</span><span class="o">:</span><span class="w"> </span><span class="nb">Default</span><span class="o">&gt;</span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">result</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Vec</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">v</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">elem</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mem</span><span class="o">::</span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">],</span><span class="w"> </span><span class="n">T</span><span class="o">::</span><span class="n">default</span><span class="p">());</span><span class="w"></span>
+<span class="w">        </span><span class="n">result</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">elem</span><span class="p">);</span><span class="w"></span>
+<span class="w">        </span><span class="n">i</span><span class="w"> </span><span class="o">*=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="n">result</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p style="text-align: center">
+    <img src="http://xion.io/images/indyswap.jpg" alt="Swap!"></br>
+    <small>Pictured: implementation of <code>mem::replace</code>.</small>
+</p>
+
+<p><a href="https://doc.rust-lang.org/std/default/trait.Default.html#tymethod.default">The <code>Default</code> value</a>,
+if available, is usually a great choice here. Alternately, a <code>Copy</code> or <code>Clone</code> of some other element can also work
+if it&#8217;s cheap to&nbsp;obtain.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>In Rust jargon, it is sometimes said that the object has been &#8220;consumed&#8221; there.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>As <a href="https://www.reddit.com/r/rust/comments/4cbc4u/moving_out_of_a_container_in_rust/d1gx9tb">/u/Gankro points out</a>
+on <a href="https://reddit.com/r/rust">/r/rust</a>, since <code>Vec</code> isn&#8217;t a part of the language itself,
+it doesn&#8217;t get to bend the borrow checking rules. Therefore speaking of counterfactual correctness
+is a bit too far-fetched in this case.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>For <code>String</code>s specifically, the usual practice is to require a more generic <code>&amp;str</code> type (string slice)
+instead of <code>&amp;String</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-move-out-of-container.html#rust-move-out-of-container">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-retry-idiom.html#python-retry-idiom">Retry idiom for&nbsp;Python</a></h2>
     <p>
       Posted on Wed 27 January 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1095,202 +1257,6 @@ you can override <code>__init__</code> instead of <code>__new__</code>
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
-    <p>
-      Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/jinja.html">Jinja</a>,      <a href="http://xion.io/tag/css.html">CSS</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/flask.html">Flask</a>      &#8226; <a href="http://xion.io/post/code/jinja-classlist.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>One of the great uses for a templating engine such as <a href="http://jinja.pocoo.org">Jinja</a> is reducing the clutter
-in our <span class="caps">HTML</span> source files. Even with the steady advances in the <span class="caps">CSS</span><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> standards, various <code>div.wrapper</code>, <code>div.container</code>,
-<code>div.content</code>, and other presentational elements are still a common fact of life.
-Unless you&#8217;re one of the cool kids who use <a href="http://webcomponents.org/">Web Components</a> with
-<a href="https://www.polymer-project.org">Polymer</a>, your main option for abstracting this boilerplate away
-is defining some more general <a href="http://jinja.pocoo.org/docs/dev/templates/#macros">template macros</a>.</p>
-<p>As with any kind of abstraction, it&#8217;s crucial to balance broad applicability with a potential for finely-tuned
-customization. In the case of wrapping <span class="caps">HTML</span> snippets in Jinja macros, an easy way to maintain flexibility is to allow
-the caller to specify some crucial attributes of the root&nbsp;element:</p>
-<div class="highlight"><pre><span class="c">{#</span>
-<span class="c">  Renders the markup for a &lt;button&gt; from Twitter Bootstrap.</span>
-<span class="c">#}</span><span class="x"></span>
-<span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot;</span>
-<span class="x">        class=&quot;btn btn-</span><span class="cp">{{</span> <span class="nv">style</span> <span class="cp">}}{%</span> <span class="k">if</span> <span class="nv">class</span> <span class="cp">%}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">class</span> <span class="cp">}}{%</span> <span class="k">endif</span> <span class="cp">%}</span><span class="x">&quot;</span>
-<span class="x">        </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
-<span class="x">    </span><span class="cp">{{</span> <span class="nv">text</span> <span class="cp">}}</span><span class="x"></span>
-<span class="x">  &lt;/button&gt;</span>
-<span class="cp">{%</span> <span class="k">endmacro</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>An element <code>id</code> would be a good example, and in the above macro it&#8217;s handled implicility
-thanks to the <code>{{ kwargs|xmlattr }}</code> stanza.</p>
-<p><code>class</code>, however, is not that simple, because a macro like that usually needs to supply some <span class="caps">CSS</span> classes of its own.
-The operation of combining them with additional ones, passed by the caller, is awfully textual and error-prone.
-It&#8217;s easy, for example, to forget about the crucial space and run two class names&nbsp;together.</p>
-<p>As if <span class="caps">CSS</span> wasn&#8217;t difficult enough to debug&nbsp;already!</p>
-<h4>Let them have&nbsp;list</h4>
-<p>The root cause for any of those problems is working at a level that&#8217;s too low for the task.
-The value for a <code>class</code> attribute may be <em>encoded</em> as string, but it&#8217;s fundamentally a <em>list of tokens</em>.
-In the modern <span class="caps">DOM</span> <span class="caps">API</span>, for example, it is represented
-<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/classList">as exactly that</a>: a <code>DOMTokenList</code>.</p>
-<p>I&#8217;ve found it helpful to replicate a similar mechanism in Jinja templates. The result is a <code>ClassList</code> wrapper
-whose code I quote here in&nbsp;full:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29
-30
-31
-32
-33
-34
-35
-36
-37
-38
-39
-40
-41
-42
-43</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">MutableSet</span>
-
-
-<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Data structure for holding, and ultimately returning as a single string,</span>
-<span class="sd">    a set of identifiers that should be managed like CSS classes.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arg</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Constructor.</span>
-<span class="sd">        :param arg: A single class name or an iterable thereof.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
-            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arg</span><span class="p">,</span> <span class="n">Iterable</span><span class="p">):</span>
-            <span class="n">classes</span> <span class="o">=</span> <span class="n">arg</span>
-        <span class="k">elif</span> <span class="n">arg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
-                <span class="s">&quot;expected a string or string iterable, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="nb">type</span><span class="p">(</span><span class="n">arg</span><span class="p">))</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">classes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="bp">None</span><span class="p">,</span> <span class="n">classes</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">class_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classes</span>
-
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">discard</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">classes</span><span class="p">):</span>
-        <span class="k">for</span> <span class="n">class_</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">class_</span><span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">classes</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">__html__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="s">&#39;class=&quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span> <span class="k">else</span> <span class="s">&quot;&quot;</span>
-</pre></div>
-</td></tr></table>
-
-<p>To make it work with <a href="http://flask.pocoo.org">Flask</a>, adorn the class with
-<a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.template_global"><code>Flask.template_global</code> decorator</a>:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">myflaskapp</span> <span class="kn">import</span> <span class="n">app</span>
-
-<span class="nd">@app.template_global</span><span class="p">(</span><span class="s">&#39;classlist&#39;</span><span class="p">)</span>
-<span class="k">class</span> <span class="nc">ClassList</span><span class="p">(</span><span class="n">MutableSet</span><span class="p">):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>Otherwise, if you&#8217;re working with a raw <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment">Jinja <code>Environment</code></a>,
-simply add <code>ClassList</code> to its <a href="http://jinja.pocoo.org/docs/dev/api/#global-namespace">global namespace</a>&nbsp;directly:</p>
-<div class="highlight"><pre><span class="n">jinja_env</span><span class="o">.</span><span class="n">globals</span><span class="p">[</span><span class="s">&#39;classlist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ClassList</span>
-</pre></div>
-
-
-<p>In either case, I recommend following the apparent Jinja convention of naming template symbols
-as <code>lowercasewithoutspaces</code>.</p>
-<h4>Becoming&nbsp;classy</h4>
-<p>Usage of this new <code>classlist</code> helper is relatively straightforward. Since it accepts both a space-separated string
-or an iterable of <span class="caps">CSS</span> class names, a macro can wrap anything the caller would pass it as a value for <code>class</code> attribute:</p>
-<div class="highlight"><pre><span class="cp">{%</span> <span class="k">macro</span> <span class="nv">button</span><span class="o">(</span><span class="nv">text</span><span class="o">=</span><span class="kp">none</span><span class="o">,</span> <span class="nv">style</span><span class="o">=</span><span class="s1">&#39;default&#39;</span><span class="o">,</span> <span class="nv">type</span><span class="o">=</span><span class="s1">&#39;button&#39;</span><span class="o">,</span> <span class="nv">class</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  </span><span class="cp">{%</span> <span class="k">set</span> <span class="nv">classes</span> <span class="o">=</span> <span class="nv">classlist</span><span class="o">(</span><span class="nv">class</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-<span class="x">  </span><span class="c">{# ... #}</span><span class="x"></span>
-</pre></div>
-
-
-<p>The <code>classlist</code> is capable of producing the complete <code>class</code> attribute syntax (i.e. <code>class="..."</code>), or omit it entirely
-if it would be empty. All we need to do is evaluate it using the normal Jinja expression&nbsp;syntax:</p>
-<div class="highlight"><pre><span class="x">  &lt;button type=&quot;</span><span class="cp">{{</span> <span class="nv">type</span> <span class="cp">}}</span><span class="x">&quot; </span><span class="cp">{{</span> <span class="nv">classes</span> <span class="cp">}}</span><span class="x"> </span><span class="cp">{{</span> <span class="nv">kwargs</span><span class="o">|</span><span class="nf">xmlattr</span> <span class="cp">}}</span><span class="x">&gt;</span>
-</pre></div>
-
-
-<p>Before that, though, we may want to include some additional classes that are specific to our macro.
-The <code>button</code> macro, for example, needs to add the <a href="http://getbootstrap.com/css/#buttons">Bootstrap-specific</a>
-<code>btn</code> and <code>btn-$STYLE</code> classes to the <code>&lt;button&gt;</code> element it produces<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre><span class="x">  </span><span class="cp">{%</span> <span class="k">do</span> <span class="nv">classes.add</span><span class="o">(</span><span class="s1">&#39;btn&#39;</span><span class="o">,</span> <span class="s1">&#39;btn-&#39;</span> <span class="o">+</span> <span class="nv">style</span><span class="o">)</span> <span class="cp">%}</span><span class="x"></span>
-</pre></div>
-
-
-<p>After executing this statement, the final <code>class</code> attribute contains both the caller-provided classes,
-as well those two that were added&nbsp;explicitly.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Believe it or not, we can finally
-<a href="https://developer.mozilla.org/en-US/docs/Web/CSS/justify-content">center the content vertically</a>
-without much of an issue!&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>The <code>{% do %}</code> block in Jinja allows to execute statements (such as function calls) without evaluating values
-they return. It is not exposed by default,
-but <a href="http://jinja.pocoo.org/docs/dev/api/#jinja2.Environment.add_extension">adding</a> a standard
-<a href="http://jinja.pocoo.org/docs/dev/extensions/#expression-statement"><code>jinja2.ext.do</code> extension</a> to the <code>Environment</code>
-makes it available.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist">Continue reading</a>
   </div>
 </article>
 

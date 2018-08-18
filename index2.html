@@ -63,6 +63,617 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/haskell-printer-monad.html#haskell-printer-monad">The Printer Monad in&nbsp;Haskell</a></h2>
+    <p>
+      Posted on Fri 04 August 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/haskell.html">Haskell</a>,      <a href="http://xion.io/tag/writer.html">Writer</a>,      <a href="http://xion.io/tag/monads.html">monads</a>,      <a href="http://xion.io/tag/monad-transformers.html">monad transformers</a>,      <a href="http://xion.io/tag/writert.html">WriterT</a>      &#8226; <a href="http://xion.io/post/code/haskell-printer-monad.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Quite recently, I have encountered an interesting case of monad-based refactoring in&nbsp;Haskell.</p>
+<p>Suppose you have a <code>ComplicatedRecord</code>
+that holds the results of some lengthy and important process in your program.
+You want to present that data to the user in a nicely formatted way,
+so you write a function which begins somewhat like&nbsp;this:</p>
+<div class="highlight"><pre><span class="cm">{-# LANGUAGE RecordWildcards #-}</span>
+
+<span class="c1">-- | Pretty-print the content of the record.</span>
+<span class="nf">ppRecord</span> <span class="ow">::</span> <span class="kt">ComplicatedRecord</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="nb">()</span>
+<span class="nf">ppRecord</span> <span class="kt">ComplicatedRecord</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="c1">-- ...</span>
+</pre></div>
+
+
+<p>Inside, there is plenty of <code>putStrLn</code> calls, likely hidden inside more specific subfunctions
+that format all the numerous parts of <code>ComplicatedRecord</code>.
+But the <code>IO</code> monad isn&#8217;t there just for printing:
+because the code went through multiple iterations,
+some of this logic actually takes advantage of it by making additional system <span class="amp">&amp;</span> network&nbsp;calls.</p>
+<p>So yeah, it&#8217;s not particularly&nbsp;pretty.</p>
+<p>Now, however, we find out that the output we&#8217;re printing here
+shouldn&#8217;t <em>always</em> go directly to stdout.
+In some cases, unsurprisingly, we actually want it back as a single string,
+without having it sent to the standard output at&nbsp;all.</p>
+<h4>Just $ return .&nbsp;it</h4>
+<p>Your first instinct here may be to simply give back the final string (well, <code>Text</code>)
+as the function result<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="nf">ppRecord</span> <span class="ow">::</span> <span class="kt">ComplicatedRecord</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="kt">Text</span>
+</pre></div>
+
+
+<p>However, this turns out to be rather awkward.
+While in most other languages
+we would simply accumulate output by progressively adding more data to a mutable result,
+this would be much more inconvenient (and somewhat weird) to do in&nbsp;Haskell.</p>
+<p>This is where the stdout-based approach seems cleaner;
+instead of straightforward, sequential code like&nbsp;this:</p>
+<div class="highlight"><pre><span class="cm">{-# LANGUAGE OverloadedStrings #-}</span>
+
+<span class="kr">import</span> <span class="nn">Control.Monad.Extra</span> <span class="p">(</span><span class="nf">whenJust</span><span class="p">)</span>
+<span class="kr">import</span> <span class="nn">Data.Text.IO</span>
+<span class="kr">import</span> <span class="nn">TextShow</span>
+
+<span class="nf">ppOrder</span> <span class="kt">Order</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">putStrLn</span> <span class="o">$</span> <span class="s">&quot;Order #&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">ordNumber</span>
+    <span class="n">ppAddress</span> <span class="n">ordDeliveryAddress</span>
+    <span class="n">forM_</span> <span class="p">(</span><span class="n">zip</span> <span class="p">[</span><span class="mi">1</span><span class="o">..</span><span class="p">]</span> <span class="n">ordItems</span><span class="p">)</span> <span class="o">$</span> <span class="nf">\</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="kt">Item</span><span class="p">{</span><span class="o">..</span><span class="p">})</span> <span class="ow">-&gt;</span> <span class="kr">do</span>
+        <span class="n">putStrLn</span> <span class="o">$</span> <span class="n">showt</span> <span class="p">(</span><span class="n">i</span><span class="ow">::</span><span class="kt">Int</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;. &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">itName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; x&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">showt</span> <span class="n">itQuantity</span>
+    <span class="n">whenJust</span> <span class="n">ordBillingAddress</span> <span class="n">ppAddress</span>
+
+<span class="nf">ppAddress</span> <span class="kt">Address</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">putStrLn</span> <span class="o">$</span> <span class="n">addrFirstName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrLastName</span>
+    <span class="n">putStrLn</span> <span class="n">addrLine1</span>
+    <span class="n">whenJust</span> <span class="n">addrLine2</span> <span class="n">putStrLn</span>
+    <span class="n">putStrLn</span> <span class="o">$</span> <span class="n">addrCity</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;, &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrPostalCode</span>
+</pre></div>
+
+
+<p>we have to overhaul each function and turn it into a much less pleasant &#8220;<code>mappend</code>age&#8221;:</p>
+<div class="highlight"><pre><span class="nf">ppOrder</span> <span class="kt">Order</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="n">unlines</span> <span class="o">$</span> <span class="n">mconcat</span>
+    <span class="p">[</span> <span class="s">&quot;Order #&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">ordNumber</span>
+    <span class="p">,</span> <span class="n">ppAddress</span> <span class="n">ordDeliveryAddress</span>
+    <span class="p">,</span> <span class="n">ppItems</span> <span class="n">ordItems</span>
+    <span class="p">]</span> <span class="o">+</span> <span class="n">maybe</span> <span class="kt">[]</span> <span class="p">(</span><span class="nf">\</span><span class="n">addr</span> <span class="ow">-&gt;</span> <span class="p">[</span><span class="n">ppAddress</span> <span class="n">addr</span><span class="p">])</span> <span class="n">ordBillingAddress</span>
+    <span class="kr">where</span>
+    <span class="n">ppItems</span> <span class="ow">=</span> <span class="n">mconcat</span> <span class="o">.</span> <span class="n">map</span> <span class="p">(</span><span class="n">uncurry</span> <span class="n">ppItem</span><span class="p">)</span> <span class="o">.</span> <span class="n">zip</span> <span class="p">[</span><span class="mi">1</span><span class="o">..</span><span class="p">]</span>
+    <span class="n">ppItem</span> <span class="n">i</span> <span class="kt">Item</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="n">showt</span> <span class="n">i</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;. &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">itName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; x&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">itQuantity</span>
+</pre></div>
+
+
+<p>One may argue that this is, in fact, the more idiomatic approach,
+but I&#8217;m not very fond of all those commas.
+Plus, it shows rather clearly that any conditional logic (like with <code>ordBillingAddress</code> here)
+is going to get pretty&nbsp;cumbersome.</p>
+<h4>Along comes the <code>Writer</code></h4>
+<p>What I&#8217;m saying here is that even in pure code,
+it is sometimes very desirable to have a <code>do</code> notation.
+For that, however, we need a suitable <code>Monad</code><sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> to provide the meaning of &#8220;invisible semicolon&#8221; in a <code>do</code> block.</p>
+<p>And <code>Text</code>, obviously, isn&#8217;t one.
+Neither is <code>[Text]</code> (lines of text),
+nor any other type we&#8217;d use to represent the final output of formatting <span class="amp">&amp;</span> printing.
+They are unsuitable, because they cannot encode the <em>computation</em> that eventually produces said output &#8212;
+either the top-level one (<code>ppRecord</code>) or any of its building blocks (like the <code>ppOrder</code> or <code>ppAddress</code>),
+down to a most elementary <code>putStrLn</code>.
+The only thing they can stand for is the result&nbsp;itself.</p>
+<p>Fortunately, the pattern of executing code and occassionally producing some &#8220;additional&#8221; output
+has been abstracted over in the Haskell standard library.
+This is exactly the use case for the <code>Writer</code> monad!</p>
+<p>The definition of <code>Writer</code> is roughly equivalent to the&nbsp;following:</p>
+<div class="highlight"><pre><span class="kr">newtype</span> <span class="kt">Writer</span> <span class="n">w</span> <span class="n">a</span> <span class="ow">=</span> <span class="o">...</span> <span class="c1">-- omitted</span>
+</pre></div>
+
+
+<p>Of the two type parameters it takes, the <code>w</code> one signifies what output it can produce &#8220;on the side&#8221;.
+This is contrasted with <code>a</code> which is the regular result of a monadic expression or function.
+In our case, <code>a</code> will basically always be <code>()</code> (unit/&#8221;empty&#8221; type),
+but it is nonetheless necessary for the <code>Writer</code> to behave as a&nbsp;monad.</p>
+<p>To complement the above definition, <code>Writer</code> comes with several useful functions.
+Among those, the most interesting one is <code>tell</code>:</p>
+<div class="highlight"><pre><span class="nf">tell</span> <span class="ow">::</span> <span class="n">w</span> <span class="ow">-&gt;</span> <span class="kt">Writer</span> <span class="n">w</span> <span class="nb">()</span>
+</pre></div>
+
+
+<p><code>write</code> would&#8217;ve probably been a better name for it,
+as it&#8217;s definitely the main and defining operation of <code>Writer</code>.</p>
+<p>Looking at its signature, we can see it takes a bit of the <code>Writer</code><span class="quo">&#8216;</span>s output (<code>w</code>)
+and results in a <code>Writer</code> action.
+Internally, it will simply add the argument to the already accumulated output of the writer<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>To make everything more concrete,
+here&#8217;s a literal &#8220;Hello world&#8221; example coded very verbosly as a <code>Writer</code> action:</p>
+<div class="highlight"><pre><span class="kr">import</span> <span class="nn">Control.Monad.Writer</span>
+
+<span class="nf">hello</span> <span class="ow">::</span> <span class="kt">Writer</span> <span class="kt">Text</span> <span class="nb">()</span>
+<span class="nf">hello</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">tell</span> <span class="s">&quot;Hello&quot;</span>
+    <span class="n">tell</span> <span class="s">&quot; &quot;</span>
+    <span class="n">tell</span> <span class="s">&quot;world&quot;</span>
+
+<span class="nf">main</span> <span class="ow">::</span> <span class="kt">IO</span> <span class="nb">()</span>
+<span class="nf">main</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="kr">let</span> <span class="p">(</span><span class="kr">_</span><span class="p">,</span> <span class="n">greeting</span><span class="p">)</span> <span class="ow">=</span> <span class="n">runWriter</span> <span class="n">hello</span>
+    <span class="kt">Text</span><span class="o">.</span><span class="n">putStrLn</span> <span class="n">greeting</span>
+</pre></div>
+
+
+<p>It also contains the last element of the <code>Writer</code> puzzle:</p>
+<div class="highlight"><pre><span class="nf">runWriter</span> <span class="ow">::</span> <span class="kt">Writer</span> <span class="n">w</span> <span class="n">a</span> <span class="ow">-&gt;</span> <span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Like its name suggests, this function will &#8220;run&#8221; any <code>Writer</code> action that we give it,
+returning both the &#8220;regular&#8221; result (<code>a</code>) plus any output passed in <code>tell</code>s (<code>w</code>).<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup></p>
+<h4>My little monad: transformers are&nbsp;magic</h4>
+<p>The last example may be very simple,
+but it contains all the building blocks for many of the printing functions we need.
+If we define a convenience wrapper for <code>tell</code>:</p>
+<div class="highlight"><pre><span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Writer</span> <span class="kt">Text</span> <span class="nb">()</span>
+<span class="nf">putLn</span> <span class="n">line</span> <span class="ow">=</span> <span class="n">tell</span> <span class="o">$</span> <span class="n">line</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+</pre></div>
+
+
+<p>then both <code>ppAddress</code> and <code>ppOrder</code> can be translated
+through a mere mechanical substitution of <code>putStrLn</code> with <code>putLn</code>:</p>
+<div class="highlight"><pre><span class="nf">ppAddress</span> <span class="kt">Address</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="kr">do</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="n">addrFirstName</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrLastName</span>
+    <span class="n">putLn</span> <span class="n">addrLine1</span>
+    <span class="n">whenJust</span> <span class="n">addrLine2</span> <span class="n">putLn</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="n">addrCity</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;, &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">addrPostalCode</span>
+
+<span class="c1">-- ppOrder omitted</span>
+</pre></div>
+
+
+<p>Unfortunately, a bare <code>Writer</code> like this can only work for pure code,
+which isn&#8217;t a luxury we can expect in every situtation.
+In my case, some of the printing logic was tied pretty strongly to <code>IO</code>,
+and it would be difficult and time consuming to decouple&nbsp;it.</p>
+<p>Thankfully, the reliance on <code>IO</code> isn&#8217;t a complete deal breaker.
+While we cannot ensure that nothing calls <code>putStrLn</code> anymore,
+we can provide the <code>tell</code>/<code>putLn</code> capabilities alongside whatever <em>other</em> <code>IO</code> calls
+our code has to make (for&nbsp;now).</p>
+<p>To achieve that, we need to create a <em>monad stack</em> with <code>WriterT</code>:</p>
+<div class="highlight"><pre><span class="kr">newtype</span> <span class="kt">WriterT</span> <span class="n">w</span> <span class="n">m</span> <span class="n">a</span> <span class="ow">=</span> <span class="o">...</span> <span class="c1">-- omitted</span>
+</pre></div>
+
+
+<p><code>WriterT</code> is a <em>monad transformer</em>, one of those scary Haskell concepts
+that are actually simpler than they appear on the surface.
+This is because transfomers like <code>WriterT</code> are mere wrappers.
+The only difference between it and a regular <code>Writer</code> is the additional <code>m</code> parameter,
+which is the <em>inner monad</em> we&#8217;re packaging inside a new <code>Writer</code>.</p>
+<p>Here (and in many other cases), <code>m</code> will be substituted with <code>IO</code>:</p>
+<div class="highlight"><pre><span class="kr">type</span> <span class="kt">Printer</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">WriterT</span> <span class="kt">Text</span> <span class="kt">IO</span> <span class="n">a</span>  <span class="c1">-- w == Text, m == IO</span>
+</pre></div>
+
+
+<p>thus creating the titular <code>Printer</code> monad.
+This hybrid beast can both output <code>Text</code> through the <code>Writer</code> <span class="caps">API</span>,
+as well as perform any additional <code>IO</code> operations
+that the code may (still)&nbsp;require.</p>
+<p>Below is an example;
+the <code>User</code> record requires an I/O call to get the size of its <code>$HOME</code> directory:</p>
+<div class="highlight"><pre><span class="kr">import</span> <span class="nn">Control.Monad.IO.Class</span> <span class="p">(</span><span class="nf">liftIO</span><span class="p">)</span>
+<span class="kr">import</span> <span class="nn">System.Directory</span> <span class="p">(</span><span class="nf">getFileSize</span><span class="p">)</span>
+
+<span class="c1">-- To print this data type nicely, we sadly require I/O :(</span>
+<span class="kr">data</span> <span class="kt">User</span> <span class="ow">=</span> <span class="kt">User</span> <span class="p">{</span> <span class="n">usrName</span> <span class="ow">::</span> <span class="kt">Text</span>
+                 <span class="p">,</span> <span class="n">usrHomeDir</span> <span class="ow">::</span> <span class="kt">FilePath</span>
+                 <span class="p">}</span>
+
+<span class="nf">ppUser</span> <span class="ow">::</span> <span class="kt">User</span> <span class="ow">-&gt;</span> <span class="kt">IO</span> <span class="kt">Text</span>
+<span class="nf">ppUser</span> <span class="kt">User</span><span class="p">{</span><span class="o">..</span><span class="p">}</span> <span class="ow">=</span> <span class="n">snd</span> <span class="o">&lt;$&gt;</span> <span class="n">runWriterT</span> <span class="o">$</span> <span class="kr">do</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="s">&quot;Name: &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">usrName</span>
+    <span class="n">homeSize</span> <span class="ow">&lt;-</span> <span class="n">liftIO</span> <span class="o">$</span> <span class="n">getFileSize</span> <span class="n">usrHomeDir</span>
+    <span class="n">putLn</span> <span class="o">$</span> <span class="s">&quot;$HOME: &quot;</span> <span class="o">&lt;&gt;</span> <span class="n">showt</span> <span class="n">usrHomeDir</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;(&quot;</span> <span class="o">&lt;&gt;</span> <span class="n">showt</span> <span class="n">homeSize</span> <span class="o">&lt;&gt;</span> <span class="s">&quot; bytes)&quot;</span>
+</pre></div>
+
+
+<p>As a bit of necessary cruft,
+we have to use <code>liftIO</code> to &#8220;lift&#8221; (wrap) <code>IO</code> actions such as <code>getFileSize</code>
+in a full <code>Printer</code> monad before executing them.
+Besides everything else you can think of,
+this is yet another argument for eventually getting rid of the <code>IO</code> :)</p>
+<h4>Making the monads&nbsp;coexist</h4>
+<p>But our job isn&#8217;t done yet.
+Despite looking very reasonable, this version of <code>ppUser</code> doesn&#8217;t actually compile!
+The actual type error may vary a little,
+but it all boils down to a difference between <code>WriterT Text IO ()</code> (i.e. <code>Printer ()</code>)
+and <code>Writer Text ()</code> at each call site of <code>putLn</code>.</p>
+<p><span class="caps">GHC</span> is obviously correct.
+However, the problem lies not in how we&#8217;re calling <code>putLn</code>,
+but rather the way it&#8217;s been&nbsp;defined:</p>
+<div class="highlight"><pre><span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Writer</span> <span class="kt">Text</span> <span class="nb">()</span>
+</pre></div>
+
+
+<p>This type can only produce a specific, <em>pure</em> <code>Writer</code> action.
+But to fit inside the <code>do</code> block of our compound monad,
+we need the <code>Writer</code> + <code>IO</code> combo from <code>WriterT Text IO</code> (i.e. <code>Printer</code>).</p>
+<p>We can try to address the mismatch by changing the signature&nbsp;to:</p>
+<div class="highlight"><pre><span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">WriterT</span> <span class="kt">Text</span> <span class="kt">IO</span> <span class="nb">()</span>  <span class="c1">-- or just: Printer ()</span>
+</pre></div>
+
+
+<p>but this will only result in the <em>opposite</em> problem.
+Now, all the pure printers like <code>ppAddress</code> are facing the fact
+that <code>putLn</code> is a (wrapped) <code>IO</code> action, despite not actually doing any I/O&nbsp;whatsoever.</p>
+<p>The obvious question is, can we have something that fits <em>both</em>?</p>
+<p>Earlier on, I&#8217;ve said that both vanilla <code>Writer</code> and the <code>IO</code>-spruced <code>Printer</code> support the &#8220;<code>Writer</code> <span class="caps">API</span>&#8221;,
+most notably the <code>tell</code> function.
+This notion of a &#8220;monadic interface&#8221; isn&#8217;t just hand-waving, though,
+and Haskell (obviously!) provides a way to express it&nbsp;programmatically.</p>
+<p>Meet the <code>MonadWriter</code> typeclass:</p>
+<div class="highlight"><pre><span class="kr">class</span> <span class="p">(</span><span class="kt">Monad</span> <span class="n">m</span><span class="p">,</span> <span class="kt">Monoid</span> <span class="n">w</span><span class="p">)</span> <span class="ow">=&gt;</span> <span class="kt">MonadWriter</span> <span class="n">w</span> <span class="n">m</span>
+</pre></div>
+
+
+<p>Any monad that can work as a <code>Writer</code> will be an instance of it,
+regardless of whether it wraps over <code>IO</code> or anything else.
+Functions like <code>tell</code> are defined to be
+<a href="http://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Writer-Class.html#v:tell">polymorphic over it</a>,
+enabling us to leverage the same technique they use when we define <code>putLn</code>:</p>
+<div class="highlight"><pre><span class="cm">{-# LANGUAGE FlexibleContexts #-}</span>
+
+<span class="kr">import</span> <span class="nn">Control.Monad.Writer.Class</span>
+
+<span class="nf">putLn</span> <span class="ow">::</span> <span class="kt">MonadWriter</span> <span class="kt">Text</span> <span class="n">m</span> <span class="ow">=&gt;</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="n">m</span> <span class="nb">()</span>
+<span class="nf">putLn</span> <span class="n">line</span> <span class="ow">=</span> <span class="n">tell</span> <span class="o">$</span> <span class="n">line</span> <span class="o">&lt;&gt;</span> <span class="s">&quot;</span><span class="se">\n</span><span class="s">&quot;</span>
+</pre></div>
+
+
+<p>If you aren&#8217;t very familiar with this syntax,
+the part before <code>=&gt;</code> is a <em>typeclass constraint</em>, or <em>context</em>.
+It defines the requirements to be satisfied by types
+which are later used in the function&nbsp;signature.</p>
+<p>Here, we request a <code>MonadWriter</code> instance &#8212; one where <code>Text</code> is the output
+but <em>anything</em> can be the inner monad.
+We refer to that unknown monad only as <code>m</code>, a type variable.
+The compiler will figure out what to substitute for it <em>at every call site</em> of <code>putLn</code>.</p>
+<p>As a result, both a pure <code>Writer</code> and the <code>IO</code>-bound <code>Printer</code> can now use it.
+In the second case, the relevant instance of <code>MonadWriter</code> will,
+naturally, have <code>IO</code> fill in the <code>m</code> position.</p>
+<p>But curiously, the &#8220;pure&#8221; <code>Writer</code> also has
+<a href="http://hackage.haskell.org/package/base-4.9.1.0/docs/Data-Functor-Identity.html#t:Identity">an inner monad</a>.
+It just literally <em>does nothing</em> but wrap some other&nbsp;value:</p>
+<div class="highlight"><pre><span class="kr">newtype</span> <span class="kt">Identity</span> <span class="n">a</span> <span class="ow">=</span> <span class="kt">Identity</span> <span class="p">{</span> <span class="n">runIdentity</span> <span class="ow">::</span> <span class="n">a</span> <span class="p">}</span>
+</pre></div>
+
+
+<p>In most cases, this fact is hidden behind
+<a href="http://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Writer-Lazy.html#t:Writer">the real definition of <code>Writer</code></a>,
+though <code>runIdentity</code> may sometimes come handy for some on-the-spot type hacks<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.</p>
+<h4>The&nbsp;wrap</h4>
+<p>The many things we&#8217;ve talked about here could of course be a starting point
+for even more advanced stuff, but obviously we have to stop somewhere!
+But don&#8217;t worry: knowing about <code>MonadWriter</code> and other monad typeclasses like this
+is enough to write quite idiomatic&nbsp;code&#8230;</p>
+<p>&#8230;at least until you learn about
+<a href="http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html">free monads</a>,
+<a href="https://ocharles.org.uk/blog/posts/2013-12-04-24-days-of-hackage-extensible-effects.html">effects</a>,
+and the like&nbsp;;-)</p>
+<p>In any case, you can check <a href="https://gist.github.com/Xion/74c39b65c591ae9615b7cf81e88a5946">this gist</a>
+for the complete code from this&nbsp;post.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p><code>IO</code> is still necessary due to ad-hoc network fetches and syscalls mentioned earlier.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Or at least an <code>Applicative</code>, via the <code>ApplicativeDo</code> <span class="caps">GHC</span> extension.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>The adding is done via <code>mappend</code>, requiring <code>w</code> to be a <code>Monoid</code>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>There is also the <code>execWriter</code> variant which is actually more practical here
+  as it only returns the accumulated output.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>We could, for example, use it alongside <code>mapWriterT</code> to &#8220;fix&#8221; the calls to <code>putLn</code>
+  if we didn&#8217;t have control over its definition.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
+    <h2><a href="http://xion.io/post/code/rust-extension-traits.html#rust-extension-traits">Extension traits in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Tue 20 June 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/c.html">C#</a>,      <a href="http://xion.io/tag/methods.html">methods</a>,      <a href="http://xion.io/tag/extension-methods.html">extension methods</a>,      <a href="http://xion.io/tag/traits.html">traits</a>      &#8226; <a href="http://xion.io/post/code/rust-extension-traits.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In a few object-oriented languages,
+it is possible to add methods to a class <em>after</em> it&#8217;s already been&nbsp;defined.</p>
+<p>This feature arises quite naturally if the language has a dynamic type system
+that&#8217;s modifiable at runtime.
+In those cases, even <em>replacing</em> existing methods is perfectly possible<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>In addition to that,
+some statically typed languages &#8212; most notably in C# &#8212;
+offer <em>extension methods</em> as a <a href="cs-ext-methods">dedicated feature</a> of their type systems.
+The premise is that you would write standalone functions whose
+first argument is specially designated (usually by <code>this</code> keyword)
+as a receiver of the resulting method&nbsp;call:</p>
+<div class="highlight"><pre><span class="k">public</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">WordCount</span><span class="p">(</span><span class="k">this</span> <span class="n">String</span> <span class="n">str</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="n">str</span><span class="p">.</span><span class="n">Split</span><span class="p">(</span><span class="k">new</span> <span class="kt">char</span><span class="p">[]</span> <span class="p">{</span> <span class="sc">&#39; &#39;</span><span class="p">,</span> <span class="sc">&#39;.&#39;</span><span class="p">,</span> <span class="sc">&#39;?&#39;</span> <span class="p">},</span>
+                     <span class="n">StringSplitOptions</span><span class="p">.</span><span class="n">RemoveEmptyEntries</span><span class="p">).</span><span class="n">Length</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>At the call site,
+the new method is indistinguishable from any of the existing&nbsp;ones:</p>
+<div class="highlight"><pre><span class="kt">string</span> <span class="n">s</span> <span class="p">=</span> <span class="s">&quot;Alice has a cat.&quot;</span><span class="p">;</span>
+<span class="kt">int</span> <span class="n">n</span> <span class="p">=</span> <span class="n">s</span><span class="p">.</span><span class="n">WordCount</span><span class="p">();</span>
+</pre></div>
+
+
+<p>That&#8217;s assuming you have imported both the original class
+(or it&#8217;s a built-in like <code>String</code>),
+as well as the module in which the extension method is&nbsp;defined.</p>
+<h4>Rewrite it in&nbsp;Rust</h4>
+<p>The curious thing about <a href="http://rust-lang.org">Rust</a>&#8216;s type system is
+that it permits extension methods solely as a side effect of its core building block: <em>traits</em>.</p>
+<p>In this post, I&#8217;m going to describe a certain design pattern in Rust
+which involves third-party types and user-defined traits.
+Several popular crates &#8212;
+like <a href="https://docs.rs/itertools">itertools</a> or <a href="https://docs.rs/unicode-normalization/">unicode-normalization</a> &#8212;
+utilize it very successfully to add new, useful methods to the language standard&nbsp;types.</p>
+<p>I&#8217;m not sure if this pattern has an official or widely accepted name.
+Personally, I&#8217;ve taken to calling it <strong>extension traits</strong>.</p>
+<p>Let&#8217;s have a look at how they are commonly&nbsp;implemented.</p>
+<h4>Ingredients</h4>
+<p>We can use the extension trait pattern if we want to have additional methods in a type
+that we don&#8217;t otherwise control (or don&#8217;t want to&nbsp;modify).</p>
+<p>Common cases&nbsp;include:</p>
+<ul>
+<li>Rust standard library types, like <code>Result</code>, <code>String</code>,
+  or anything else inside the <code>std</code> namespace</li>
+<li>types imported from <a href="https://crates.io">third-party&nbsp;libraries</a></li>
+<li>types from the current crate if additional methods only make sense in certain scenarios
+  (e.g. conditional compilation / testing)<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup></li>
+</ul>
+<p>The crux of this technique is really simple.
+Like with most design patterns, however,
+it involves a certain degree of boilerplate and&nbsp;duplication.</p>
+<p>So without further ado&#8230;
+In order to &#8220;patch&#8221; some new method(s) into an external type you will need&nbsp;to:</p>
+<ol>
+<li>Define a trait with signatures of all the methods you want to&nbsp;add.</li>
+<li>Implement it for the external&nbsp;type.</li>
+<li><em>There is no step three</em>.</li>
+</ol>
+<p>As an important note on the usage side,
+the calling code needs to <em>import your new trait</em> in addition to the external type.
+Once that&#8217;s done, it can proceed to use the new methods is if they were there to begin&nbsp;with.</p>
+<p>I&#8217;m sure you are keen on seeing some&nbsp;examples!</p>
+<h4>Broadening your <code>Option</code>s</h4>
+<p>We&#8217;re going to add two new methods to Rust&#8217;s <a href="https://doc.rust-lang.org/std/option/enum.Option.html">standard <code>Option</code> type</a>.
+The goal is to make it more convenient to operate on mutable <code>Option</code>s
+by allowing to easily replace an existing value with another one<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>Here&#8217;s the appropriate extension trait<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>:</p>
+<div class="highlight"><pre><span class="c-Doc">/// Additional mutation methods for `Option`.</span>
+<span class="k">pub</span><span class="w"> </span><span class="k">trait</span><span class="w"> </span><span class="n">OptionMutExt</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c-Doc">/// Replace the existing `Some` value with a new one.</span>
+<span class="w">    </span><span class="c-Doc">///</span>
+<span class="w">    </span><span class="c-Doc">/// Returns the previous value if it was present, or `None` if no replacement was made.</span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">val</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">;</span><span class="w"></span>
+
+<span class="w">    </span><span class="c-Doc">/// Replace the existing `Some` value with the result of given closure.</span>
+<span class="w">    </span><span class="c-Doc">///</span>
+<span class="w">    </span><span class="c-Doc">/// Returns the previous value if it was present, or `None` if no replacement was made.</span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">replace_with</span><span class="o">&lt;</span><span class="n">F</span><span class="o">:</span><span class="w"> </span><span class="n">FnOnce</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="o">:</span><span class="w"> </span><span class="n">F</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>It may feel at little bit weird to implement it.<br>
+You will basically have to pretend you are <em>inside the <code>Option</code> type itself</em>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="n">OptionMutExt</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">replace</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">val</span><span class="o">:</span><span class="w"> </span><span class="n">T</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">replace_with</span><span class="p">(</span><span class="n">move</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">val</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">replace_with</span><span class="o">&lt;</span><span class="n">F</span><span class="o">:</span><span class="w"> </span><span class="n">FnOnce</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">T</span><span class="o">&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="o">:</span><span class="w"> </span><span class="n">F</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">is_some</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="kd">let</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">take</span><span class="p">();</span><span class="w"></span>
+<span class="w">            </span><span class="o">*</span><span class="bp">self</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">f</span><span class="p">());</span><span class="w"></span>
+<span class="w">            </span><span class="n">result</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="nb">None</span><span class="w"></span>
+<span class="w">        </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Unfortunately, this is just an illusion.
+Extension traits grant no special powers
+that&#8217;d allow you to bypass any of the regular visibility rules.
+All you can use inside the new methods is still
+just the <em>public interface</em> of the type you&#8217;re augmenting (here, <code>Option</code>).</p>
+<p>In our case, however, this is good enough,
+mostly thanks to <a href="option_take">the recently introduced <code>Option::take</code></a>.</p>
+<p>To use our shiny new methods in other places,
+all we have to do is import the extension&nbsp;trait:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">ext</span><span class="o">::</span><span class="n">rust</span><span class="o">::</span><span class="n">OptionMutExt</span><span class="p">;</span><span class="w">  </span><span class="c1">// assuming you put it in ext/rust.rs</span>
+
+<span class="c1">// ...somewhere...</span>
+<span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">opt</span><span class="o">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="kt">u32</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">...;</span><span class="w"></span>
+<span class="k">match</span><span class="w"> </span><span class="n">opt</span><span class="p">.</span><span class="n">replace</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">debug</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Option had a value of {} before replacement&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="nb">None</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="nb">None</span><span class="p">,</span><span class="w"> </span><span class="n">opt</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>It doesn&#8217;t matter where it was defined either,
+meaning we can ship it away to <a href="https://crates.io">crates.io</a>
+and let it accrue as many happy users as <code>Itertools</code> has&nbsp;;-)</p>
+<h4>Are you <code>hyper::Body</code> ready?</h4>
+<p>Our second example will demonstrate attaching more methods to a third-party&nbsp;type.</p>
+<p>Last week, there was a new release of <a href="https://hyper.rs/">Hyper</a>,
+a popular Rust framework for <span class="caps">HTTP</span> servers <span class="amp">&amp;</span> clients.
+It was notable because it marked a switch from synchronous, straightforward <span class="caps">API</span>
+to a more complex, asynchronous one
+(which I incidentally <a href="http://xion.io/post/programming/rust-async-closer-look.html">wrote about a few weeks ago</a>).</p>
+<p>Predictably, <a href="https://www.reddit.com/r/rust/comments/6hksa0/problems_with_understanding_hypers_async/">there has been some confusion</a>
+among its new and existing&nbsp;users.</p>
+<p>We&#8217;re going to help by pinning a more convenient interface on
+<a href="https://hyper.rs/hyper/master/hyper/struct.Body.html">hyper&#8217;s <code>Body</code> type</a>.
+<code>Body</code> here is a struct representing the content of an <span class="caps">HTTP</span> request or response.
+After the &#8216;asyncatastrophe&#8217;,
+it doesn&#8217;t allow to access the raw incoming bytes as easily as it did&nbsp;before.</p>
+<p>Thanks to extension traits, we can fix this rather&nbsp;quickly:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">error</span><span class="o">::</span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="kn">use</span><span class="w"> </span><span class="n">futures</span><span class="o">::</span><span class="p">{</span><span class="n">BoxFuture</span><span class="p">,</span><span class="w"> </span><span class="n">future</span><span class="p">,</span><span class="w"> </span><span class="n">Future</span><span class="p">,</span><span class="w"> </span><span class="n">Stream</span><span class="p">};</span><span class="w"></span>
+<span class="kn">use</span><span class="w"> </span><span class="n">hyper</span><span class="o">::</span><span class="p">{</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">Body</span><span class="p">};</span><span class="w"></span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">trait</span><span class="w"> </span><span class="n">BodyExt</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c-Doc">/// Collect all the bytes from all the `Chunk`s from `Body`</span>
+<span class="w">    </span><span class="c-Doc">/// and return it as `Vec&lt;u8&gt;`.</span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">BoxFuture</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="kt">u8</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">hyper</span><span class="o">::</span><span class="n">Error</span><span class="o">&gt;</span><span class="p">;</span><span class="w"></span>
+
+<span class="w">    </span><span class="c-Doc">/// Collect all the bytes from all the `Chunk`s from `Body`,</span>
+<span class="w">    </span><span class="c-Doc">/// decode them as UTF8, and return the resulting `String`.</span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_string</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">BoxFuture</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Box</span><span class="o">&lt;</span><span class="n">Error</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">Send</span><span class="o">&gt;&gt;</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">impl</span><span class="w"> </span><span class="n">BodyExt</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">Body</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_bytes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">BoxFuture</span><span class="o">&lt;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="kt">u8</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">hyper</span><span class="o">::</span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">concat</span><span class="p">()</span><span class="w"></span>
+<span class="w">            </span><span class="p">.</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">bytes</span><span class="o">|</span><span class="w"> </span><span class="n">future</span><span class="o">::</span><span class="n">ok</span><span class="o">::&lt;</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">hyper</span><span class="o">::</span><span class="n">Error</span><span class="o">&gt;</span><span class="p">(</span><span class="n">bytes</span><span class="p">.</span><span class="n">to_vec</span><span class="p">()))</span><span class="w"></span>
+<span class="w">            </span><span class="p">.</span><span class="n">boxed</span><span class="p">()</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_string</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">BoxFuture</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Box</span><span class="o">&lt;</span><span class="n">Error</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">Send</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">into_bytes</span><span class="p">()</span><span class="w"></span>
+<span class="w">            </span><span class="p">.</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">Box</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">Box</span><span class="o">&lt;</span><span class="n">Error</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">Send</span><span class="o">&gt;</span><span class="p">)</span><span class="w"></span>
+<span class="w">            </span><span class="p">.</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">bytes</span><span class="o">|</span><span class="w"> </span><span class="n">String</span><span class="o">::</span><span class="n">from_utf8</span><span class="p">(</span><span class="n">bytes</span><span class="p">)</span><span class="w"></span>
+<span class="w">                </span><span class="p">.</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">Box</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="n">Box</span><span class="o">&lt;</span><span class="n">Error</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">Send</span><span class="o">&gt;</span><span class="p">))</span><span class="w"></span>
+<span class="w">            </span><span class="p">.</span><span class="n">boxed</span><span class="p">()</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>With these new methods in hand,
+it is relatively straightforward to implement, say, a simple character-counting&nbsp;service:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">error</span><span class="o">::</span><span class="n">Error</span><span class="p">;</span><span class="w"></span>
+
+<span class="kn">use</span><span class="w"> </span><span class="n">futures</span><span class="o">::</span><span class="p">{</span><span class="n">BoxFuture</span><span class="p">,</span><span class="w"> </span><span class="n">future</span><span class="p">,</span><span class="w"> </span><span class="n">Future</span><span class="p">};</span><span class="w"></span>
+<span class="kn">use</span><span class="w"> </span><span class="n">hyper</span><span class="o">::</span><span class="n">server</span><span class="o">::</span><span class="p">{</span><span class="n">Service</span><span class="p">,</span><span class="w"> </span><span class="n">Request</span><span class="p">,</span><span class="w"> </span><span class="n">Response</span><span class="p">};</span><span class="w"></span>
+
+<span class="kn">use</span><span class="w"> </span><span class="n">ext</span><span class="o">::</span><span class="n">hyper</span><span class="o">::</span><span class="n">BodyExt</span><span class="p">;</span><span class="w">  </span><span class="c1">// assuming the above is in ext/hyper.rs</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="n">Length</span><span class="p">;</span><span class="w"></span>
+<span class="k">impl</span><span class="w"> </span><span class="n">Service</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">Length</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">type</span><span class="w"> </span><span class="n">Request</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Request</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">type</span><span class="w"> </span><span class="n">Response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Response</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">type</span><span class="w"> </span><span class="n">Error</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Box</span><span class="o">&lt;</span><span class="n">Error</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">Send</span><span class="o">&gt;</span><span class="p">;</span><span class="w"></span>
+<span class="w">    </span><span class="k">type</span><span class="w"> </span><span class="n">Future</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">BoxFuture</span><span class="o">&lt;</span><span class="n">Self</span><span class="o">::</span><span class="n">Response</span><span class="p">,</span><span class="w"> </span><span class="n">Self</span><span class="o">::</span><span class="n">Error</span><span class="o">&gt;</span><span class="p">;</span><span class="w"></span>
+
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">call</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="o">:</span><span class="w"> </span><span class="n">Request</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Self</span><span class="o">::</span><span class="n">Future</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">body</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="n">deconstruct</span><span class="p">();</span><span class="w"></span>
+<span class="w">        </span><span class="n">body</span><span class="p">.</span><span class="n">into_string</span><span class="p">().</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">s</span><span class="o">|</span><span class="w"> </span><span class="n">future</span><span class="o">::</span><span class="n">ok</span><span class="p">(</span><span class="w"></span>
+<span class="w">            </span><span class="n">Response</span><span class="o">::</span><span class="n">new</span><span class="p">().</span><span class="n">with_body</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">len</span><span class="p">().</span><span class="n">to_string</span><span class="p">())</span><span class="w"></span>
+<span class="w">        </span><span class="p">)).</span><span class="n">boxed</span><span class="p">()</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Replacing <code>Box&lt;Error + Send&gt;</code> with an idiomatic <a href="https://docs.rs/crate/derive-error/">error enum</a>
+is left as an exercise for the reader&nbsp;:)</p>
+<h4>Extra credit bonus&nbsp;explanation</h4>
+<p><small>Reading this section is not necessary to use extension traits.</small></p>
+<p>So far, we have seen what extension traits are capable of.
+It is only right to mention what they <em>cannot do</em>.</p>
+<p>Indeed, this technique has some limitations.
+They are a conscious choice on the part of Rust authors,
+and they were decided upon in an effort to keep the type system <em>coherent</em>.</p>
+<p>Coherence isn&#8217;t an everyday topic in Rust,
+but it becomes important when working with traits and types that cross package boundaries.
+Rules of trait coherence
+(described briefly towards the end of <a href="coherence-in-book">this section of the Rust book</a>)
+state that the following combinations of &#8220;local&#8221; (this crate) and &#8220;external&#8221; (other crates<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>) are&nbsp;legal:</p>
+<ul>
+<li>implement a <em>local</em> trait for a <em>local</em> type.<br>
+  This is common in larger programs that use polymorphic&nbsp;abstractions.</li>
+<li>implement an <em>external</em> trait for a <em>local</em> type.<br>
+  We do this often to integrate with third-party libraries and frameworks,
+  just like with <code>hyper</code> above.</li>
+<li>implement a <em>local</em> trait for an <em>external</em> type.<br>
+  That&#8217;s extension traits for&nbsp;you!</li>
+</ul>
+<p>What is <em>not</em> possible, however, is&nbsp;to:</p>
+<ul>
+<li>implement an <em>external</em> trait for an <em>external</em>&nbsp;type</li>
+</ul>
+<p>This case is prohibited in order to make the choice of trait implementations more predictable,
+both for the compiler and for the programmer.
+Without this rule in place, you could introduce many instances of <code>impl Trait for Type</code>
+(same <code>Trait</code> and same <code>Type</code>),
+each one with different functionality,
+leaving the compiler to &#8220;guess&#8221; the right <code>impl</code> for any given situation<sup id="fnref:6"><a class="footnote-ref" href="#fn:6" rel="footnote">6</a></sup>.</p>
+<p>The decision was thus made to disallow the <code>impl ExternalTrait for ExternalType</code> case altogether.
+If you like, you can read <a href="rust-orphans">some more extensive backstory</a> behind&nbsp;it.</p>
+<p>Bear in mind, however, that this isn&#8217;t the unequivocally &#8220;correct&#8221; solution.
+<a href="hs-orphans">Some languages</a> choose to allow this so-called <em>orphan</em> case,
+and try to resolve the potential ambiguities in various different ways.
+It is a genuinely useful feature, too, as it makes easier it to glue together two unrelated libraries<sup id="fnref:7"><a class="footnote-ref" href="#fn:7" rel="footnote">7</a></sup>.</p>
+<p>Thankfully for extension traits,
+the coherence restriction doesn&#8217;t apply as long as you keep those traits and their <code>impl</code>s in the same&nbsp;crate.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>This practice is often referred to as <em>monkeypatching</em>, especially in Python and Ruby.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>In this case, a more common solution is to just open another <code>impl Foo</code> block,
+annotated with <code>#[cfg(test)]</code> or similar.
+An extension trait, however, makes it easier
+to extract <code>Foo</code> into a separate crate along with some handy, test-only <span class="caps">API</span>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>Note that this is <em>not</em> the same as the unstable (as of 1.18) <code>Option</code> methods
+guarded behind <a href="https://github.com/rust-lang/rust/issues/39288">the <code>options_entry</code> feature gate</a>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>My own convention is to call those traits <code>FooExt</code>
+if they are meant to enhance the interface of type <code>Foo</code>.
+The other practice is to mirror the name of the crate that the trait is packaged in;
+both <code>Itertools</code> and <code>UnicodeNormalization</code> are examples of this style.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>Standard library (<code>std</code> or <code>core</code> namespaces) counts as external crate for this purpose.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+<li id="fn:6">
+<p>Or throw an error. However, trait <code>impl</code>s are always imported implicitly,
+so this could essentially prevent some combination of different modules/libraries in the ecosystem from being used together,
+and generally create an unfathomable mess.&#160;<a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text">&#8617;</a></p>
+</li>
+<li id="fn:7">
+<p>The usual workaround for coherence/orphan rules in Rust involves creating a wrapper
+around the external type in order to make it &#8220;local&#8221;, and therefore allow external trait <code>impl</code>s for it.
+This is called <a href="https://github.com/rust-unofficial/patterns/blob/master/patterns/newtype.md">the <em>newtype</em> pattern</a>
+and there are <a href="https://docs.rs/newtype_derive">some crates</a> to support it.&#160;<a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/rust-into-haskell.html#rust-into-haskell">Rust as a gateway drug to&nbsp;Haskell</a></h2>
     <p>
       Posted on Tue 13 June 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -1565,390 +2176,6 @@ of <code>let</code> which is often used to explain lifetimes and borrowing.&#160
 <p>Unfortunately, Rust isn&#8217;t currently capable of proving that the pattern is irrefutable in all obvious cases.
 For example, <code>let Some(x) = Some(42);</code> will be rejected due to the existence of a <code>None</code> variant in <code>Option</code>,
 even though it isn&#8217;t actually used in the (constant) expression on the right.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-unit-test-placement.html#rust-unit-test-placement">Better location for unit tests in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Fri 06 January 2017 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/unit-tests.html">unit tests</a>,      <a href="http://xion.io/tag/testing.html">testing</a>,      <a href="http://xion.io/tag/modules.html">modules</a>      &#8226; <a href="http://xion.io/post/code/rust-unit-test-placement.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>For a unit test to be comprehensive,
-it must often access some private symbols from the module it&nbsp;checks.</p>
-<p>In Rust, this is permitted for submodules:
-they can freely refer to anything defined &#8220;upwards&#8221; in the module hierarchy.
-The only requirement is that they import it explicitly by name,
-using statements such as <code>use super::foo</code>.</p>
-<p>To illustrate this,
-here&#8217;s an <a href="https://is.gd/xTgUEd">example</a>
-of a ridiculously well-factored <a href="http://wiki.c2.com/?FizzBuzzTest">FizzBuzz</a>
-along with its accompanying unit&nbsp;test:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">borrow</span><span class="o">::</span><span class="n">Cow</span><span class="p">;</span><span class="w"></span>
-
-<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">fizzbuzz</span><span class="p">(</span><span class="n">n</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mf">1.</span><span class="p">.</span><span class="n">n</span><span class="o">+</span><span class="mi">1</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="n">i</span><span class="p">));</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="n">i</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Cow</span><span class="o">&lt;</span><span class="nl">&#39;static</span><span class="p">,</span><span class="w"> </span><span class="kt">str</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">by3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">by5</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">by3</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">by5</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;FizzBuzz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">by3</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Fizz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">by5</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Buzz&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="k">else</span><span class="w">          </span><span class="p">{</span><span class="w"> </span><span class="n">format</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">i</span><span class="p">).</span><span class="n">into</span><span class="p">()</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-
-<span class="cp">#[cfg(test)]</span><span class="w"></span>
-<span class="kn">mod</span><span class="w"> </span><span class="n">tests</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kn">use</span><span class="w"> </span><span class="n">super</span><span class="o">::</span><span class="n">fizzbuzz_string</span><span class="p">;</span><span class="w"></span>
-
-<span class="w">    </span><span class="cp">#[test]</span><span class="w"></span>
-<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">single_numbers</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">1</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;2&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">2</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Fizz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">3</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Buzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">5</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;7&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">7</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Fizz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">9</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Buzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">10</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="n">assert_eq</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;FizzBuzz&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">fizzbuzz_string</span><span class="p">(</span><span class="mi">15</span><span class="p">));</span><span class="w"></span>
-<span class="w">        </span><span class="err">#</span><span class="w"> </span><span class="n">etc</span><span class="p">.</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>The internal function, as shown above, can be imported and verified independently
-of the <code>pub</code>lic one.
-This is done through a <code>#[test]</code> procedure in an inline&nbsp;submodule.</p>
-<p>Such factorization and granular testing is commonplace,
-especially when the public <span class="caps">API</span> may cause unwanted side effects,
-such as printing stuff to stdout&nbsp;here.</p>
-<h4>The issue of&nbsp;length</h4>
-<p>But if you are like me and prefer your modules to be short and sweet,
-you may feel justifiably concerned about this <em>inline</em> submodule&nbsp;business.</p>
-<p>In the toy example above,
-tests have already taken at least as many lines as the actual code.
-Real world usually <a href="https://github.com/Geal/nom/blob/80a1deab58d1faf41c05a5d741d9e3f51bde3a55/src/nom.rs#L599">matches</a> this ratio.
-A module with a couple hundred lines of regular code starts
-to be measured in <a href="https://en.wikipedia.org/wiki/Source_lines_of_code#Related_terms">KLOCs</a>
-if we also include its&nbsp;tests.</p>
-<p>While this could be taken as a strong hint to split things up,
-it can just as easily disincentivize testing&nbsp;instead.</p>
-<p>The obvious solution is to move those tests somewhere else.
-What is not so evident is how to preserve this crucial module-submodule relation,
-enabling us to write comprehensive tests in the first&nbsp;place.</p>
-<h4>Looking for&nbsp;inspiration</h4>
-<p>I must quickly disappoint anyone who would like to round up all their unit tests
-and sequester them in some distant <em>tests/</em> directory.
-Such layout is reserved for
-<a href="https://doc.rust-lang.org/book/testing.html#the-tests-directory">crate-level</a> (&#8220;integration&#8221;) tests.
-Unit tests, on the other hand, are predestined to live among production code<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>So let&#8217;s at least relocate them to separate&nbsp;files.</p>
-<p>To make this goal more concrete,
-we will try to emulate the project layout described in
-<a href="https://google.github.io/styleguide/cppguide.html#File_Names">Google&#8217;s C++ style guide</a>.
-By this convention, a conceptual &#8220;module&#8221; or &#8220;unit&#8221; consists of the following&nbsp;files:</p>
-<ul>
-<li><em>foo.h</em></li>
-<li><em>foo.cc</em></li>
-<li><em>foo_test.cc</em></li>
-</ul>
-<p>Translating this to Rust, we&nbsp;get:</p>
-<ul>
-<li><em>foo.rs</em></li>
-<li><em>foo_test.rs</em></li>
-</ul>
-<p>The first one is obviously our production code.
-The second file, <em>foo_test.rs</em>,
-contains all the tests we would previously put in the <code>mod tests { }</code> construct.</p>
-<p>Seems pretty clean and straightforward, right?
-Unfortunately, Rust will not accept this setup without some&nbsp;convincing.</p>
-<h4>Family&nbsp;problems</h4>
-<p>To understand why,
-recall that the mere presence of some <em>.rs</em> files
-is not enough for the Rust compiler to care.
-If we want them picked up and included in the project,
-we also need to add some <em>module declarations</em>&nbsp;first.</p>
-<p>In other words, there must also be a <em>mod.rs</em> file in this directory,
-containing at the very least the following&nbsp;content:</p>
-<div class="highlight"><pre><span class="c1">// (mod.rs)</span>
-
-<span class="kn">mod</span><span class="w"> </span><span class="n">foo</span><span class="p">;</span><span class="w"></span>
-<span class="cp">#[cfg(test)]</span><span class="w"></span>
-<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>Now it should be clearer that something is&nbsp;wrong.</p>
-<p>We got two modules here, but they are <em>siblings</em>.
-Both <code>foo</code> and <code>foo_test</code> are on the same level,
-children of whatever parent module contains them both.
-More to the point, it&#8217;s <code>foo_test</code> that&#8217;s not a child module of <code>foo</code>,
-meaning it can only see the <code>pub</code>lic symbols of the&nbsp;latter.</p>
-<p>This is not quite enough to write a proper unit test.
-It definitely isn&#8217;t for our initial FizzBuzz example,
-because the <code>fizzbuzz_string</code> function cannot even be&nbsp;imported!</p>
-<h4>Existential&nbsp;crises</h4>
-<p>Okay, so how about we move the <code>mod foo_test;</code> declaration to <em>foo.rs</em>?
-This should be enough to establish the proper hierarchy.
-After all, this is how the module tree is
-<a href="https://doc.rust-lang.org/book/crates-and-modules.html#defining-modules">normally reconstructed</a>:
-from the appropriate placement of the <code>mod</code> statements.</p>
-<p>So, here we&nbsp;go:</p>
-<div class="highlight"><pre><span class="c1">// (foo.rs)</span>
-
-<span class="cp">#[cfg(test)]</span><span class="w"></span>
-<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>error: cannot declare a new module at this location
-  --&gt; src/parent/foo.rs:4:5
-   |
- 4 | mod foo_test;
-</pre></div>
-
-
-<p>&#8230;Really?</p>
-<p>Well, yes. A declaration like this simply isn&#8217;t allowed.
-The reason for this is actually much less arbitrary than the error message would&nbsp;indicate.</p>
-<p>To put it bluntly, <code>foo_test</code> simply cannot <em>exist</em> if it&#8217;s introduced there.
-To deliver on its declaration promise,
-the submodule would have to reside <em>within <code>foo</code> itself</em>.
-But of course, <em>foo.rs</em> is just a file, so this setup is evidently&nbsp;impossible.</p>
-<p>All in all, Rust seems to be looking for our module in all the wrong&nbsp;places.</p>
-<p>Perhaps we can just <em>tell it</em> where it should be going&nbsp;instead?&#8230;</p>
-<h4>The right&nbsp;path</h4>
-<p>Enter the <code>#[path]</code> attribute,
-which fulfills this exact&nbsp;purpose:</p>
-<div class="highlight"><pre><span class="c1">// (foo.rs)</span>
-
-<span class="cp">#[cfg(test)]</span><span class="w"></span>
-<span class="cp">#[path = </span><span class="s">&quot;./foo_test.rs&quot;</span><span class="cp">]</span><span class="w"></span>
-<span class="kn">mod</span><span class="w"> </span><span class="n">foo_test</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p><code>#[path]</code> tells the Rust compiler where to look for the <code>mod</code>ule it is attached to.
-Its argument is relative to the location of the outer module (like <code>foo</code> here),
-and can be either a single file, or a directory with <em>mod.rs</em>.</p>
-<p>Conceptually, this is similar to a custom <code>ClassLoader</code> in Java,
-or the common <a href="http://xion.org.pl/2012/05/06/hacking-python-imports/"><code>sys.path</code> hacks</a> in Python.
-Unlike those two languages, however,
-the <code>#[path]</code> attribute is only relevant at compile&nbsp;time.</p>
-<p>Additionally, and somewhat <a href="https://github.com/rust-lang/rust/issues/13156">confusingly</a>,
-<code>#[path]</code> can also be applied <em>retroactively</em>
-to a module that the compiler has already located.
-In such case, it will affect <a href="https://doc.rust-lang.org/reference.html#modules">the lookup of any child modules</a>
-by making <code>rustc</code> search for them in the new&nbsp;location.</p>
-<hr />
-<p>With <code>#[path]</code> handy,
-it is therefore possible to implement custom layouts
-of regular source modules and test&nbsp;files.</p>
-<p>But like with every tool that can be used to defy conventions,
-it should be used with the appropriate care.
-While a straightforward and self-documenting approach described here
-is unlikely to raise any eyebrows,
-rewriting module paths willy-nilly is most certainly a bad&nbsp;idea.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Okay, technically it <em>is</em> possible to completely isolate them,
-essentially by abusing the approach I describe later in this post.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-all-wild-imports.html#python-all-wild-imports">__all__ and wild imports in&nbsp;Python</a></h2>
-    <p>
-      Posted on Mon 26 December 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/modules.html">modules</a>,      <a href="http://xion.io/tag/imports.html">imports</a>,      <a href="http://xion.io/tag/testing.html">testing</a>      &#8226; <a href="http://xion.io/post/code/python-all-wild-imports.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>An often misunderstood piece of Python import machinery is the <code>__all__</code> attribute.
-While it is completely <em>optional</em>,
-it&#8217;s common to see modules with the <code>__all__</code> list populated&nbsp;explicitly:</p>
-<div class="highlight"><pre><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;Foo&#39;</span><span class="p">,</span> <span class="s">&#39;bar&#39;</span><span class="p">]</span>
-
-<span class="k">class</span> <span class="nc">Foo</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="c"># ...</span>
-
-<span class="k">def</span> <span class="nf">bar</span><span class="p">():</span>
-    <span class="c"># ...</span>
-
-<span class="k">def</span> <span class="nf">baz</span><span class="p">():</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>Before explaining what the real purpose of <code>__all__</code> is
-(and how it relates to the titular wild imports),
-let&#8217;s deconstruct some common misconceptions by highlighting what it <em>isn&#8217;t</em>:</p>
-<ul>
-<li>
-<p><code>__all__</code> doesn&#8217;t prevent any of the module symbols (functions, classes, etc.)
-from being <em>directly</em> imported.
-In our the example, the seemingly omitted <code>baz</code> function (which is not included in <code>__all__</code>),
-is still <em>perfectly importable</em> by writing <code>from module import baz</code>.</p>
-</li>
-<li>
-<p>Similarly, <code>__all__</code> doesn&#8217;t influence what symbols are included in the results of
-<code>dir(module)</code> or <code>vars(module)</code>. So in the case above, a <code>dir</code> call would result in a
-<code>['Foo', 'bar', 'baz']</code> list, even though <code>'baz'</code> does not occur in <code>__all__</code>.</p>
-</li>
-</ul>
-<p>In other words, the content of <code>__all__</code> is more of a convention
-rather than a strict limitation.
-Regardless of what you put there, every symbol defined in your module
-will still be accessible from the&nbsp;outside.</p>
-<p>This is a clear reflection of the common policy in Python:
-assume <a href="https://mail.python.org/pipermail/tutor/2003-October/025932.html">everyone is a consenting adult</a>,
-and that visibility controls are not necessary.
-Without an explicit <code>__all__</code> list,
-Python simply puts all of the module &#8220;public&#8221; symbols there anyway<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<h4>The meaning of it <code>__all__</code></h4>
-<p>So, what does <code>__all__</code> actually&nbsp;effect?</p>
-<p>This is neatly summed up in this brief
-<a href="http://stackoverflow.com/a/2187636/434799">StackOverflow answer</a>.
-Simply speaking, its purpose is&nbsp;twofold:</p>
-<ul>
-<li>
-<p>It tells the readers of the source code &#8212; be it humans or automated tools &#8212;
-what&#8217;s the conventional <em>public <span class="caps">API</span></em> exposed by the&nbsp;module.</p>
-</li>
-<li>
-<p>It lists names to import when performing the so-called <em>wild import</em>:
-<code>from module import *</code>.</p>
-</li>
-</ul>
-<p>Because of the default content of <code>__all__</code> that I mentioned earlier,
-the public <span class="caps">API</span> of a module can also be defined implicitly.
-Some style guides (like the <a href="https://google.github.io/styleguide/pyguide.html">Google one</a>)
-are therefore relying on the <code>public</code> and <code>_private</code> naming exclusively.
-Nevertheless, an explicit <code>__all__</code> list is still a perfectly valid option,
-especially considering that no approach offers any form of <em>actual</em> access&nbsp;control.</p>
-<h4>Import&nbsp;star</h4>
-<p>The second point, however, has some real runtime&nbsp;significance.</p>
-<p>In Python, like in many other languages,
-it is recommended to be explicit about the exact functions and classes we&#8217;re importing.
-Commonly, the <code>import</code> statement will thus take one of the following&nbsp;forms:</p>
-<div class="highlight"><pre><span class="kn">import</span> <span class="nn">random</span>
-<span class="kn">import</span> <span class="nn">urllib.parse</span>
-<span class="kn">from</span> <span class="nn">random</span> <span class="kn">import</span> <span class="n">randint</span>
-<span class="kn">from</span> <span class="nn">logging</span> <span class="kn">import</span> <span class="n">fatal</span><span class="p">,</span> <span class="n">warning</span> <span class="k">as</span> <span class="n">warn</span>
-<span class="kn">from</span> <span class="nn">urllib.parse</span> <span class="kn">import</span> <span class="n">urlparse</span>
-<span class="c"># etc.</span>
-</pre></div>
-
-
-<p>In each case, it&#8217;s easy to see the relevant <em>name</em> being imported.
-Regardless of the exact syntax and the possible presence of aliasing (<code>as</code>),
-it&#8217;s always the last (qualified) name in the <code>import</code> statement,
-before a newline or&nbsp;comma.</p>
-<p>Contrast this with an <code>import</code> that ends with an&nbsp;asterisk:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="o">*</span>
-</pre></div>
-
-
-<p>This is called a <em>star</em> or <em>wild import</em>, and it isn&#8217;t so straightforward.
-This is also the reason why using it is <a href="http://stackoverflow.com/a/3615206/434799">generally discouraged</a>,
-except for some <a href="http://stackoverflow.com/a/3615238/434799">very specific situations</a>.</p>
-<p>Why? Because you cannot easily see what exact names are being imported here.
-For that you&#8217;d have to go to the module&#8217;s source and &#8212; you guessed it &#8212;
-look at the <code>__all__</code> list<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
-<h4>Taming the&nbsp;wild</h4>
-<p>Barring some less important details,
-the mechanics of <code>import *</code> could therefore be expressed in the following Python&nbsp;(pseudo)code:</p>
-<div class="highlight"><pre><span class="kn">import</span> <span class="nn">module</span> <span class="kn">as</span> <span class="nn">__temp</span>
-<span class="k">for</span> <span class="n">__name</span> <span class="ow">in</span> <span class="n">module</span><span class="p">:</span>
-    <span class="nb">globals</span><span class="p">()[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">__temp</span><span class="p">,</span> <span class="n">__name</span><span class="p">)</span>
-<span class="k">del</span> <span class="n">__temp</span>
-<span class="k">del</span> <span class="n">__name</span>
-</pre></div>
-
-
-<p>One interesting case to consider is
-what happens when <code>__all__</code> contains a <em>wrong</em>&nbsp;name.</p>
-<p>What if one of the strings there doesn&#8217;t correspond to any name within the&nbsp;module?&#8230;</p>
-<div class="highlight"><pre><span class="c"># foo.py</span>
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;Foo&#39;</span><span class="p">]</span>
-
-<span class="k">def</span> <span class="nf">bar</span><span class="p">():</span>
-    <span class="k">pass</span>
-
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">foo</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">foo</span> <span class="kn">import</span> <span class="o">*</span>
-<span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
-  <span class="n">File</span> <span class="s">&quot;&lt;stdin&gt;&quot;</span><span class="p">,</span> <span class="n">line</span> <span class="mi">1</span><span class="p">,</span> <span class="ow">in</span> <span class="o">&lt;</span><span class="n">module</span><span class="o">&gt;</span>
-<span class="ne">AttributeError</span><span class="p">:</span> <span class="s">&#39;module&#39;</span> <span class="nb">object</span> <span class="n">has</span> <span class="n">no</span> <span class="n">attribute</span> <span class="s">&#39;Foo&#39;</span>
-</pre></div>
-
-
-<p>Quite predictably, <code>import *</code> blows up.<br>
-Notice, however, that regular import <em>still works</em>.<br></p>
-<p>All in all (ahem), this hints at a cute little trick which is also very&nbsp;self-evident:</p>
-<div class="highlight"><pre><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;DO_NOT_WILD_IMPORT&#39;</span><span class="p">]</span>
-</pre></div>
-
-
-<p>Put this in a Python module, and no one will be able to <code>import *</code> from it!<br>
-Much more effective than any lint warning ;-)<br></p>
-<h4>Test <code>__all__</code> the&nbsp;things</h4>
-<p>Jokes aside, this phenomenon (<code>__all__</code> with an out-of-place name in it) can also backfire.
-Especially when
-<a href="https://github.com/Xion/callee/blob/277add8170bd0c758f3c4a3068127e8229d2e2d1/callee/__init__.py#L31">reexporting</a>,
-it&#8217;s relatively easy to introduce stray <code>'name'</code> into <code>__all__</code>:
-one which doesn&#8217;t correspond to any <code>name</code> that&#8217;s <em>actually present</em> in the&nbsp;namespace.</p>
-<p>If we commit such a mishap, we are inadvertently lying about the public <span class="caps">API</span> of our package.
-What&#8217;s worse is that this mistake can propagate through documentation generators,
-and ultimately mislead our&nbsp;users.</p>
-<p>While some linters may be able to catch this,
-a <a href="https://github.com/Xion/callee/blob/277add8170bd0c758f3c4a3068127e8229d2e2d1/tests/test_all.py#L10">simple test</a>
-like this&nbsp;one:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">test_all</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Test that __all__ contains only names that are actually exported.&quot;&quot;&quot;</span>
-    <span class="kn">import</span> <span class="nn">yourpackage</span>
-
-    <span class="n">missing</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">yourpackage</span><span class="o">.</span><span class="n">__all__</span>
-                  <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">yourpackage</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">)</span>
-    <span class="bp">self</span><span class="o">.</span><span class="n">assertEmpty</span><span class="p">(</span>
-        <span class="n">missing</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="s">&quot;__all__ contains unresolved names: </span><span class="si">%s</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span>
-            <span class="s">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">missing</span><span class="p">),))</span>
-</pre></div>
-
-
-<p>is a quick <span class="amp">&amp;</span> easy way to ensure this never&nbsp;happens.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p><span class="dquo">&#8220;</span>Public&#8221; symbols have names that don&#8217;t begin with underscore (<code>_</code>).
-Of course, &#8220;non-public&#8221; ones are still accessible
-but are treated as implicitly unstable <span class="amp">&amp;</span> discouraged.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Or check what symbols there don&#8217;t have a leading underscore.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

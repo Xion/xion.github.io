@@ -1,5 +1,478 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2017-11-24T17:52:00+00:00</updated><entry><title>Recap of the gisht project</title><link href="http://xion.io/post/programming/gisht-recap.html" rel="alternate"></link><updated>2017-11-24T17:52:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-11-24:post/programming/gisht-recap.html</id><summary type="html">&lt;p&gt;In this post, I want to discuss some of the experiences I had with a project
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/programming.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2018-08-18T13:07:00+02:00</updated><entry><title>A Haskell retrospective</title><link href="http://xion.io/post/programming/haskell-retrospective.html" rel="alternate"></link><updated>2018-08-18T13:07:00+02:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-08-18:post/programming/haskell-retrospective.html</id><summary type="html">&lt;p&gt;Approximately a year ago,
+I had the opportunity to work on &lt;a href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/"&gt;Sigma&lt;/a&gt;
+&amp;#8212; a large, distributed system that protects Facebook users from spam and other kinds of&amp;nbsp;abuse.&lt;/p&gt;
+&lt;p&gt;One reason it was a pretty unique experience is that Sigma is almost entirely a &lt;em&gt;Haskell&lt;/em&gt; codebase.
+It was the first time I got to work with the language in a professional setting,
+so I was eager to see how it performs in a real-world, production-grade&amp;nbsp;application.&lt;/p&gt;
+&lt;p&gt;In this (rather long) post, I&amp;#8217;ll draw on this experience
+and highlight Haskell&amp;#8217;s notable features from a practical, engineering standpoint.
+In other words, I&amp;#8217;ll be interested in how much does it help with solving actual problems
+that arise in the field of software development &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt;&amp;nbsp;maintenance.&lt;/p&gt;
+&lt;h4&gt;Haskell&amp;nbsp;Who?&lt;/h4&gt;
+&lt;p&gt;Before we start, however,
+it seems necessary to clarify what &amp;#8220;Haskell&amp;#8221; are we actually talking&amp;nbsp;about.&lt;/p&gt;
+&lt;p&gt;Granted, this may be a little surprising.
+From a far-away vantage point,
+Haskell is typically discussed as a rather uniform language,
+and it is often treated as synonymous with &lt;em&gt;functional programming&lt;/em&gt; in&amp;nbsp;general.&lt;/p&gt;
+&lt;p&gt;But if you look closer, that turns out to be a bit of a misrepresentation.
+In reality, Haskell is a complex manifold of different components,
+some of which can be thought as their own sublanguages.
+Roughly speaking, Haskell
+&amp;#8212; as it&amp;#8217;s used in the industry and in the &lt;span class="caps"&gt;OSS&lt;/span&gt; world today &amp;#8212;
+should be thought of as a cake with at least the following&amp;nbsp;layers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;The base Haskell language, as defined by the Haskell &amp;#8216;98 and 2010 reports.
+At least in theory, this is the &lt;em&gt;portable&lt;/em&gt; version of the language
+that any conforming compiler is supposed to accept.
+In practice, given &lt;a href="http://taylor.fausak.me/2017/11/15/2017-state-of-haskell-survey-results/#question-14"&gt;the absolute monopoly of &lt;span class="caps"&gt;GHC&lt;/span&gt;&lt;/a&gt;,
+it is merely a theoretical base that needs to be significantly augmented
+in order to reach some level of practical&amp;nbsp;usability.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;A bunch of &lt;span class="caps"&gt;GHC&lt;/span&gt; extensions that are
+&lt;a href="http://dev.stephendiehl.com/hask/#the-benign"&gt;widely considered&lt;/a&gt;
+mandatory for any real-world project.
+Some, like &lt;code&gt;TupleSections&lt;/code&gt; or &lt;code&gt;MultiParamTypeClasses&lt;/code&gt;,
+are mostly there to fix some surprising feature gaps
+that would be more confusing if you had worked around them instead.
+Others, like &lt;code&gt;GADTs&lt;/code&gt; or &lt;code&gt;DataKinds&lt;/code&gt;,
+open up completely new avenues for type-level&amp;nbsp;abstractions.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;A repertoire of common third-party libraries with unique DSLs,
+like &lt;a href="https://hackage.haskell.org/package/conduit"&gt;&lt;em&gt;conduit&lt;/em&gt;&lt;/a&gt;,
+&lt;a href="https://hackage.haskell.org/package/pipes"&gt;&lt;em&gt;pipes&lt;/em&gt;&lt;/a&gt;,
+or &lt;a href="https://hackage.haskell.org/package/lens-tutorial-1.0.3/docs/Control-Lens-Tutorial.html"&gt;&lt;em&gt;lens&lt;/em&gt;&lt;/a&gt;.
+Unlike many &amp;#8220;regular&amp;#8221; packages that merely bring in some domain-specific &lt;span class="caps"&gt;API&lt;/span&gt;,
+these fundamental libraries shape both the deeper architecture
+and the surface-level look &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; feel of any Haskell codebase that uses&amp;nbsp;them.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;A selection of &lt;a href="https://ocharles.org.uk/blog/posts/2014-12-01-24-days-of-ghc-extensions.html"&gt;less common extensions&lt;/a&gt;
+which are nevertheless encountered in Haskell code with some&amp;nbsp;regularity.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;a href="https://wiki.haskell.org/Template_Haskell"&gt;Template Haskell&lt;/a&gt;,
+the language for compile-time metaprogramming whose main application is probably &lt;em&gt;generics&lt;/em&gt;.&lt;br&gt;
+To be clear, neither &amp;#8220;template&amp;#8221; nor &amp;#8220;generics&amp;#8221; have anything to do with the usual meanings
+of those terms in C++ and Java/C#/Go&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.
+Rather, it refers to a kind of &lt;span class="caps"&gt;AST&lt;/span&gt;-based &amp;#8220;preprocessing&amp;#8221;
+that allows Haskell code to operate on the generic &lt;em&gt;structure&lt;/em&gt; of user-defined types:
+their constructors, parameters, and record fields&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;br&gt;
+Direct use of &lt;span class="caps"&gt;TH&lt;/span&gt; in application code is extremely rare,
+but many projects rely on libraries which utilize it behind the scenes.
+A great example would be &lt;a href="https://hackage.haskell.org/package/persistent-2.7.1/docs/Database-Persist.html"&gt;Persistent&lt;/a&gt;,
+a database interface library where the &lt;span class="caps"&gt;ORM&lt;/span&gt;
+uses Template Haskell to construct record types from a &lt;span class="caps"&gt;DB&lt;/span&gt; schema at compile&amp;nbsp;time.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4&gt;There is a language in my type&amp;nbsp;system&lt;/h4&gt;
+&lt;p&gt;What&amp;#8217;s striking about this ensemble of features and ideas
+is that most of them don&amp;#8217;t seem to follow from the ostensible premise of the language:
+that it is functional, pure / referentially transparent, and non-strict / lazily evaluated.
+Instead, they are mostly a collection of progressively more sophisticated refinements
+and applications of Haskell&amp;#8217;s &lt;em&gt;type system&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;This singular focus on type theory &amp;#8212; especially in the recent years&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt; &amp;#8212;
+is probably why many people in the wider programming world think
+it is necessary to grok advanced type system concepts
+if you even want to dabble in functional&amp;nbsp;programming&lt;/p&gt;
+&lt;p&gt;That is, of course, patently untrue&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;.
+&lt;em&gt;Some&lt;/em&gt; features of a strong static type system are definitely useful to have in a functional language.
+You can look at &lt;a href="http://elm-lang.org/"&gt;Elm&lt;/a&gt;
+to see &lt;a href="http://package.elm-lang.org/packages/elm-lang/core/5.1.1/Result#map3"&gt;how awkward&lt;/a&gt;
+things become when you deprive an &lt;span class="caps"&gt;FP&lt;/span&gt; language of its typeclasses
+and &lt;a href="http://package.elm-lang.org/packages/elm-lang/core/5.1.1/Result#andThen"&gt;composition sugar&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;But when the focus on type systems becomes too heavy,
+the concepts &lt;a href="https://wiki.haskell.org/GHC/Type_system"&gt;keep piling up&lt;/a&gt;
+and the language becomes increasingly impenetrable.
+Eventually, you may end up with an ecosystem where the recommended way to implement an &lt;span class="caps"&gt;HTTP&lt;/span&gt; &lt;span class="caps"&gt;API&lt;/span&gt;
+is to call upon
+&lt;a href="http://haskell-servant.readthedocs.io/en/stable/tutorial/Server.html#a-first-example"&gt;half a dozen compiler extensions&lt;/a&gt;
+in order to specify it as
+&lt;a href="http://haskell-servant.readthedocs.io/en/stable/tutorial/Server.html#from-combinators-to-handler-arguments"&gt;one humongous type&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;But hey, isn&amp;#8217;t it desirable to have this kind of increased type&amp;nbsp;safety?&lt;/p&gt;
+&lt;p&gt;In principle, the answer would of course be yes.
+However, the price we pay here is in the precious currency of &lt;em&gt;complexity&lt;/em&gt;,
+and it often turns out to be way too high.
+When libraries, frameworks, and languages get complicated and abstract,
+it&amp;#8217;s not just safety and/or productivity that can (hopefully) increase &amp;#8212;
+it is also the burden on developers&amp;#8217; thought processes.
+While the exact threshold of diminishing or even negative returns is hard to pinpoint,
+it can definitely be reached even by the smartest and most talented teams.
+Add in the usual obstacles of software engineering &amp;#8212; shifting requirements,
+deadlines, turnover &amp;#8212; and you may encounter it much sooner than you&amp;nbsp;think.&lt;/p&gt;
+&lt;p&gt;For some, this is a sufficient justification to basically
+&lt;a href="https://golang.org/"&gt;give up on type systems&lt;/a&gt; altogether.
+And while I&amp;#8217;d say such a knee-jerk reaction is rather excessive and unwarranted,
+it is at least equally harmful to letting your typing regime grow in boundless complexity.
+Both approaches are just too extreme to stand the test of&amp;nbsp;practicality.&lt;/p&gt;
+&lt;h4&gt;The legacy of bleeding&amp;nbsp;edge&lt;/h4&gt;
+&lt;p&gt;In other words, Haskell &lt;em&gt;is&lt;/em&gt; hard and this &lt;em&gt;does&lt;/em&gt; count as one of its serious problems.
+This conclusion isn&amp;#8217;t exactly novel or surprising,
+even if some people would &lt;a href="http://dave.fayr.am/posts/2011-08-19-lets-go-shopping.html"&gt;still argue with it&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Suppose, however, that we have somehow caused this issue to disappear completely.
+Let&amp;#8217;s say that through some kind of divine intervention,
+it was made so that the learning curve of Haskell
+is no longer a problem for the majority of programmers.
+Maybe we found a magic lamp and &amp;#8212; for the lack of better ideas &amp;#8212;
+we wished that everyone be as proficient
+in applicative parsers as they are in inheritance&amp;nbsp;hierarchies.&lt;/p&gt;
+&lt;p&gt;Even in this hypothetical scenario, I posit that
+the value proposition of Haskell would &lt;em&gt;still&lt;/em&gt; be a tough&amp;nbsp;sell.&lt;/p&gt;
+&lt;p&gt;There is this old quote from Bjarne Stroustrup (creator of C++)
+where he says that programming languages divide into those everyone complains about,
+and those that no one uses.&lt;br&gt;
+The first group consists of old, established technologies
+that managed to accrue significant complexity debt through years and decades of evolution.
+All the while, they&amp;#8217;ve been adapting to the constantly shifting perspectives
+on what are the best industry practices.
+Traces of those adaptations can still be found today,
+sticking out like a leftover appendix or residual tail bone &amp;#8212;
+or like the built-in support for &lt;span class="caps"&gt;XML&lt;/span&gt; in&amp;nbsp;Java.&lt;/p&gt;
+&lt;p&gt;Languages that &amp;#8220;no one uses&amp;#8221;, on the other hand,
+haven&amp;#8217;t yet passed the industry threshold of sufficient maturity and stability.
+Their ecosystems are still cutting edge, and their future is uncertain,
+but they sometimes champion some really compelling paradigm shifts.
+As long as you can bear with things that are rough around the edges,
+you can take advantage of their novel&amp;nbsp;ideas.&lt;/p&gt;
+&lt;p&gt;Unfortunately for Haskell,
+it manages to combine the &lt;em&gt;worst parts&lt;/em&gt; of both of these&amp;nbsp;worlds.&lt;/p&gt;
+&lt;p&gt;On one hand, it is a surprisingly old language,
+clocking more than two decades of fruitful research around many innovative concepts.
+Yet on the other hand, it bears the signs of a fresh new technology,
+with relatively few production-grade libraries,
+scarce coverage of some domains (e.g. &lt;span class="caps"&gt;GUI&lt;/span&gt; programming),
+and not too many stories of commercial&amp;nbsp;successes.&lt;/p&gt;
+&lt;h4&gt;There are many ways to do&amp;nbsp;it&lt;/h4&gt;
+&lt;p&gt;Nothing shows better the problems of Haskell&amp;#8217;s evolution over the years
+than the various approaches to handling &lt;em&gt;strings&lt;/em&gt; and &lt;em&gt;errors&lt;/em&gt; that it now has.&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;&lt;/p&gt;
+&lt;h5&gt;String&amp;nbsp;theory&lt;/h5&gt;
+&lt;p&gt;Historically, &lt;code&gt;String&lt;/code&gt; has been defined as a list of &lt;code&gt;Char&lt;/code&gt;acters,
+which is normally denoted as the &lt;code&gt;[Char]&lt;/code&gt; type.
+The good thing about this representation is that many string-based algorithms
+can simply be written using just the list&amp;nbsp;functions.&lt;/p&gt;
+&lt;p&gt;The bad thing is that Haskell lists are the so-called &lt;em&gt;cons lists&lt;/em&gt;.
+They consist of the single element (called &lt;code&gt;head&lt;/code&gt;),
+followed by another list of the remaining elements (called &lt;code&gt;tail&lt;/code&gt;).
+This makes them roughly equivalent to what the data structures theory
+calls a &lt;em&gt;singly-linked list&lt;/em&gt;
+&amp;#8212; a rarely used construct that has a number of undesirable&amp;nbsp;characteristics:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;linear time (&lt;code&gt;O(n)&lt;/code&gt;) for finding a specific element in the&amp;nbsp;list&lt;/li&gt;
+&lt;li&gt;linear time for finding an element with a specific &lt;em&gt;index&lt;/em&gt; in the&amp;nbsp;list&lt;/li&gt;
+&lt;li&gt;linear time for insertion in the middle of the&amp;nbsp;list&lt;/li&gt;
+&lt;li&gt;poor cache coherency due to scattered allocations of list nodes&lt;sup id="fnref:6"&gt;&lt;a class="footnote-ref" href="#fn:6" rel="footnote"&gt;6&lt;/a&gt;&lt;/sup&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;On top of that, keeping only a single character inside each node
+results in a significant waste of&amp;nbsp;memory.&lt;/p&gt;
+&lt;p&gt;Given those downsides,
+it isn&amp;#8217;t very surprising that virtually no serious Haskell program
+uses &lt;code&gt;String&lt;/code&gt;s for any meaningful text processing.
+The community-accepted replacement is &lt;a href="https://hackage.haskell.org/package/text"&gt;the &lt;em&gt;text&lt;/em&gt; package&lt;/a&gt;,
+whose implementation stores strings inside packed arrays, i.e. just as you would expect.
+As a result, Haskell has at least two main types of &amp;#8220;strings&amp;#8221; &amp;#8212; or even &lt;em&gt;three&lt;/em&gt;,
+since &lt;code&gt;Text&lt;/code&gt; has both lazy and strict&amp;nbsp;variants.&lt;/p&gt;
+&lt;p&gt;That&amp;#8217;s not all, however:
+there is also &lt;a href="https://hackage.haskell.org/package/bytestring"&gt;the &lt;em&gt;bytestring&lt;/em&gt; package&lt;/a&gt;.
+Although technically it implements generic byte buffers,
+its &lt;span class="caps"&gt;API&lt;/span&gt; has been &lt;a href="https://hackage.haskell.org/package/bytestring-0.10.8.2/docs/Data-ByteString.html#g:11"&gt;pretty rich and enticing&lt;/a&gt;.
+As a result, many other packages would rather use &lt;code&gt;ByteString&lt;/code&gt;s directly in their interfaces
+than to incur the conversions to and from &lt;code&gt;Text&lt;/code&gt;.&lt;br&gt;
+And just like in case of &lt;code&gt;Text&lt;/code&gt;,
+separate lazy and strict variants of &lt;code&gt;ByteString&lt;/code&gt; are also available.
+But unlike &lt;code&gt;Text&lt;/code&gt;, byte strings also have &lt;code&gt;Word8&lt;/code&gt; and &lt;code&gt;Char8&lt;/code&gt; versions,
+where the latter is designed to handle legacy cases of &lt;span class="caps"&gt;ASCII&lt;/span&gt;-exclusive text&amp;nbsp;support.&lt;/p&gt;
+&lt;p&gt;Well, I hope you kept count of all these types!
+I also hope you can memorize the correct way of converting between them,
+because it&amp;#8217;s commonplace to see them used simultaneously.
+This may sometimes happen even within the same library,
+but it definitely occurs in application code
+that utilizes many different dependencies.
+What it usually results in are numerous occurrences of something like &lt;code&gt;Text.pack . foo . Text.unpack&lt;/code&gt;,
+with conversion functions copiously sprinkled in
+to help win in the &lt;a href="http://javran.github.io/posts/2014-02-28-type-tetris-and-typeclassopedia.html"&gt;Type Tetris&lt;/a&gt;.&lt;/p&gt;
+&lt;h5&gt;Errors and how to handle&amp;nbsp;them&lt;/h5&gt;
+&lt;p&gt;A somewhat similar issue applies to error handling.
+Over the years, Haskell has tried many approaches to this problem,
+often mixing techniques that are very rarely found in a single language,
+like exceptions combined with result&amp;nbsp;types.&lt;/p&gt;
+&lt;p&gt;Nowadays, there is some consensus about those
+&lt;a href="https://prime.haskell.org/wiki/Libraries/Proposals/MonadFail"&gt;mistakes of the past&lt;/a&gt;,
+but the best we got is their deprecation:
+the current version of &lt;span class="caps"&gt;GHC&lt;/span&gt; still supports them&amp;nbsp;all.&lt;/p&gt;
+&lt;p&gt;What are all those techniques? Here&amp;#8217;s an abridged&amp;nbsp;list:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the &lt;code&gt;error&lt;/code&gt; function, terminating the program with a message
+  (which is obviously&amp;nbsp;discouraged)&lt;/li&gt;
+&lt;li&gt;the &lt;code&gt;fail&lt;/code&gt; method of the &lt;code&gt;Monad&lt;/code&gt; typeclass
+  (which is now deprecated and moved to &lt;code&gt;MonadFail&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Error.html#t:MonadError"&gt;the &lt;code&gt;MonadError&lt;/code&gt; class&lt;/a&gt;
+  with the associated &lt;code&gt;ErrorT&lt;/code&gt; transformer, now deprecated in favor&amp;nbsp;of&amp;#8230;&lt;/li&gt;
+&lt;li&gt;a &lt;em&gt;different&lt;/em&gt; &lt;a href="https://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Except.html#t:MonadError"&gt;&lt;code&gt;MonadError&lt;/code&gt; class&lt;/a&gt;,
+  with &lt;code&gt;ExceptT&lt;/code&gt; as the new&amp;nbsp;transformer&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Control-Exception.html"&gt;exceptions in the &lt;code&gt;IO&lt;/code&gt; monad&lt;/a&gt;,
+  normally raised by the standard I/O calls to signal abnormal conditions and error;
+  however, libraries and application code are free to &lt;a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Control-Exception.html#g:2"&gt;also throw them&lt;/a&gt;
+  and use for their own error&amp;nbsp;handling&lt;/li&gt;
+&lt;li&gt;the &lt;code&gt;Either&lt;/code&gt; sum type / monad, which is essentially a type-safe version of the venerable return&amp;nbsp;codes&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;If you really stretched the definition of error handling,
+I could also imagine counting &lt;code&gt;Maybe&lt;/code&gt;/&lt;code&gt;MaybeT&lt;/code&gt; as yet another method.
+But even without it, that&amp;#8217;s half a dozen distinct approaches
+which you are likely to encounter in the wild in one form or&amp;nbsp;another.&lt;/p&gt;
+&lt;h4&gt;Implicit is better than&amp;nbsp;explicit&lt;/h4&gt;
+&lt;p&gt;The other kind of troublesome legacy of Haskell
+relates to the various design choices in the language itself.
+They reflect ideas straight from the time they were conceived in,
+which doesn&amp;#8217;t necessarily agree with the best engineering practices as we understand them &lt;em&gt;now&lt;/em&gt;.&lt;/p&gt;
+&lt;h5&gt;Leaky&amp;nbsp;modules&lt;/h5&gt;
+&lt;p&gt;Take the &lt;em&gt;module system&lt;/em&gt;, for&amp;nbsp;example.&lt;/p&gt;
+&lt;p&gt;Today, it is rather uncontroversial that the purpose of splitting code into multiple submodules
+is to isolate it as much as possible and prevent accidental dependencies.
+The benefit of such isolation is better internal cohesion for each module.
+This can simplify testing, improve readability, foster simplicity,
+and reduce cognitive burden on the&amp;nbsp;maintainers.&lt;/p&gt;
+&lt;p&gt;Contemporary languages help achieving this goal
+by making inter-module dependencies explicit.
+If you want to use a symbol (functions, class) from module A inside another module B,
+you typically have to&amp;nbsp;both:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;declare it &lt;em&gt;public&lt;/em&gt; in module&amp;nbsp;A&lt;/li&gt;
+&lt;li&gt;explicitly &lt;em&gt;import&lt;/em&gt; its name in module&amp;nbsp;B&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The first step helps to ensure that the &lt;span class="caps"&gt;API&lt;/span&gt; of module A is limited and tractable.
+The second step does the same to the external dependencies of module&amp;nbsp;B.&lt;/p&gt;
+&lt;p&gt;Unfortunately, Haskell requires neither of those steps.
+In fact, it encourages precisely the &lt;em&gt;opposite&lt;/em&gt; of well-defined, self-contained modules,
+all by the virtue of its default&amp;nbsp;behaviors:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the default module declaration (&lt;code&gt;module Foo where ...&lt;/code&gt;)
+implicitly declares &lt;em&gt;every symbol&lt;/em&gt; defined in the module &lt;code&gt;Foo&lt;/code&gt;
+as public and importable by&amp;nbsp;others&lt;/li&gt;
+&lt;li&gt;the default import statement (&lt;code&gt;import Foo&lt;/code&gt;) brings in &lt;em&gt;every public symbol&lt;/em&gt;
+from the module &lt;code&gt;Foo&lt;/code&gt; into the global namespace of the current&amp;nbsp;module&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;In essence, this is like putting &lt;code&gt;public&lt;/code&gt; on each and every class or method
+that you&amp;#8217;d define in a Java project,
+while simultaneously using nothing but wildcard (star) imports.
+In a very short order, you will end up with project
+where everything depends on everything else, and nothing can be developed in&amp;nbsp;isolation.&lt;/p&gt;
+&lt;h5&gt;Namespaces are apparently a bad&amp;nbsp;idea&lt;/h5&gt;
+&lt;p&gt;Thankfully, it is possible to avoid this pitfall
+by explicitly declaring both your exported and imported&amp;nbsp;symbols:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;-- Foo.hs --&lt;/span&gt;
+&lt;span class="kr"&gt;module&lt;/span&gt; &lt;span class="nn"&gt;Foo&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt; &lt;span class="nf"&gt;foo&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nf"&gt;bar&lt;/span&gt; &lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="kr"&gt;where&lt;/span&gt;
+
+&lt;span class="nf"&gt;foo&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;span class="nf"&gt;bar&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
+&lt;span class="nf"&gt;baz&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;  &lt;span class="c1"&gt;-- not exported&lt;/span&gt;
+
+&lt;span class="c1"&gt;-- Bar.hs --&lt;/span&gt;
+&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;Foo&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nf"&gt;foo&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="c1"&gt;-- `bar` is inaccessible here, but `foo` is available&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;But while this helps fighting the tangle of dependencies,
+it still results in cluttering the namespace of any non-trivial module
+with a significant number of imported&amp;nbsp;symbols.&lt;/p&gt;
+&lt;p&gt;In many other languages, you can instead import the module as a whole
+and only refer to its members using &lt;em&gt;qualified names&lt;/em&gt;.
+This is possible in Haskell as well, though it requires yet another variant
+of the &lt;code&gt;import&lt;/code&gt; statement:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="k"&gt;qualified&lt;/span&gt; &lt;span class="nn"&gt;Data.Text&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;Text&lt;/span&gt;
+
+&lt;span class="nf"&gt;duplicateWords&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;
+&lt;span class="nf"&gt;duplicateWords&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwords&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwords&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="n"&gt;replicate&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;words&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;What if you want both, though? In the above code, for example,
+the qualified name &lt;code&gt;Text.Text&lt;/code&gt; looks a little silly,
+especially when it&amp;#8217;s such a common type.
+It would be nice to import it directly, so that we can use it simply as &lt;code&gt;Text&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;Unfortunately, this is only possible when using &lt;em&gt;two&lt;/em&gt; &lt;code&gt;import&lt;/code&gt; statements:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;Data.Text&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="kr"&gt;import&lt;/span&gt; &lt;span class="k"&gt;qualified&lt;/span&gt; &lt;span class="nn"&gt;Data.Text&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="n"&gt;Text&lt;/span&gt;
+
+&lt;span class="nf"&gt;duplicateWords&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
+&lt;span class="nf"&gt;duplicateWords&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwords&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwords&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="n"&gt;replicate&lt;/span&gt; &lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="o"&gt;.&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;words&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;You will find this duplication pervasive throughout Haskell codebases.
+Given how it affects the most important third-party packages (like &lt;code&gt;text&lt;/code&gt; and &lt;code&gt;bytestring&lt;/code&gt;),
+there have been a few proposals to improve the situation&lt;sup id="fnref:7"&gt;&lt;a class="footnote-ref" href="#fn:7" rel="footnote"&gt;7&lt;/a&gt;&lt;/sup&gt;,
+but it seems that none can go through the syntax bikeshedding&amp;nbsp;phase.&lt;/p&gt;
+&lt;p&gt;Contrast this with Rust, for example, where it&amp;#8217;s common to see imports such as&amp;nbsp;this:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;io&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Read&lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;read_first_half&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="nb"&gt;Path&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;io&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="nb"&gt;Result&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// (omitted)&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;where &lt;code&gt;self&lt;/code&gt; conveniently stands for the module as a&amp;nbsp;whole.&lt;/p&gt;
+&lt;h5&gt;Wild&amp;nbsp;records&lt;/h5&gt;
+&lt;p&gt;Another aspect of the difficulties with keeping your namespaces in check
+relates to Haskell &lt;em&gt;record types&lt;/em&gt; &amp;#8212; its rough equivalent of &lt;code&gt;struct&lt;/code&gt;s from C and&amp;nbsp;others.&lt;/p&gt;
+&lt;p&gt;When you define a record&amp;nbsp;type:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;User&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;User&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;usrFirstName&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;String&lt;/span&gt;
+                 &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;usrLastName&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;String&lt;/span&gt;
+                 &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;usrEmail&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;String&lt;/span&gt;
+                 &lt;span class="p"&gt;}&lt;/span&gt; &lt;span class="kr"&gt;deriving&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Show&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;you are declaring not one but multiple different names,
+and dumping them all straight into the global namespace.
+These names&amp;nbsp;include:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;the record &lt;em&gt;type&lt;/em&gt; (here, &lt;code&gt;User&lt;/code&gt;)&lt;/li&gt;
+&lt;li&gt;its &lt;em&gt;type constructor&lt;/em&gt; (also &lt;code&gt;User&lt;/code&gt;, second one&amp;nbsp;above)&lt;/li&gt;
+&lt;li&gt;all of its fields (&lt;code&gt;usrFirstName&lt;/code&gt;, &lt;code&gt;usrLastName&lt;/code&gt;, &lt;code&gt;usrEmail&lt;/code&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Yep, thats right.
+Because Haskell has no special syntax for accessing record fields,
+each field declaration creates an unqualified getter function.
+Combined with the lack of function overloading,
+this creates many opportunities for name&amp;nbsp;collisions.&lt;/p&gt;
+&lt;p&gt;This is why in the above example,
+&lt;a href="https://en.wikipedia.org/wiki/Hungarian_notation"&gt;Hungarian notation&lt;/a&gt; is used to prevent those clashes.
+Despite its age and almost complete disuse in basically every other language,
+it is still a widely accepted practice in Haskell&lt;sup id="fnref:8"&gt;&lt;a class="footnote-ref" href="#fn:8" rel="footnote"&gt;8&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;h4&gt;Purity beats&amp;nbsp;practicality&lt;/h4&gt;
+&lt;p&gt;We have previously discussed the multiple ways of working with strings
+and handling errors in Haskell. While somewhat confusing at times,
+there at least appears to be an agreement in the community as to which one
+should generally be&amp;nbsp;preferred.&lt;/p&gt;
+&lt;p&gt;This is not the case for some subtler and more abstract&amp;nbsp;topics.&lt;/p&gt;
+&lt;p&gt;Haskell is, famously,
+a &lt;a href="https://en.wikipedia.org/wiki/Purely_functional_programming"&gt;&lt;em&gt;purely functional&lt;/em&gt; programming language&lt;/a&gt;.
+Evaluating functions, in a mathematical sense,
+is all a Haskell program is supposed to be doing.
+But the obvious problem is
+that such a program wouldn&amp;#8217;t be able to do anything actually &lt;em&gt;useful&lt;/em&gt;;
+there needs to be some way for it to &lt;em&gt;effect&lt;/em&gt; the environment it runs in,
+if only to print the results it&amp;nbsp;computed.&lt;/p&gt;
+&lt;p&gt;How to reconcile the functional purity with real-world applications
+is probably the most important problem
+that the Haskell language designers have to contend with.
+After a couple of decades of research &lt;em&gt;and&lt;/em&gt; industrial use
+it still doesn&amp;#8217;t have a satisfactory&amp;nbsp;answer.&lt;/p&gt;
+&lt;p&gt;Yes, there is the &lt;code&gt;IO&lt;/code&gt; monad, but it is a very blunt instrument.
+It offers a distinction between pure code and &amp;#8220;effectful&amp;#8221; code,
+but allows for no granularity or structure for the latter.
+An &lt;code&gt;IO&lt;/code&gt;-returning function can do literally anything,
+while a pure function can only compute some value based on its arguments.
+Most code, however, is best placed somewhere between those two&amp;nbsp;extremes.&lt;/p&gt;
+&lt;p&gt;How to represent different varieties of &lt;em&gt;effects&lt;/em&gt; (filesystem, logging, network, etc.)?&lt;br&gt;
+How to express them as function constraints that can be verified by the compiler?&lt;br&gt;
+How to compose them? How to extend them?&lt;br&gt;&lt;/p&gt;
+&lt;p&gt;These (and others) are still very much open questions in the Haskell community.
+The traditional way of dealing with them are &lt;em&gt;monad transformers&lt;/em&gt;,
+but they suffer from many shortcomings&lt;sup id="fnref:9"&gt;&lt;a class="footnote-ref" href="#fn:9" rel="footnote"&gt;9&lt;/a&gt;&lt;/sup&gt;.
+More recent solutions like &lt;a href="http://hackage.haskell.org/package/extensible-effects"&gt;effects&lt;/a&gt;
+or &lt;a href="http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html"&gt;free monads&lt;/a&gt; are promising,
+but exhibit performance issues that likely won&amp;#8217;t be solvable without full compiler support.
+And even so, you can &lt;a href="https://markkarpov.com/post/free-monad-considered-harmful.html"&gt;convincingly argue against&lt;/a&gt;
+those new approaches,
+which suggests that we may ultimately need something else&amp;nbsp;entirely.&lt;/p&gt;
+&lt;p&gt;Of course, this state of affairs doesn&amp;#8217;t really prevent anyone
+from writing useful applications in Haskell.
+&amp;#8220;Regular&amp;#8221; monads are still a fine choice.
+Indeed, even if you end up stuffing most of your code inside plain &lt;code&gt;IO&lt;/code&gt;,
+it will already be a step up compared to most other&amp;nbsp;languages.&lt;/p&gt;
+&lt;h4&gt;Good&amp;nbsp;Enough™&lt;/h4&gt;
+&lt;p&gt;Incidentally, something similar could probably be said about the language as a&amp;nbsp;whole.&lt;/p&gt;
+&lt;p&gt;Yes, it has numerous glaring flaws and some not-so-obvious shortcomings.&lt;br&gt;
+Yes, it requires disciplined coding style and attention to readability.&lt;br&gt;
+Yes, it will force you to courageously tackle problems
+that are completely unknown to programmers using other languages.&lt;br&gt;
+In the end, however, you will probably find it better than most&amp;nbsp;alternatives.&lt;/p&gt;
+&lt;p&gt;Basically, Haskell is like pizza:
+even when it&amp;#8217;s bad, it is still &lt;em&gt;pretty good&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;But what&amp;#8217;s possibly the best thing about it
+is that you don&amp;#8217;t even really need to adopt Haskell in order to benefit from its innovations
+(and avoid the legacy&amp;nbsp;warts).&lt;/p&gt;
+&lt;p&gt;There is already a breed of mainstream languages
+that can aptly be characterized as &amp;#8220;Haskell-lite&amp;#8221;:
+heavily influenced by &lt;span class="caps"&gt;FP&lt;/span&gt; paradigms but without subscribing to them completely.
+The closest example in this category is of course Scala,
+while the newest one would be Rust.&lt;br&gt;
+In many aspects, they offer a great compromise
+that provides some important functional features
+while sparing you most of the teething issues
+that Haskell still has after almost 30 years.
+Functional purists may not be completely satisfied,
+but at least they&amp;#8217;ll get to keep their typeclasses and&amp;nbsp;monoids.&lt;/p&gt;
+&lt;p&gt;And what if you don&amp;#8217;t want to hear about this &lt;span class="caps"&gt;FP&lt;/span&gt; nonsense at all?&amp;#8230;
+Well, I&amp;#8217;m afraid it will get harder and harder to avoid.
+These days, it&amp;#8217;s evidently fine for a language to omit generics
+but it seems inconceivable to ditch &lt;a href="https://gobyexample.com/closures"&gt;first-class functions&lt;/a&gt;.
+Even the traditional &lt;span class="caps"&gt;OOP&lt;/span&gt; powerhouse like Java
+cannot do without
+&lt;a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html"&gt;support for anonymous (&amp;#8220;lambda&amp;#8221;) functions&lt;/a&gt;
+anymore.
+And let&amp;#8217;s not forget
+&lt;a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises#Chaining"&gt;all&lt;/a&gt;
+&lt;a href="https://docs.oracle.com/javase/8/docs/api/java/util/Optional.html#flatMap-java.util.function.Function-"&gt;the&lt;/a&gt;
+&lt;a href="http://msdn.microsoft.com/en-us/library/system.linq.enumerable.selectmany.aspx"&gt;numerous&lt;/a&gt;
+&lt;a href="https://docs.oracle.com/javase/8/docs/api/java/util/stream/Stream.html#flatMap-java.util.function.Function-"&gt;examples&lt;/a&gt;
+of monadic constructs
+that pervade many of the mature APIs, libraries, and&amp;nbsp;languages.&lt;/p&gt;
+&lt;p&gt;So even if you, understandably, don&amp;#8217;t really want to come to Haskell,
+it&amp;#8217;s looking more and more likely that Haskell will soon come to you&amp;nbsp;:)&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;In case of Go, I&amp;#8217;m of course referring to a feature that&amp;#8217;s notoriously &lt;em&gt;missing&lt;/em&gt; from the language.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;For a close analogue in languages other than Haskell,
+you can look at the
+&lt;a href="https://doc.rust-lang.org/book/first-edition/procedural-macros.html"&gt;current state of procedural macros&lt;/a&gt;
+in Rust (commonly known as &amp;#8220;custom derives&amp;#8221;).&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;What seems to excite the Haskell community in 2018, for example,
+are things like &lt;a href="https://ghc.haskell.org/trac/ghc/wiki/LinearTypes"&gt;linear types&lt;/a&gt;
+and &lt;a href="https://typesandkinds.wordpress.com/2016/07/24/dependent-types-in-haskell-progress-report/"&gt;dependent types&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:4"&gt;
+&lt;p&gt;The obvious counterexample is &lt;a href="https://en.wikipedia.org/wiki/Clojure"&gt;Clojure&lt;/a&gt;
+and its cousins in the Lisp family of languages.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:5"&gt;
+&lt;p&gt;Although
+&lt;a href="https://www.reddit.com/r/haskell/comments/8ilw75/there_are_too_many_prettyprinting_libraries/"&gt;the abundance of pretty-printing libraries&lt;/a&gt;
+is high up there, too :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:6"&gt;
+&lt;p&gt;This can be mitigated somewhat by using a contiguous chunk of memory
+through a dedicated &lt;em&gt;arena allocator&lt;/em&gt;, or implementing the list as an array.&amp;#160;&lt;a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:7"&gt;
+&lt;p&gt;See for example &lt;a href="https://theam.github.io/require/"&gt;this project&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:8"&gt;
+&lt;p&gt;Some &lt;span class="caps"&gt;GHC&lt;/span&gt; extensions like &lt;code&gt;DisambiguateRecordFields&lt;/code&gt; allow for correct type inference
+even in case of &amp;#8220;overloaded&amp;#8221; field names, though.&amp;#160;&lt;a class="footnote-backref" href="#fnref:8" rev="footnote" title="Jump back to footnote 8 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:9"&gt;
+&lt;p&gt;To name a few:
+they don&amp;#8217;t compose well (e.g. can only have one instance of a particular monad in the stack);
+they can cause some &lt;a href="https://www.fpcomplete.com/blog/2017/06/tale-of-two-brackets"&gt;extremely tricky bugs&lt;/a&gt;;
+they don&amp;#8217;t really cooperate with the standard library which uses &lt;code&gt;IO&lt;/code&gt; everywhere
+(often requiring tricks like &lt;a href="https://github.com/fpco/unliftio"&gt;this&lt;/a&gt;).&amp;#160;&lt;a class="footnote-backref" href="#fnref:9" rev="footnote" title="Jump back to footnote 9 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Haskell"></category><category term="functional programming"></category><category term="type systems"></category><category term="Facebook"></category></entry><entry><title>Recap of the gisht project</title><link href="http://xion.io/post/programming/gisht-recap.html" rel="alternate"></link><updated>2017-11-24T17:52:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-11-24:post/programming/gisht-recap.html</id><summary type="html">&lt;p&gt;In this post, I want to discuss some of the experiences I had with a project
 that I recently finished, &lt;a href="https://github.com/Xion/gisht"&gt;&lt;em&gt;gisht&lt;/em&gt;&lt;/a&gt;.
 By &amp;#8220;finished&amp;#8221; I mean that I don&amp;#8217;t anticipate developing any new major features for it,
 though smaller things, bug fixes, or non-code stuff, is of course still very&amp;nbsp;possible.&lt;/p&gt;
@@ -1822,145 +2295,4 @@ But futures, by their very nature, are meant to encapsulate &lt;em&gt;any&lt;/em
 For them, &amp;#8220;each individual case&amp;#8221; is literally &lt;em&gt;every asynchronous function&lt;/em&gt; in your code.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="async"></category><category term="Tokio"></category><category term="futures"></category><category term="HTTP"></category></entry><entry><title>A tale of two Rusts</title><link href="http://xion.io/post/programming/rust-nightly-vs-stable.html" rel="alternate"></link><updated>2017-03-28T18:35:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2016-12-24:post/programming/rust-nightly-vs-stable.html</id><summary type="html">&lt;p&gt;The writing has been on the wall for many months now,
-but I think the time has come when we can officially declare&amp;nbsp;it.&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;Stable Rust is dead. Nightly Rust is the only&amp;nbsp;Rust.&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;h4&gt;Say&amp;nbsp;what?&lt;/h4&gt;
-&lt;p&gt;If you&amp;#8217;re out of the loop,
-&lt;a href="http://rust-lang.org/"&gt;Rust&lt;/a&gt; is this newfangled system programming language.
-Rust is meant to fit in the niches normally occupied by C,
-so its domain includes performance-sensitive and safety-critical applications.
-Embedded programming, &lt;span class="caps"&gt;OS&lt;/span&gt; kernels, databases, servers,
-and similar low-level pieces of computing and networking infrastructure
-are all within its&amp;nbsp;purview.&lt;/p&gt;
-&lt;p&gt;Of course, this &amp;#8220;replacing C&amp;#8221; thing is still an ambition that&amp;#8217;s years or decades away.
-But in theory, there is nothing preventing it from happening.
-The main thing Rust would need here is &lt;em&gt;time&lt;/em&gt;: time to buy trust of developers
-by having been used in real-world, production scenarios without&amp;nbsp;issues.&lt;/p&gt;
-&lt;p&gt;To facilitate this (and for other reasons),
-Rust has been using &lt;a href="https://doc.rust-lang.org/stable/book/release-channels.html"&gt;three &lt;em&gt;release channels&lt;/em&gt;&lt;/a&gt;
-with varying frequency of updates.
-There are the &lt;em&gt;stable&lt;/em&gt;, &lt;em&gt;beta&lt;/em&gt;, and &lt;em&gt;nightly&lt;/em&gt; Rust.
-Of those, beta is pretty much an
-&lt;a href="https://en.wikipedia.org/wiki/Software_release_life_cycle#Release_candidate"&gt;&lt;span class="caps"&gt;RC&lt;/span&gt;&lt;/a&gt;
-for a future stable release,
-so there aren&amp;#8217;t many differences at all between the first two&amp;nbsp;channels.&lt;/p&gt;
-&lt;h4&gt;Nightly&amp;nbsp;perks&lt;/h4&gt;
-&lt;p&gt;This cannot be said about&amp;nbsp;nightly.&lt;/p&gt;
-&lt;p&gt;In fact, nightly Rust is essentially &lt;em&gt;its own language&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;First, there is a number of exclusive language features that are only available on nightly.
-They are all guarded by numerous &lt;code&gt;#![feature(...)]&lt;/code&gt; gates
-which are required to activate them.
-Because stable Rust doesn&amp;#8217;t accept any such directive,
-trying to compile code that uses them will fail on a non-nightly&amp;nbsp;compiler.&lt;/p&gt;
-&lt;p&gt;This has been justified as a necessary step for testing out new features
-in real scenarios, or at least those that resemble (stable) reality as close as possible.
-Indeed, many features &lt;em&gt;did&lt;/em&gt; eventually land in stable Rust by going through this route
-&amp;#8212; a recent example would be &lt;a href="https://m4rw3r.github.io/rust-questionmark-operator"&gt;the &lt;code&gt;?&lt;/code&gt; operator&lt;/a&gt;,
-an error-handling measure analogous to the &lt;code&gt;try!&lt;/code&gt; macro.&lt;/p&gt;
-&lt;p&gt;But some features take a lot of time to stabilize.
-And few (like &lt;code&gt;zero_one&lt;/code&gt; which guards the numeric traits
-&lt;a href="https://doc.rust-lang.org/std/num/trait.Zero.html"&gt;&lt;code&gt;Zero&lt;/code&gt;&lt;/a&gt;
-and &lt;a href="https://doc.rust-lang.org/std/num/trait.One.html"&gt;&lt;code&gt;One&lt;/code&gt;&lt;/a&gt;) may even be deprecated
-without ever getting out of the nightly&amp;nbsp;channel.&lt;/p&gt;
-&lt;h4&gt;Unplugged&lt;/h4&gt;
-&lt;p&gt;Secondly, and most importantly, there is at least one feature
-that won&amp;#8217;t get stabilized &lt;strong&gt;ever&lt;/strong&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#![feature(plugin)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;And it&amp;#8217;s all by&amp;nbsp;design.&lt;/p&gt;
-&lt;p&gt;This &lt;code&gt;plugin&lt;/code&gt; switch is what&amp;#8217;s necessary to include &lt;code&gt;#![plugin(...)]&lt;/code&gt; directives.
-Those in turn activate &lt;em&gt;compiler plugins&lt;/em&gt;:
-user-provided additions to the compiler itself.
-Plugins operate against the &lt;span class="caps"&gt;API&lt;/span&gt; provided directly by &lt;code&gt;rustc&lt;/code&gt;
-and enhance its capabilities beyond what the language normally&amp;nbsp;provides.&lt;/p&gt;
-&lt;p&gt;Although it sounds rather ominous,
-the vast majority of plugins in the wild serve a singular purpose: &lt;em&gt;code generation&lt;/em&gt;.
-They are written with the sole purpose of combating Rust&amp;#8217;s rigidity,
-including the (perfectly expected) lack of dynamic runtime capabilities
-and the (disappointingly) stiff limits of its wanting macro&amp;nbsp;system.&lt;/p&gt;
-&lt;p&gt;This is how they are utilized by &lt;a href="http://diesel.rs/"&gt;Diesel&lt;/a&gt;, for example,
-a popular &lt;span class="caps"&gt;ORM&lt;/span&gt; and &lt;span class="caps"&gt;SQL&lt;/span&gt; query interface;
-or &lt;a href="https://serde.rs/"&gt;Serde&lt;/a&gt;, a serialization&amp;nbsp;framework.&lt;/p&gt;
-&lt;p&gt;Why compiler plugins can never be stable, though?
-It&amp;#8217;s because the internal &lt;span class="caps"&gt;API&lt;/span&gt; they are coded against
-goes too deep into the compiler bowels to ever get stabilized.
-If it were, it would severely limit the ability to further develop the language
-without significant breakage of the established&amp;nbsp;plugins.&lt;/p&gt;
-&lt;h4&gt;Pseudo-stable&lt;/h4&gt;
-&lt;p&gt;&lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;Wait,&amp;#8221; you may ask, &amp;#8220;how do we even talk about «established» compiler plugins?
-Shouldn&amp;#8217;t they be, by their very definition, &lt;em&gt;unstable&lt;/em&gt;?&amp;#8221;&lt;/p&gt;
-&lt;p&gt;Well&amp;#8230; yes. They definitely should. And therein lies the crux of the&amp;nbsp;problem.&lt;/p&gt;
-&lt;p&gt;Turns out, plugins &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; nightly Rust are only &lt;em&gt;mostly&lt;/em&gt; treated as&amp;nbsp;unstable.&lt;/p&gt;
-&lt;p&gt;In reality, the comfort and convenience provided by nightly versions of many libraries
-&amp;#8212; all of which rely on compiler plugins &amp;#8212; is difficult to overstate.
-While their stable approximations are available, they at best require rather complicated&amp;nbsp;setup.&lt;/p&gt;
-&lt;p&gt;What&amp;#8217;s always involved is a custom build step,
-and usually a separate file for the relevant code symbols and declarations.
-In the end, we get a bunch of autogenerated modules
-whose prior non-existence during development may also confuse IDEs and autocompletion&amp;nbsp;tools.&lt;/p&gt;
-&lt;p&gt;For all those reasons and more,
-an ecosystem has developed where several popular libraries are &amp;#8220;nightly but pseudo-stable&amp;#8221;.
-This includes some key components in many serious applications,
-like the aforementioned &lt;span class="caps"&gt;ORM&lt;/span&gt; &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; serialization&amp;nbsp;crates.&lt;/p&gt;
-&lt;h4&gt;The&amp;nbsp;precedent&lt;/h4&gt;
-&lt;p&gt;And so has been the state of affairs until very recently.
-The nightly Rust has been offering some extremely enticing features,
-but the stable channel was at least paid a lip service to.
-However, the mentality among library authors that &amp;#8220;nightly-first&amp;#8221; is an acceptable policy
-had been strong for a long time&amp;nbsp;now.&lt;/p&gt;
-&lt;p&gt;No wonder it has finally shifted towards&amp;nbsp;&amp;#8220;nightly-only&amp;#8221;.&lt;/p&gt;
-&lt;p&gt;Meet &lt;a href="http://rocket.rs"&gt;Rocket&lt;/a&gt;,
-the latest contestant in the already rich lineup of &lt;a href="http://www.arewewebyet.org/topics/frameworks/"&gt;Rust web frameworks&lt;/a&gt;.
-Everything about it is really slick:
-a flashy designer website; approachable and comprehensive documentation;
-and concise, &lt;a href="http://flask.pocoo.org/"&gt;Flask&lt;/a&gt;-like &lt;span class="caps"&gt;API&lt;/span&gt; for
-&lt;a href="https://rocket.rs/overview/#anatomy-of-a-rocket-application"&gt;routing&lt;/a&gt;
-and response handling.
-Predictably, it&amp;#8217;s been making quite a
-&lt;a href="https://www.reddit.com/r/rust/comments/5jxv6u/rocket_web_framework_for_rust/"&gt;buzz&lt;/a&gt; on
-&lt;a href="https://www.reddit.com/r/programming/comments/5jy64x/rocket_a_web_framework_for_rust/"&gt;Reddit&lt;/a&gt;
-and &lt;a href="https://news.ycombinator.com/item?id=13245475"&gt;elsewhere&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;There is just an itty bitty little problem: Rocket &lt;em&gt;only works on nightly&lt;/em&gt;.
-No alternatives, no codegen shims&amp;#8230;
-and no prospects of any change in the foreseeable future.
-Yet, there doesn&amp;#8217;t seem to be many people concerned about this,
-so clearly this is (a new?)&amp;nbsp;norm.&lt;/p&gt;
-&lt;h4&gt;The Rusts&amp;nbsp;split&lt;/h4&gt;
-&lt;p&gt;In essence, Rust is now two separate&amp;nbsp;languages.&lt;/p&gt;
-&lt;p&gt;The stable-nightly divide has essentially evolved into something that closely resembles
-the early stages of the &lt;a href="https://wiki.python.org/moin/Python2orPython3"&gt;2.x vs. 3.x&lt;/a&gt; split in the Python world.
-The people still &amp;#8220;stuck&amp;#8221; on 2.7 (i.e. stable) were &amp;#8220;holdouts&amp;#8221;,
-and the future was with 3.x (nightly).
-Sure, there have been some pithy backports (feature stabilizations),
-but the interesting stuff has been happening on the other&amp;nbsp;side.&lt;/p&gt;
-&lt;p&gt;It&amp;#8217;s astonishing that Rust managed to replicate this phenomenon
-without any major version bumps, and with no backwards-incompatible releases.
-Technically, everything is still version 1.x..
-Not even &lt;a href="http://crates.io"&gt;Cargo&lt;/a&gt;, the Rust package manager, recognizes the stable-nightly&amp;nbsp;distinction.&lt;/p&gt;
-&lt;p&gt;But that&amp;#8217;s hardly any consolation when you try to install a nightly-only crate on stable Rust.
-You will download it just fine, and get all the way to compiling its code,
-only to have it error out due to unsupported &lt;code&gt;#![feature(...)]&lt;/code&gt; declarations.&lt;/p&gt;
-&lt;h4&gt;What&amp;nbsp;now?&lt;/h4&gt;
-&lt;p&gt;The natural question is, can this situation be effectively&amp;nbsp;addressed?&lt;/p&gt;
-&lt;p&gt;I hope it&amp;#8217;s obvious why stable Rust cannot suddenly start supporting compiler plugins.
-Given that they rely on &lt;code&gt;rustc&lt;/code&gt; internals which aren&amp;#8217;t standardized,
-doing so would be contrary to the very definition of a &amp;#8220;stable&amp;#8221; release&amp;nbsp;channel.&lt;/p&gt;
-&lt;p&gt;The other option is to fully embrace nightly as &lt;em&gt;de facto&lt;/em&gt; recommended toolchain.
-This has been informally happening already,
-despite the &lt;a href="https://doc.rust-lang.org/stable/book/release-channels.html#choosing-a-version"&gt;contrary recommendations&lt;/a&gt;
-in the official&amp;nbsp;docs.&lt;/p&gt;
-&lt;p&gt;The downsides are obvious here, though: nightly Rust is not a misnomer at all.
-The compiler is in active development and its build &lt;a href="https://travis-ci.org/rust-lang/rust/builds"&gt;breaks often&lt;/a&gt;.
-Some of those breakages make it into nightly releases with unsatisfying&amp;nbsp;regularity.&lt;/p&gt;
-&lt;p&gt;Of course, there was also another option:
-stick to the intended purpose of release channels and don&amp;#8217;t build castles on the sand
-by publishing nightly-first or nightly-only crates.
-This ship seems to have sailed by now, as the community has collectively decided&amp;nbsp;otherwise.&lt;/p&gt;
-&lt;p&gt;Oh&amp;nbsp;well.&lt;/p&gt;
-&lt;p&gt;It&amp;#8217;s just a little ironic that in a language that is so focused on safety,
-everyone is perfectly happy with an &lt;em&gt;unstable compiler&lt;/em&gt;.&lt;/p&gt;</summary><category term="Rust"></category><category term="nightly Rust"></category><category term="stable Rust"></category><category term="Rocket.rs"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="async"></category><category term="Tokio"></category><category term="futures"></category><category term="HTTP"></category></entry></feed>

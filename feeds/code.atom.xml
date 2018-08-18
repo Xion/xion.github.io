@@ -1,5 +1,295 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2018-01-27T18:04:00-08:00</updated><entry><title>Unfolding a Stream of paginated items</title><link href="http://xion.io/post/code/rust-unfold-pagination.html" rel="alternate"></link><updated>2018-01-27T18:04:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-01-24:post/code/rust-unfold-pagination.html</id><summary type="html">&lt;p&gt;My &lt;a href="https://github.com/Xion/ezomyte"&gt;most recent Rust crate&lt;/a&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/code.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2018-02-28T08:37:00+01:00</updated><entry><title>Add examples to your Rust libraries</title><link href="http://xion.io/post/code/rust-examples.html" rel="alternate"></link><updated>2018-02-28T08:37:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-02-28:post/code/rust-examples.html</id><summary type="html">&lt;p&gt;When you&amp;#8217;re writing a library for other programs to depend on,
+it is paramount to think how the developers are going to use it in their&amp;nbsp;code.&lt;/p&gt;
+&lt;p&gt;The best way to ensure they have a pleasant experience
+is to &lt;em&gt;put yourself in their shoes&lt;/em&gt;.
+Forget the internal details of your package, and consider only its outward interface.
+Then, come up with a realistic use case and just &lt;em&gt;implement it&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;In other words, you should create complete, end-to-end,
+and (somewhat) usable &lt;em&gt;example applications&lt;/em&gt;.&lt;/p&gt;
+&lt;h4&gt;Examples are&amp;nbsp;trouble&lt;/h4&gt;
+&lt;p&gt;You may think this is asking a lot, and I wouldn&amp;#8217;t really disagree&amp;nbsp;here.&lt;/p&gt;
+&lt;p&gt;In most languages and programming platforms,
+it is indeed quite cumbersome to create example apps.
+This happens for at least several different&amp;nbsp;reasons:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;It typically requires bootstrapping an entire project from scratch.&lt;/strong&gt;
+  If you are lucky, you will have something like &lt;code&gt;create-react-app&lt;/code&gt;
+  to get you going relatively quickly.
+  Still, you need to wire up the new project so that it depends on the &lt;em&gt;source code&lt;/em&gt; of your library
+  rather than its published version,
+  and this tends to be a non-standard option &amp;#8212; if it is available at&amp;nbsp;all.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;It&amp;#8217;s unclear where should the example code live.&lt;/strong&gt;
+  Should you just throw it away, once it has served its immediate purpose?
+  I&amp;#8217;m sure this would discourage many people from creating examples in the first place.
+  It&amp;#8217;s certainly better to keep them in the version control,
+  allowing their code to serve as additional documentation.
+  &lt;br&gt;&lt;br&gt;
+  But if you intend to do this,
+  you need to be careful not to deploy the example along with your library
+  when you upload it to the package registry for your language.
+  This may require maintaining an explicit blacklist and/or whitelist,
+  in the vein of &lt;a href="https://docs.python.org/2/distutils/sourcedist.html#the-manifest-in-template"&gt;&lt;code&gt;MANIFEST&lt;/code&gt; files&lt;/a&gt;
+  in&amp;nbsp;Python.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;Examples may break as the library changes.&lt;/strong&gt;
+  Although example apps aren&amp;#8217;t integration tests that have a clear, expected outcome,
+  they should at the very least &lt;em&gt;compile correctly&lt;/em&gt;.
+  &lt;br&gt;&lt;br&gt;
+  The only way to ensure that is to include them in the build/test pipeline of your library.
+  To accomplish this, however, you may need to complicate your &lt;abbr title="continuous integration"&gt;&lt;span class="caps"&gt;CI&lt;/span&gt;&lt;/abbr&gt; setup,
+  perhaps by introducing additional languages like Bash or&amp;nbsp;Python.&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;&lt;strong&gt;It&amp;#8217;s harder to maintain quality of example code.&lt;/strong&gt;
+  Any linters and static analyzers that you&amp;#8217;re normally running will likely need to be configured
+  to also apply to the examples.
+  On the other hand, however, you probably don&amp;#8217;t want those checkers to be &lt;em&gt;too strict&lt;/em&gt;
+  (it&amp;#8217;s just example code, after all), so you may want to turn off some of the warnings,
+  adjust the level of others, and so&amp;nbsp;on.&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;So essentially, writing examples involves quite a lot of hassle.
+It would be great if the default tooling of your language
+helped to lessen the burden at least a &lt;em&gt;little&lt;/em&gt;&amp;nbsp;bit.&lt;/p&gt;
+&lt;p&gt;Well, good news! If you&amp;#8217;re a &lt;a href="http://rust-lang.org"&gt;Rust&lt;/a&gt; programmer,
+the language has basically got you&amp;nbsp;covered.&lt;/p&gt;
+&lt;p&gt;Cargo &amp;#8212; the standard build tool and package manager for Rust &amp;#8212;
+has some dedicated features to support &lt;em&gt;examples&lt;/em&gt; as a first-class concept.
+While it doesn&amp;#8217;t completely address all the pain points outlined above,
+it goes a long way towards minimizing&amp;nbsp;them.&lt;/p&gt;
+&lt;h4&gt;What are Cargo&amp;nbsp;examples?&lt;/h4&gt;
+&lt;p&gt;In Cargo&amp;#8217;s parlance, an &lt;em&gt;example&lt;/em&gt; is nothing else
+but a Rust source code of a standalone executable&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;
+that typically resides in a single &lt;code&gt;.rs&lt;/code&gt; file.
+All such files should be places in the &lt;code&gt;examples/&lt;/code&gt; directory,
+at the same level as &lt;code&gt;src/&lt;/code&gt; and the &lt;code&gt;Cargo.toml&lt;/code&gt; manifest itself&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+&lt;p&gt;Here&amp;#8217;s the simplest example of, ahem, an &lt;em&gt;example&lt;/em&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// examples/hello.rs&lt;/span&gt;
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello from an example!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;You can run it through the typical &lt;code&gt;cargo run&lt;/code&gt; command;
+simply pass the example name after the &lt;code&gt;--example&lt;/code&gt; flag:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;$ cargo run --example hello
+Hello from an example!
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;It is also possible to run the example with some additional&amp;nbsp;arguments:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;$ cargo run --example hello2 -- Alice
+Hello, Alice!
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;which are relayed directly to the underlying&amp;nbsp;binary:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// examples/hello2.rs&lt;/span&gt;
+&lt;span class="kn"&gt;use&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;env&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;env&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;skip&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;next&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello, {}!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;unwrap_or&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;world&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;()));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As you can see, the way we run examples is very similar to how we&amp;#8217;d run
+&lt;a href="https://doc.rust-lang.org/cargo/reference/manifest.html#the-project-layout"&gt;the &lt;code&gt;src/bin&lt;/code&gt; binaries&lt;/a&gt;,
+which some people use as normal entry points to their Rust&amp;nbsp;programs.&lt;/p&gt;
+&lt;p&gt;The important thing is that you don&amp;#8217;t have to worry what to do with your example code anymore.
+All you need to do is drop it in the &lt;code&gt;examples/&lt;/code&gt; directory,
+and let Cargo do the&amp;nbsp;rest.&lt;/p&gt;
+&lt;h4&gt;Dependency&amp;nbsp;included&lt;/h4&gt;
+&lt;p&gt;Of course in reality,
+your examples will be at least a &lt;em&gt;little&lt;/em&gt; more complicated than that.
+For one, they will surely call into your library to use its &lt;span class="caps"&gt;API&lt;/span&gt;,
+which means they need to depend on it &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; import its&amp;nbsp;symbols.&lt;/p&gt;
+&lt;p&gt;Fortunately, this doesn&amp;#8217;t complicate things even one&amp;nbsp;bit.&lt;/p&gt;
+&lt;p&gt;The library crate itself is already an &lt;em&gt;implied dependency&lt;/em&gt; of any code
+inside the &lt;code&gt;examples/&lt;/code&gt; directory.
+This is automatically handled by Cargo,
+so you don&amp;#8217;t have to modify &lt;code&gt;Cargo.toml&lt;/code&gt; (or do anything else really)
+to make it&amp;nbsp;happen.&lt;/p&gt;
+&lt;p&gt;So without any additional effort,
+you can just to link to your library crate in the usual manner,
+i.e. by putting &lt;code&gt;extern crate&lt;/code&gt; on top of the Rust&amp;nbsp;file:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// examples/real.rs&lt;/span&gt;
+&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;make_a_thing&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;I made a thing: {:?}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This goes even further, and extends to any dependency &lt;em&gt;of the library itself&lt;/em&gt;.
+All such third-party crates are automatically available to the example code,
+which proves handy in common cases such as &lt;a href="http://tokio.rs"&gt;Tokio&lt;/a&gt;-based asynchronous&amp;nbsp;APIs:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// example/async.rs&lt;/span&gt;
+&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio_core&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;// assuming it&amp;#39;s in mylib&amp;#39;s [dependencies]&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;core&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;tokio_core&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;reactor&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Core&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;core&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;run&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;make_a_thing_asynchronously&lt;/span&gt;&lt;span class="p"&gt;()).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;I made a thing: {:?}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;h4&gt;More&amp;nbsp;deps&lt;/h4&gt;
+&lt;p&gt;Sometimes, however, it is very useful to pull in an additional package or two,
+just for the example&amp;nbsp;code.&lt;/p&gt;
+&lt;p&gt;A typical case may involve &lt;em&gt;logging&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;If your library uses the usual &lt;a href="https://docs.rs/log"&gt;&lt;code&gt;log&lt;/code&gt; crate&lt;/a&gt; to output debug messages,
+you probably want to see them printed out when you run your examples.
+Since the &lt;code&gt;log&lt;/code&gt; crate is just a &lt;a href="https://en.wikipedia.org/wiki/Facade_pattern"&gt;facade&lt;/a&gt;,
+it doesn&amp;#8217;t offer any built-in way to pipe log messages to standard output.
+To handle this part,
+you need something like &lt;a href="http://docs.rs/env_logger"&gt;the &lt;code&gt;env_logger&lt;/code&gt; package&lt;/a&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// example/with_logging.rs&lt;/span&gt;
+&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;env_logger&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;env_logger&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;init&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{:?}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;make_a_thing&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;To be able to import &lt;code&gt;env_logger&lt;/code&gt; like this,
+it natually has to be declared as a dependency in our &lt;code&gt;Cargo.toml&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;We won&amp;#8217;t put it in the &lt;code&gt;[dependencies]&lt;/code&gt; section of the manifest,
+however, as it&amp;#8217;s not needed by the library code.
+Instead, we should place it in a
+&lt;a href="https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies"&gt;separate section&lt;/a&gt;
+called &lt;code&gt;[dev-dependencies]&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;[dev-dependencies]&lt;/span&gt;
+&lt;span class="na"&gt;env_logger&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;0.5&amp;quot;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Packages listed there are shared by tests, benchmarks, and &amp;#8212; yes, examples.
+They are not, however, linked into regular builds of your library,
+so you don&amp;#8217;t have to worry about bloating it with unnecessary&amp;nbsp;code.&lt;/p&gt;
+&lt;h4&gt;Growing&amp;nbsp;bigger&lt;/h4&gt;
+&lt;p&gt;So far, we have seen examples that span just a single Rust file.
+Practical applications tend to be bigger than that,
+so it&amp;#8217;d be nice if we could provide some multi-file examples as&amp;nbsp;well.&lt;/p&gt;
+&lt;p&gt;This is easily done, although for some reason it doesn&amp;#8217;t seem to be mentioned
+in &lt;a href="https://doc.rust-lang.org/cargo/reference/manifest.html#examples"&gt;the official docs&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;In any case, the approach is identical to
+&lt;a href="https://doc.rust-lang.org/cargo/reference/manifest.html#the-project-layout"&gt;executables inside &lt;code&gt;src/bin/&lt;/code&gt;&lt;/a&gt;.
+Basically, if we have a single &lt;code&gt;foo.rs&lt;/code&gt; file with executable code,
+we can expand it to a &lt;code&gt;foo/&lt;/code&gt; subdirectory with &lt;code&gt;foo/main.rs&lt;/code&gt; as the entry point.
+Then, we can add whatever other submodules we want &amp;#8212;
+just like we would do for a regular Rust binary&amp;nbsp;crate:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// examples/multifile/main.rs&lt;/span&gt;
+&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;env_logger&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="k"&gt;extern&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;crate&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="kn"&gt;mod&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;util&lt;/span&gt;&lt;span class="p"&gt;;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;env_logger&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;init&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ingredient&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;util&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;create_ingredient&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;mylib&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;make_a_thing_with&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;ingredient&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;{:?}&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;thing&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;!-- --&gt;
+
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="c1"&gt;// examples/multifile/util.rs&lt;/span&gt;
+
+&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;create_ingredient&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u64&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Of course, it won&amp;#8217;t be often that examples this large are necessary.
+Showing how a library can scale to bigger applications can, however,
+be very encouraging to potential&amp;nbsp;users.&lt;/p&gt;
+&lt;h4&gt;Maintaining&amp;nbsp;maintainability&lt;/h4&gt;
+&lt;p&gt;Thus far, we have discussed how to create small and larger examples,
+how to use additional third-party crates in example programs,
+and how to easily build &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; run them using built-in Cargo&amp;nbsp;commands.&lt;/p&gt;
+&lt;p&gt;All this effort spent on writing examples would be of little use
+if we couldn&amp;#8217;t ensure that they &lt;em&gt;work&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Like every type of code,
+examples are prone to breakage whenever the underlying &lt;span class="caps"&gt;API&lt;/span&gt; changes.
+If the library is actively developed, its interface represents a moving target.
+It is quite expected that changes may sometimes cause old examples to stop&amp;nbsp;compiling.&lt;/p&gt;
+&lt;p&gt;Thankfully, Cargo is very dilligent in reporting such breakages.
+Whenever you&amp;nbsp;run:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;$ cargo test
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;&lt;em&gt;all examples are built&lt;/em&gt; simultaneously with the execution of your regular test suite&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.
+You get the compilation guarantee for your examples essentially for free
+&amp;#8212; there is no need to even edit your &lt;code&gt;.travis.yml&lt;/code&gt;,
+or to adjust your continuous integration setup in any other&amp;nbsp;way!&lt;/p&gt;
+&lt;p&gt;Pretty neat,&amp;nbsp;right?&lt;/p&gt;
+&lt;p&gt;This saying, you should keep in mind that
+simply compiling your examples on a regular basis is not a foolproof guarantee
+that their code never becomes outdated.
+Examples are &lt;em&gt;not&lt;/em&gt; integration tests,
+and they won&amp;#8217;t catch important changes in your implementation
+that aren&amp;#8217;t breaking the&amp;nbsp;interface.&lt;/p&gt;
+&lt;h4&gt;Examples-Driven&amp;nbsp;Development?&lt;/h4&gt;
+&lt;p&gt;You may be wondering then, what&amp;#8217;s exactly the point of writing examples?
+If you got tests on one hand to verify correctness,
+and documentation on the other hand to inform your users,
+then having a bunch of dedicated executable examples may seem&amp;nbsp;superfluous.&lt;/p&gt;
+&lt;p&gt;To me, however, an impeccable test suite and amazing docs
+&amp;#8212; which also remain comprehensive and awesome for an entire lifetime of the library! &amp;#8212;
+sound a bit too much like a perfect world :)
+Adding examples to the mix can almost always improve things,
+and their maintenance burden should, in most cases, be very&amp;nbsp;minimal.&lt;/p&gt;
+&lt;p&gt;But I have also found out that starting off with examples early on
+is a great way to &lt;em&gt;validate the interface design&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Once the friction of creating small test programs has been eliminated,
+they become indispensable for prototyping new features.
+Wanna try out that new thing you&amp;#8217;ve just added?
+Simple: just make a quick example for it, run it, and see what&amp;nbsp;happens!&lt;/p&gt;
+&lt;p&gt;In many ways, doing this feels similar to trying out things in a
+&lt;abbr title="Run Eval Print Loop"&gt;&lt;span class="caps"&gt;REPL&lt;/span&gt;&lt;/abbr&gt;
+&amp;#8212; something that&amp;#8217;s almost exclusive to dynamic/interpreted languages.
+But unlike mucking around in Python shell, examples are &lt;em&gt;not&lt;/em&gt; throwaway code:
+they become part of your project, and remain useful for both you &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; your&amp;nbsp;users.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;It is also possible to create examples
+&lt;a href="https://doc.rust-lang.org/cargo/reference/manifest.html#examples"&gt;which are themselves just libraries&lt;/a&gt;.
+I don&amp;#8217;t think this is particularly useful, though,
+since all you can do with such examples is build them,
+so they don&amp;#8217;t provide any additional value over normal tests
+(and especially &lt;a href="https://doc.rust-lang.org/beta/rustdoc/documentation-tests.html"&gt;doc tests&lt;/a&gt;).&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:2"&gt;
+&lt;p&gt;Because they are outside of the &lt;code&gt;src/&lt;/code&gt; directory,
+examples do not become a part of your library&amp;#8217;s code, and are not deployed to &lt;a href="https://crates.io"&gt;crates.io&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li id="fn:3"&gt;
+&lt;p&gt;You can also run &lt;code&gt;cargo build --examples&lt;/code&gt; to only compile the examples,
+without running any kind of tests.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="Cargo"></category><category term="examples"></category><category term="documentation"></category><category term="packaging"></category></entry><entry><title>Unfolding a Stream of paginated items</title><link href="http://xion.io/post/code/rust-unfold-pagination.html" rel="alternate"></link><updated>2018-01-27T18:04:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-01-24:post/code/rust-unfold-pagination.html</id><summary type="html">&lt;p&gt;My &lt;a href="https://github.com/Xion/ezomyte"&gt;most recent Rust crate&lt;/a&gt;
 is an &lt;span class="caps"&gt;API&lt;/span&gt; client for &lt;a href="https://www.pathofexile.com/developer/docs/api-resource-public-stash-tabs"&gt;the Path of Exile&amp;#8217;s public stash tabs&lt;/a&gt;.
 One problem that I had to solve while writing it was to turn a sequence of &lt;em&gt;paginated&lt;/em&gt; items
 (in this case, player stash tabs) into a single, asynchronous &lt;code&gt;Stream&lt;/code&gt;.&lt;/p&gt;
@@ -385,7 +675,7 @@ from the &lt;a href="https://docs.rs/itertools/"&gt;&lt;code&gt;itertools&lt;/co
 allowing anyone to get an &lt;code&gt;Iterator&lt;/code&gt; from it.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="Tokio"></category><category term="streams"></category><category term="HTTP"></category></entry><entry><title>Terminating a Stream in Rust</title><link href="http://xion.io/post/code/rust-stream-terminate.html" rel="alternate"></link><updated>2017-12-16T21:17:00-08:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-12-16:post/code/rust-stream-terminate.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a little trick that may be useful in dealing with
+&lt;/div&gt;</summary><category term="Rust"></category><category term="Tokio"></category><category term="streams"></category><category term="HTTP"></category></entry><entry><title>Terminating a Stream in Rust</title><link href="http://xion.io/post/code/rust-stream-terminate.html" rel="alternate"></link><updated>2017-12-16T21:17:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-12-16:post/code/rust-stream-terminate.html</id><summary type="html">&lt;p&gt;Here&amp;#8217;s a little trick that may be useful in dealing with
 &lt;a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html"&gt;asynchronous &lt;code&gt;Stream&lt;/code&gt;s&lt;/a&gt; in&amp;nbsp;Rust.&lt;/p&gt;
 &lt;p&gt;When you consume a &lt;code&gt;Stream&lt;/code&gt; using
 &lt;a href="https://docs.rs/futures/0.1.17/futures/stream/trait.Stream.html#method.for_each"&gt;the &lt;code&gt;for_each&lt;/code&gt; method&lt;/a&gt;,
@@ -1516,189 +1806,4 @@ often requiring explicit type annotations, a &amp;#8220;no-op&amp;#8221; &lt;cod
 or both.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="iterators"></category></entry><entry><title>Arguments to Python generator functions</title><link href="http://xion.io/post/code/python-generator-args.html" rel="alternate"></link><updated>2017-04-02T22:10:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-03-14:post/code/python-generator-args.html</id><summary type="html">&lt;p&gt;In Python, a &lt;em&gt;generator function&lt;/em&gt; is one that
-contains a &lt;code&gt;yield&lt;/code&gt; statement inside the function body.
-Although this language construct has many fascinating use cases
-(&lt;a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"&gt;&lt;span class="caps"&gt;PDF&lt;/span&gt;&lt;/a&gt;),
-the most common one is creating concise and readable&amp;nbsp;iterators.&lt;/p&gt;
-&lt;h4&gt;A typical&amp;nbsp;case&lt;/h4&gt;
-&lt;p&gt;Consider, for example, this simple&amp;nbsp;function:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-    &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;which creates an (infinite) iterator over all multiples of given integer.
-A sample of its output looks like&amp;nbsp;this:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;itertools&lt;/span&gt; &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="n"&gt;islice&lt;/span&gt;
-&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="nb"&gt;list&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;islice&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
-&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;15&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;20&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;25&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;30&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;35&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;40&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;45&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;50&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;If you were to replicate in a language such as Java or Rust
-&amp;#8212; neither of which supports an equivalent of &lt;code&gt;yield&lt;/code&gt; &amp;#8212;
-you&amp;#8217;d end up writing an &lt;em&gt;iterator&lt;/em&gt; class.
-Python also has them, of&amp;nbsp;course:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;class&lt;/span&gt; &lt;span class="nc"&gt;Multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nb"&gt;object&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__init__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;current&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;__iter__&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;next&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;current&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;current&lt;/span&gt;
-
-    &lt;span class="n"&gt;__next__&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;next&lt;/span&gt;  &lt;span class="c"&gt;# Python 3&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;but they are usually not the first choice&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;It&amp;#8217;s also pretty easy to see why:
-they require explicit bookkeeping of any auxiliary state between iterations.
-Perhaps it&amp;#8217;s not too much to ask for a trivial walk over integers,
-but it can get quite tricky if we were to iterate over recursive data structures,
-like trees or graphs. In &lt;code&gt;yield&lt;/code&gt;-based generators, this isn&amp;#8217;t a problem,
-because the state is stored within local variables on the coroutine&amp;nbsp;stack.&lt;/p&gt;
-&lt;h4&gt;Lazy!&lt;/h4&gt;
-&lt;p&gt;It&amp;#8217;s important to remember, however, that
-generator functions behave differently than regular functions do,
-even if the surface appearance often says&amp;nbsp;otherwise.&lt;/p&gt;
-&lt;p&gt;The difference I wanted to explore in this post becomes apparent
-when we add some argument checking to the initial&amp;nbsp;example:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;ValueError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;expected a natural number, got &lt;/span&gt;&lt;span class="si"&gt;%r&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;,))&lt;/span&gt;
-
-    &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-    &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;With that &lt;code&gt;if&lt;/code&gt; in place, passing a negative number shall result in an exception.
-Yet when we attempt to do just that, it will seem as if nothing is&amp;nbsp;happening:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;And to a certain degree, this is pretty much correct.
-Simply &lt;em&gt;calling&lt;/em&gt; a generator function does comparatively little,
-and doesn&amp;#8217;t actually execute any of its code!
-Instead, we get back a &lt;em&gt;generator object&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;m&lt;/span&gt;
-&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;generator&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt; &lt;span class="n"&gt;at&lt;/span&gt; &lt;span class="mh"&gt;0x10f0ceb40&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;which is essentially a built-in analogue to the &lt;code&gt;Multiples&lt;/code&gt; iterator instance.
-Commonly, it is said that both generator functions and iterator classes are &lt;em&gt;lazy&lt;/em&gt;:
-they only do work when we asked (i.e. iterated&amp;nbsp;over).&lt;/p&gt;
-&lt;h4&gt;Getting&amp;nbsp;eager&lt;/h4&gt;
-&lt;p&gt;Oftentimes, this is perfectly okay.
-The laziness of generators is in fact one of their great strengths,
-which is particularly evident in the &lt;a href="https://pymotw.com/2/itertools/"&gt;immense usefulness&lt;/a&gt;
-of &lt;a href="http://docs.python.org/2/library/itertools.html"&gt;the&lt;code&gt;itertools&lt;/code&gt; module&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;On the other hand, however,
-delaying argument checks and similar operations until later may hamper debugging.
-The classic engineering principle of &lt;a href="https://en.wikipedia.org/wiki/Fail-fast"&gt;failing fast&lt;/a&gt;
-applies here very fittingly: any errors should be signaled immediately.
-In Python, this means raising exceptions as soon as problems are&amp;nbsp;detected.&lt;/p&gt;
-&lt;p&gt;Fortunately, it is possible to reconcile the benefits of laziness
-with (more) defensive programming.
-We can make the generator functions only a &lt;em&gt;little&lt;/em&gt; more eager,
-just enough to verify the correctness of their&amp;nbsp;arguments.&lt;/p&gt;
-&lt;p&gt;The trick is simple. We shall extract an &lt;em&gt;inner&lt;/em&gt; generator function
-and only call it after we have checked the&amp;nbsp;arguments:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="sd"&gt;&amp;quot;&amp;quot;&amp;quot;Yields all multiples of given integer.&amp;quot;&amp;quot;&amp;quot;&lt;/span&gt;
-    &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="k"&gt;raise&lt;/span&gt; &lt;span class="ne"&gt;ValueError&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;expected a natural number, got &lt;/span&gt;&lt;span class="si"&gt;%r&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;%&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;,))&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;():&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-            &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-            &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;From the caller&amp;#8217;s point of view, nothing has changed in the typical&amp;nbsp;case:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;generator&lt;/span&gt; &lt;span class="nb"&gt;object&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt; &lt;span class="n"&gt;at&lt;/span&gt; &lt;span class="mh"&gt;0x110579190&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;but if we try to make an incorrect invocation now,
-the problem is detected &lt;em&gt;immediately&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;5&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;!-- --&gt;
-
-&lt;div class="highlight"&gt;&lt;pre&gt;Traceback (most recent call last):
-  File &amp;quot;&amp;lt;pyshell#2&amp;gt;&amp;quot;, line 1, in &amp;lt;module&amp;gt;
-    multiples(of=-5)
-  File &amp;quot;&amp;lt;pyshell#0&amp;gt;&amp;quot;, line 4, in multiples
-    raise ValueError(&amp;quot;expected a natural number, got %r&amp;quot; % (of,))
-ValueError: expected a natural number, got -5
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Pretty neat, especially for something that requires only two lines of&amp;nbsp;code!&lt;/p&gt;
-&lt;h4&gt;The last&amp;nbsp;(micro)optimization&lt;/h4&gt;
-&lt;p&gt;Indeed, we didn&amp;#8217;t even have to pass the arguments to the inner (generator) function,
-because they are already captured by the&amp;nbsp;closure.&lt;/p&gt;
-&lt;p&gt;Unfortunately, this also has a slight performance cost.
-A captured variable (also known as a &lt;em&gt;cell variable&lt;/em&gt;) is stored on the function object itself,
-so Python has to emit
-&lt;a href="http://holdenweb.blogspot.com/2014/07/closures-arent-easy.html"&gt;a different bytecode instruction&lt;/a&gt;
-(&lt;code&gt;LOAD_DEREF&lt;/code&gt;) that involves
-an &lt;a href="http://stupidpythonideas.blogspot.com/2015/12/how-lookup-works.html"&gt;extra pointer dereference&lt;/a&gt;.
-Normally, this is not a problem, but in a tight generator loop it can make a&amp;nbsp;difference.&lt;/p&gt;
-&lt;p&gt;We can eliminate this extra work&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt; by passing the parameters&amp;nbsp;explicitly:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;    &lt;span class="c"&gt;# (snip)&lt;/span&gt;
-
-    &lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-        &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-        &lt;span class="k"&gt;while&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-            &lt;span class="k"&gt;yield&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt;
-            &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="n"&gt;of&lt;/span&gt;
-
-    &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;multiples&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;of&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This turns them into local variables of the inner function,
-replacing the &lt;code&gt;LOAD_DEREF&lt;/code&gt; instructions with (aptly named) &lt;code&gt;LOAD_FAST&lt;/code&gt; ones.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;Technically, the &lt;em&gt;Multiples&lt;/em&gt; class is here is both an &lt;em&gt;iterator&lt;/em&gt;
-(because it has the &lt;code&gt;next&lt;/code&gt;/&lt;code&gt;__next__&lt;/code&gt; methods) and &lt;em&gt;iterable&lt;/em&gt;
-(because it has &lt;code&gt;__iter__&lt;/code&gt; method that returns an iterator, which happens to be the same object).
-This is common feature of iterators that are not associated with any collection,
-like the ones defined in the built-in &lt;a href="http://docs.python.org/2/library/itertools.html"&gt;&lt;code&gt;itertools&lt;/code&gt; module&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Note that if you engage in this kind of microoptimizations,
-I&amp;#8217;d assume you have already &lt;a href="https://www.python.org/doc/essays/list2str/"&gt;changed your global lookup into local ones&lt;/a&gt; :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Python"></category><category term="generators"></category><category term="functions"></category><category term="arguments"></category><category term="closures"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="iterators"></category></entry></feed>

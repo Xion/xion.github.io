@@ -63,6 +63,311 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-examples.html#rust-examples">Add examples to your Rust&nbsp;libraries</a></h2>
+    <p>
+      Posted on Wed 28 February 2018 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/cargo.html">Cargo</a>,      <a href="http://xion.io/tag/examples.html">examples</a>,      <a href="http://xion.io/tag/documentation.html">documentation</a>,      <a href="http://xion.io/tag/packaging.html">packaging</a>      &#8226; <a href="http://xion.io/post/code/rust-examples.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>When you&#8217;re writing a library for other programs to depend on,
+it is paramount to think how the developers are going to use it in their&nbsp;code.</p>
+<p>The best way to ensure they have a pleasant experience
+is to <em>put yourself in their shoes</em>.
+Forget the internal details of your package, and consider only its outward interface.
+Then, come up with a realistic use case and just <em>implement it</em>.</p>
+<p>In other words, you should create complete, end-to-end,
+and (somewhat) usable <em>example applications</em>.</p>
+<h4>Examples are&nbsp;trouble</h4>
+<p>You may think this is asking a lot, and I wouldn&#8217;t really disagree&nbsp;here.</p>
+<p>In most languages and programming platforms,
+it is indeed quite cumbersome to create example apps.
+This happens for at least several different&nbsp;reasons:</p>
+<ul>
+<li>
+<p><strong>It typically requires bootstrapping an entire project from scratch.</strong>
+  If you are lucky, you will have something like <code>create-react-app</code>
+  to get you going relatively quickly.
+  Still, you need to wire up the new project so that it depends on the <em>source code</em> of your library
+  rather than its published version,
+  and this tends to be a non-standard option &#8212; if it is available at&nbsp;all.</p>
+</li>
+<li>
+<p><strong>It&#8217;s unclear where should the example code live.</strong>
+  Should you just throw it away, once it has served its immediate purpose?
+  I&#8217;m sure this would discourage many people from creating examples in the first place.
+  It&#8217;s certainly better to keep them in the version control,
+  allowing their code to serve as additional documentation.
+  <br><br>
+  But if you intend to do this,
+  you need to be careful not to deploy the example along with your library
+  when you upload it to the package registry for your language.
+  This may require maintaining an explicit blacklist and/or whitelist,
+  in the vein of <a href="https://docs.python.org/2/distutils/sourcedist.html#the-manifest-in-template"><code>MANIFEST</code> files</a>
+  in&nbsp;Python.</p>
+</li>
+<li>
+<p><strong>Examples may break as the library changes.</strong>
+  Although example apps aren&#8217;t integration tests that have a clear, expected outcome,
+  they should at the very least <em>compile correctly</em>.
+  <br><br>
+  The only way to ensure that is to include them in the build/test pipeline of your library.
+  To accomplish this, however, you may need to complicate your <abbr title="continuous integration"><span class="caps">CI</span></abbr> setup,
+  perhaps by introducing additional languages like Bash or&nbsp;Python.</p>
+</li>
+<li>
+<p><strong>It&#8217;s harder to maintain quality of example code.</strong>
+  Any linters and static analyzers that you&#8217;re normally running will likely need to be configured
+  to also apply to the examples.
+  On the other hand, however, you probably don&#8217;t want those checkers to be <em>too strict</em>
+  (it&#8217;s just example code, after all), so you may want to turn off some of the warnings,
+  adjust the level of others, and so&nbsp;on.</p>
+</li>
+</ul>
+<p>So essentially, writing examples involves quite a lot of hassle.
+It would be great if the default tooling of your language
+helped to lessen the burden at least a <em>little</em>&nbsp;bit.</p>
+<p>Well, good news! If you&#8217;re a <a href="http://rust-lang.org">Rust</a> programmer,
+the language has basically got you&nbsp;covered.</p>
+<p>Cargo &#8212; the standard build tool and package manager for Rust &#8212;
+has some dedicated features to support <em>examples</em> as a first-class concept.
+While it doesn&#8217;t completely address all the pain points outlined above,
+it goes a long way towards minimizing&nbsp;them.</p>
+<h4>What are Cargo&nbsp;examples?</h4>
+<p>In Cargo&#8217;s parlance, an <em>example</em> is nothing else
+but a Rust source code of a standalone executable<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>
+that typically resides in a single <code>.rs</code> file.
+All such files should be places in the <code>examples/</code> directory,
+at the same level as <code>src/</code> and the <code>Cargo.toml</code> manifest itself<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<p>Here&#8217;s the simplest example of, ahem, an <em>example</em>:</p>
+<div class="highlight"><pre><span class="c1">// examples/hello.rs</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello from an example!&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>You can run it through the typical <code>cargo run</code> command;
+simply pass the example name after the <code>--example</code> flag:</p>
+<div class="highlight"><pre>$ cargo run --example hello
+Hello from an example!
+</pre></div>
+
+
+<p>It is also possible to run the example with some additional&nbsp;arguments:</p>
+<div class="highlight"><pre>$ cargo run --example hello2 -- Alice
+Hello, Alice!
+</pre></div>
+
+
+<p>which are relayed directly to the underlying&nbsp;binary:</p>
+<div class="highlight"><pre><span class="c1">// examples/hello2.rs</span>
+<span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">env</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">env</span><span class="o">::</span><span class="n">args</span><span class="p">().</span><span class="n">skip</span><span class="p">(</span><span class="mi">1</span><span class="p">).</span><span class="n">next</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">.</span><span class="n">unwrap_or</span><span class="p">(</span><span class="s">&quot;world&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()));</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you can see, the way we run examples is very similar to how we&#8217;d run
+<a href="https://doc.rust-lang.org/cargo/reference/manifest.html#the-project-layout">the <code>src/bin</code> binaries</a>,
+which some people use as normal entry points to their Rust&nbsp;programs.</p>
+<p>The important thing is that you don&#8217;t have to worry what to do with your example code anymore.
+All you need to do is drop it in the <code>examples/</code> directory,
+and let Cargo do the&nbsp;rest.</p>
+<h4>Dependency&nbsp;included</h4>
+<p>Of course in reality,
+your examples will be at least a <em>little</em> more complicated than that.
+For one, they will surely call into your library to use its <span class="caps">API</span>,
+which means they need to depend on it <span class="amp">&amp;</span> import its&nbsp;symbols.</p>
+<p>Fortunately, this doesn&#8217;t complicate things even one&nbsp;bit.</p>
+<p>The library crate itself is already an <em>implied dependency</em> of any code
+inside the <code>examples/</code> directory.
+This is automatically handled by Cargo,
+so you don&#8217;t have to modify <code>Cargo.toml</code> (or do anything else really)
+to make it&nbsp;happen.</p>
+<p>So without any additional effort,
+you can just to link to your library crate in the usual manner,
+i.e. by putting <code>extern crate</code> on top of the Rust&nbsp;file:</p>
+<div class="highlight"><pre><span class="c1">// examples/real.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">thing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;I made a thing: {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">thing</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>This goes even further, and extends to any dependency <em>of the library itself</em>.
+All such third-party crates are automatically available to the example code,
+which proves handy in common cases such as <a href="http://tokio.rs">Tokio</a>-based asynchronous&nbsp;APIs:</p>
+<div class="highlight"><pre><span class="c1">// example/async.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">tokio_core</span><span class="p">;</span><span class="w">  </span><span class="c1">// assuming it&#39;s in mylib&#39;s [dependencies]</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">core</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tokio_core</span><span class="o">::</span><span class="n">reactor</span><span class="o">::</span><span class="n">Core</span><span class="o">::</span><span class="n">new</span><span class="p">().</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">thing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">core</span><span class="p">.</span><span class="n">run</span><span class="p">(</span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing_asynchronously</span><span class="p">()).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;I made a thing: {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">thing</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>More&nbsp;deps</h4>
+<p>Sometimes, however, it is very useful to pull in an additional package or two,
+just for the example&nbsp;code.</p>
+<p>A typical case may involve <em>logging</em>.</p>
+<p>If your library uses the usual <a href="https://docs.rs/log"><code>log</code> crate</a> to output debug messages,
+you probably want to see them printed out when you run your examples.
+Since the <code>log</code> crate is just a <a href="https://en.wikipedia.org/wiki/Facade_pattern">facade</a>,
+it doesn&#8217;t offer any built-in way to pipe log messages to standard output.
+To handle this part,
+you need something like <a href="http://docs.rs/env_logger">the <code>env_logger</code> package</a>:</p>
+<div class="highlight"><pre><span class="c1">// example/with_logging.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">env_logger</span><span class="p">;</span><span class="w"></span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">env_logger</span><span class="o">::</span><span class="n">init</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing</span><span class="p">());</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>To be able to import <code>env_logger</code> like this,
+it natually has to be declared as a dependency in our <code>Cargo.toml</code>.</p>
+<p>We won&#8217;t put it in the <code>[dependencies]</code> section of the manifest,
+however, as it&#8217;s not needed by the library code.
+Instead, we should place it in a
+<a href="https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies">separate section</a>
+called <code>[dev-dependencies]</code>:</p>
+<div class="highlight"><pre><span class="k">[dev-dependencies]</span>
+<span class="na">env_logger</span> <span class="o">=</span> <span class="s">&quot;0.5&quot;</span>
+</pre></div>
+
+
+<p>Packages listed there are shared by tests, benchmarks, and &#8212; yes, examples.
+They are not, however, linked into regular builds of your library,
+so you don&#8217;t have to worry about bloating it with unnecessary&nbsp;code.</p>
+<h4>Growing&nbsp;bigger</h4>
+<p>So far, we have seen examples that span just a single Rust file.
+Practical applications tend to be bigger than that,
+so it&#8217;d be nice if we could provide some multi-file examples as&nbsp;well.</p>
+<p>This is easily done, although for some reason it doesn&#8217;t seem to be mentioned
+in <a href="https://doc.rust-lang.org/cargo/reference/manifest.html#examples">the official docs</a>.</p>
+<p>In any case, the approach is identical to
+<a href="https://doc.rust-lang.org/cargo/reference/manifest.html#the-project-layout">executables inside <code>src/bin/</code></a>.
+Basically, if we have a single <code>foo.rs</code> file with executable code,
+we can expand it to a <code>foo/</code> subdirectory with <code>foo/main.rs</code> as the entry point.
+Then, we can add whatever other submodules we want &#8212;
+just like we would do for a regular Rust binary&nbsp;crate:</p>
+<div class="highlight"><pre><span class="c1">// examples/multifile/main.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">env_logger</span><span class="p">;</span><span class="w"></span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+
+<span class="kn">mod</span><span class="w"> </span><span class="n">util</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">env_logger</span><span class="o">::</span><span class="n">init</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">ingredient</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">util</span><span class="o">::</span><span class="n">create_ingredient</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">thing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing_with</span><span class="p">(</span><span class="n">ingredient</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">thing</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre><span class="c1">// examples/multifile/util.rs</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">create_ingredient</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">u64</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="mi">42</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Of course, it won&#8217;t be often that examples this large are necessary.
+Showing how a library can scale to bigger applications can, however,
+be very encouraging to potential&nbsp;users.</p>
+<h4>Maintaining&nbsp;maintainability</h4>
+<p>Thus far, we have discussed how to create small and larger examples,
+how to use additional third-party crates in example programs,
+and how to easily build <span class="amp">&amp;</span> run them using built-in Cargo&nbsp;commands.</p>
+<p>All this effort spent on writing examples would be of little use
+if we couldn&#8217;t ensure that they <em>work</em>.</p>
+<p>Like every type of code,
+examples are prone to breakage whenever the underlying <span class="caps">API</span> changes.
+If the library is actively developed, its interface represents a moving target.
+It is quite expected that changes may sometimes cause old examples to stop&nbsp;compiling.</p>
+<p>Thankfully, Cargo is very dilligent in reporting such breakages.
+Whenever you&nbsp;run:</p>
+<div class="highlight"><pre>$ cargo test
+</pre></div>
+
+
+<p><em>all examples are built</em> simultaneously with the execution of your regular test suite<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
+You get the compilation guarantee for your examples essentially for free
+&#8212; there is no need to even edit your <code>.travis.yml</code>,
+or to adjust your continuous integration setup in any other&nbsp;way!</p>
+<p>Pretty neat,&nbsp;right?</p>
+<p>This saying, you should keep in mind that
+simply compiling your examples on a regular basis is not a foolproof guarantee
+that their code never becomes outdated.
+Examples are <em>not</em> integration tests,
+and they won&#8217;t catch important changes in your implementation
+that aren&#8217;t breaking the&nbsp;interface.</p>
+<h4>Examples-Driven&nbsp;Development?</h4>
+<p>You may be wondering then, what&#8217;s exactly the point of writing examples?
+If you got tests on one hand to verify correctness,
+and documentation on the other hand to inform your users,
+then having a bunch of dedicated executable examples may seem&nbsp;superfluous.</p>
+<p>To me, however, an impeccable test suite and amazing docs
+&#8212; which also remain comprehensive and awesome for an entire lifetime of the library! &#8212;
+sound a bit too much like a perfect world :)
+Adding examples to the mix can almost always improve things,
+and their maintenance burden should, in most cases, be very&nbsp;minimal.</p>
+<p>But I have also found out that starting off with examples early on
+is a great way to <em>validate the interface design</em>.</p>
+<p>Once the friction of creating small test programs has been eliminated,
+they become indispensable for prototyping new features.
+Wanna try out that new thing you&#8217;ve just added?
+Simple: just make a quick example for it, run it, and see what&nbsp;happens!</p>
+<p>In many ways, doing this feels similar to trying out things in a
+<abbr title="Run Eval Print Loop"><span class="caps">REPL</span></abbr>
+&#8212; something that&#8217;s almost exclusive to dynamic/interpreted languages.
+But unlike mucking around in Python shell, examples are <em>not</em> throwaway code:
+they become part of your project, and remain useful for both you <span class="amp">&amp;</span> your&nbsp;users.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It is also possible to create examples
+<a href="https://doc.rust-lang.org/cargo/reference/manifest.html#examples">which are themselves just libraries</a>.
+I don&#8217;t think this is particularly useful, though,
+since all you can do with such examples is build them,
+so they don&#8217;t provide any additional value over normal tests
+(and especially <a href="https://doc.rust-lang.org/beta/rustdoc/documentation-tests.html">doc tests</a>).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Because they are outside of the <code>src/</code> directory,
+examples do not become a part of your library&#8217;s code, and are not deployed to <a href="https://crates.io">crates.io</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>You can also run <code>cargo build --examples</code> to only compile the examples,
+without running any kind of tests.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-examples.html#rust-examples">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-unfold-pagination.html#rust-unfold-pagination">Unfolding a Stream of paginated&nbsp;items</a></h2>
     <p>
       Posted on Wed 24 January 2018 in <a href="http://xion.io/category/code.html">Code</a>
@@ -2076,419 +2381,6 @@ A different situation may be best handled by Python, Ruby, or even&nbsp;JavaScri
 <p>As the old adage goes, there is no silver bullet.
 We should not try to polish static typing into&nbsp;one.</p>
       <a class="btn" href="http://xion.io/post/programming/long-live-dynamic-languages.html#long-live-dynamic-languages">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/rust-async-closer-look.html#rust-async-closer-look">Asynchronous Rust for fun <span class="amp">&amp;</span>&nbsp;profit</a></h2>
-    <p>
-      Posted on Fri 28 April 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/async.html">async</a>,      <a href="http://xion.io/tag/tokio.html">Tokio</a>,      <a href="http://xion.io/tag/futures.html">futures</a>,      <a href="http://xion.io/tag/http.html">HTTP</a>      &#8226; <a href="http://xion.io/post/programming/rust-async-closer-look.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><em>&#8230;or: Is Rust&nbsp;webscale?</em></p>
-<p>In this day and age, no language can really make an impact anymore
-unless it enables its programmers to harness the power of the Internet.
-<a href="https://www.rust-lang.org/en-US/">Rust</a> is no different here.
-Despite posing as a true systems language
-(as opposed to those <a href="http://golang.org/">only marketed as such</a>),
-it includes <a href="https://github.com/aturon/rfcs/blob/roadmap-2017/text/0000-roadmap-2017.md#rust-should-be-well-equipped-for-writing-robust-high-scale-servers">highly scalable servers</a>
-as a prominent objective in its 2017&nbsp;agenda.</p>
-<p>Presumably to satisfy this very objective,
-the Rust ecosystem has recently seen some major developments
-in the space of <em>asynchronous I/O</em>.
-Given the pace of those improvements,
-it may seem that production quality async services are quite possible&nbsp;already.</p>
-<p>But is that so?
-How exactly do you write async Rust servers in the early to mid&nbsp;2017?</p>
-<p>To find out, I set to code up a toy application.
-Said program was a small intermediary/<span class="caps">API</span> server (a &#8220;microservice&#8221;, if you will)
-that tries to hit many of the typical requirements that arise in such projects.
-The main objective was to test the limits of asynchronous Rust,
-and see how easily (or difficult) they can be&nbsp;pushed.</p>
-<p>This post is a summary of all the lessons I&#8217;ve learned from&nbsp;that.</p>
-<p>It is necessarily quite long,
-so if you look for some <span class="caps">TL</span>;<span class="caps">DR</span>, scroll down straight to <em>Conclusions</em>.</p>
-<p align="center"><img src="http://xion.io/images/jump-to-conclusions-mat.jpeg"></p>
-
-<h4>Asynchro-what?</h4>
-<p>Before we dive in, I have to clarify what &#8220;asynchronous&#8221; means in this context.
-Those familiar with async concepts can freely skip this&nbsp;section.</p>
-<h5>Pulling some&nbsp;threads</h5>
-<p>Asynchronous processing (or <em>async</em> for short) is brought up most often
-in the context of I/O operations: disk reads, network calls, database queries,
-and so&nbsp;on.</p>
-<p>Relatively speaking, all those tasks tend to be <em>slow</em>:
-they take orders of magnitude longer than just executing code or even accessing <span class="caps">RAM</span>.
-The &#8220;traditional&#8221; (synchronous) approach to dealing with them
-is to relegate those tasks to separate <em>threads</em>.</p>
-<p>When one thread has to wait for a lengthy I/O operation to complete,
-the operating system (its <em>scheduler</em>, to be precise) can suspend that thread.
-This lets others execute their code in the mean time and not waste <span class="caps">CPU</span>&nbsp;cycles.</p>
-<p>This is the essence of <em>concurrency</em><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<h5>Schedule&nbsp;yourself</h5>
-<p>But threads are not the only option when dealing with many things (i.e. requests) at&nbsp;once.</p>
-<p>The alternative approach is one where no threads are automatically suspended or resumed
-by the <span class="caps">OS</span>. Instead, a special version of I/O subroutines
-allows the program to continue execution immediately after issuing an I/O call.
-While the operation happens in the background<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>,
-the code is given an opaque handle &#8212; usually called a promise, a <em>future</em>,
-or an async result &#8212; that will eventually resolve to the actual return&nbsp;value.</p>
-<p>The program can wait for the handle synchronously,
-but it would typically hand it over to an <em>event loop</em>,
-an abstraction provided by a dedicated async framework.
-Such a framework (among which node.js is probably the best known example)
-maintains a list of all I/O &#8220;descriptors&#8221; (fds in Unix)
-that are associated with pending I/O&nbsp;operations.</p>
-<p>Then, in the loop, it simply waits on <em>all</em> of them,
-usually via the <a href="https://en.wikipedia.org/wiki/Epoll"><code>epoll</code> system call</a>.
-Whenever an I/O task completes, the loop would execute a <em>callback</em> associated
-with its result (or promise, or future).
-Through this callback, the application is able to process&nbsp;it.</p>
-<p>In a sense, we can treat the event loop as a dedicated scheduler for its&nbsp;program.</p>
-<h5>But&nbsp;why?</h5>
-<p>So, what exactly the benefit of asynchronous I/O?
-If anything, it definitely sounds more complicated for the programmer. (Spoiler alert: it&nbsp;is).</p>
-<p>The impetus for the development of async techniques most likely came from
-the <a href="http://www.kegel.com/c10k.html"><span class="caps">C10K</span> problem</a>.
-The short version of it is that computers are nowadays very fast
-and should therefore be able to serve thousands of requests simultaneously.
-(especially when those requests are mostly I/O, which translate to waiting time for the <span class="caps">CPU</span>).</p>
-<p>And if &#8220;serving&#8221; queries is indeed almost all waiting,
-then handling thousands of clients should be very&nbsp;possible.</p>
-<p>In some cases, however, it was found that when the <span class="caps">OS</span> is scheduling the threads,
-it introduces too much overhead on the frequent pause/resume state changes (<em>context switching</em>).
-Like I mentioned above, the asynchronous alternative does away with all that,
-and indeed lets the <span class="caps">CPU</span> just wait (on <code>epoll</code>) until something interesting happens.
-Once it does, the application can deal with it quickly,
-issue another I/O call, and let the server go back to&nbsp;waiting.</p>
-<p>With today&#8217;s processing power we can theoretically handle
-<em>a lot</em> of concurrent clients this way: up to hundreds of thousands or even&nbsp;millions.</p>
-<h5>Reality&nbsp;check</h5>
-<p>Well, ain&#8217;t that grand? No wonder everyone is writing everything in node.js&nbsp;now!</p>
-<p>Jokes aside, the <em>actual</em> benefits of asynchronous I/O
-(especially when weighed against its inconvenience for developers)
-are a bit harder to quantify.
-For one, they rely heavily on the assumption of fast code <span class="amp">&amp;</span> slow I/O being valid in all&nbsp;situations.</p>
-<p>But this isn&#8217;t really self-evident, and becomes increasingly dubious as time goes on
-and code complexity grows.
-It should be obvious, for example, that a Python web frontend
-talking mostly to in-memory caches in the same datacenter will have radically different
-performance characteristics than a C++ proxy server calling <span class="caps">HTTP</span> APIs over public Internet.
-Those nuances are often lost in translation between simplistic benchmarks
-and exaggerated blog posts<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
-<p>Upon a closer look, however, these details point quite clearly in favor of asynchronous Rust.
-Being a language that compiles to native code, it should usually run faster
-than interpreted (Python, Ruby) or even JITed (<span class="caps">JVM</span> <span class="amp">&amp;</span> .<span class="caps">NET</span>) languages,
-very close to what is typically referred to as &#8220;bare metal&#8221; speed.
-For async I/O, it means the event loop won&#8217;t be disturbed for a (relatively) long time
-to do some trivial processing, leading to higher potential throughput of&nbsp;requests.</p>
-<p>All in all, it would seem that Rust is one of the few languages
-where async actually <em>makes sense</em>.</p>
-<h4>Rust: the story so&nbsp;far</h4>
-<p>Obviously, this means it&#8217;s been built into the language right from the start&#8230;&nbsp;right?</p>
-<p>Well, not really.
-It was always possible to use native <code>epoll</code> through <a href="https://doc.rust-lang.org/book/ffi.html"><span class="caps">FFI</span></a>,
-of course, but that&#8217;s not exactly the level of abstraction we&#8217;d like to work with.
-Still, the upper layers of the async I/O stack have been steadily growing at least since Rust&nbsp;1.0.</p>
-<p>The major milestones here include <a href="https://docs.rs/mio"><em>mio</em></a>,
-a comparatively basic building block that provides an asynchronous version of <span class="caps">TCP</span>/<span class="caps">IP</span>.
-It also offers idiomatic wrappers over <code>epoll</code>, allowing us to write our own event&nbsp;loop.</p>
-<p>On the application side, <a href="https://docs.rs/futures">the <em>futures</em> crate</a> abstracts the notion
-of a potentially incomplete operation into, well, a <em>future</em>.
-Manipulating those futures is how one can now write asynchronous code in&nbsp;Rust.</p>
-<p>More recently, <a href="http://tokio.rs">Tokio</a> has been emerging as
-<a href="https://blog.mozilla.org/blog/2017/04/10/mozilla-awards-365000-to-open-source-projects-as-part-of-moss/"><em>defacto</em> framework</a>
-for async I/O in Rust. It essentially combines the two previously mentioned crates,
-and provides additional abstractions specifically for network clients and&nbsp;servers.</p>
-<p>And finally, the popular <span class="caps">HTTP</span> framework <a href="http://hyper.rs">Hyper</a> is now also supporting
-asynchronous request handling via Tokio.
-What this means is that bread-and-butter of the Internet&#8217;s application layer &#8212;
-<span class="caps">API</span> servers talking <span class="caps">JSON</span> over <span class="caps">HTTP</span> &#8212; should now be fully supported by the ecosystem
-of asynchronous&nbsp;Rust.</p>
-<p>Let&#8217;s take it for a spin then, shall&nbsp;we?</p>
-<h4>The Grand&nbsp;Project</h4>
-<p>Earlier on, we have established that the main use case for asynchronous I/O
-is intermediate microservices.
-They often sit somewhere between a standard web frontend and a storage server or a database.
-Because of their typical role within a bigger system,
-these kinds of projects don&#8217;t tend to be particularly exciting on their&nbsp;own.</p>
-<p>But perhaps we can liven them up a&nbsp;little.</p>
-<p>In the end, it is all about the Internet that we&#8217;re talking here,
-and everything on the Internet can usually be improved by one simple&nbsp;addition.</p>
-<p align="center">
-    <img src="http://xion.io/images/smoothie.jpeg">
-    <br/>
-    <small style="text-side: xx-small">
-        <a href="http://www.boredpanda.com/beautiful-fluffy-cat-british-longhair/">
-            Image source
-        </a>
-    </small>
-</p>
-
-<p>&#8230;Okay, <em>two</em> possible additions &#8212; the other one&nbsp;being:</p>
-<p align="center"><img src="http://xion.io/images/oprah-memes.png" alt="Memes!"></p>
-
-<p>If you&#8217;re really pedantic, you may call them <em>image macros</em>.
-But regardless of the name, the important part is putting text on pictures,
-preferably in a funny&nbsp;way.</p>
-<p><a href="https://github.com/Xion/rofld">The microservice I wrote</a> is doing just that.
-Thought it won&#8217;t ensure your memes are sufficiently hilarious,
-it will try to deliver them exactly to
-<a href="https://github.com/Xion/rofld/blob/e25e9d01bdd7e85452e6a5922770dae941d5b61c/src/caption/mod.rs#L32">your specifications</a>.
-You may thus think of it as possible backend for
-<a href="http://www.quickmeme.com/caption">an image site like this one</a>.</p>
-<h5>Flimsy excuses <span class="amp">&amp;</span> post-hoc&nbsp;justifications</h5>
-<p>It is, of course, a <em>complete</em> coincidence,
-lacking <em>any</em> premeditation on my part,
-that when it comes to evaluating an async platform,
-a service like this fits the bill <em>very well</em>.</p>
-<p>And especially when said platform is async <em>Rust</em>.</p>
-<p>Why, though, is it such a happy, er,&nbsp;accident?</p>
-<ul>
-<li>
-<p><strong>It&#8217;s a simple, well-defined application</strong>.
-  There is basically a <a href="https://github.com/Xion/rofld/blob/e25e9d01bdd7e85452e6a5922770dae941d5b61c/src/service.rs#L33">single endpoint</a>,
-  accepting simple input (<span class="caps">JSON</span> or query string) and producing a straightforward result (an image).
-  No need to persist any state made creating
-  <a href="https://github.com/Xion/rofld/blob/8026eab34ea54c4ba1b814c1114b3f5d87020233/src/main.rs">an <span class="caps">MVP</span></a>
-  significantly&nbsp;easier.</p>
-</li>
-<li>
-<p><strong>Caching can be used for meme templates and fonts.</strong>
-  Besides being an inherent part of most network services,
-  a cache also represents a point of contention for Rust programs.
-  The language is widely known for its alergy to global mutable state,
-  which is exactly what programmatic caches boil down&nbsp;to.</p>
-</li>
-<li>
-<p><strong>Image captioning is a <span class="caps">CPU</span>-intensive operation.</strong>
-  While the &#8220;async&#8221; part of async I/O may sometimes go all the way down,
-  many practical services either evolve some important <span class="caps">CPU</span>-bound code,
-  or require it right from the start.
-  For this reason, I wanted to check if <span class="amp">&amp;</span> how async Rust can mix
-  with threaded&nbsp;concurrency.</p>
-</li>
-<li>
-<p><strong>Configuration knobs can be added.</strong>
-  Unlike trivial experiments in the vein of an echo or &#8220;Hello world&#8221; server,
-  this kind of service warrants some flags that the user could tweak,
-  like the number of image captioning threads, or the size of the template cache.
-  We can see how easy (or how hard) it is to make them applicable across
-  all future-based&nbsp;requests.</p>
-</li>
-</ul>
-<p>All in all, and despite its frivolous subject matter,
-a meme server is actually hitting quite a few notable spots in the microservice&nbsp;domain.</p>
-<p align="center">
-    <img src="http://xion.io/images/meme-shocked.png" alt="">
-</p>
-
-<h4>Learnings</h4>
-<p>As you may glean from its <a href="https://github.com/Xion/rofld">GitHub repo</a>,
-it would seem that the experiment was successful.
-Sure, you could implement some features in the captioning department
-(supporting animated GIFs comes to mind),
-but none of these are pertinent to the async mechanics of the&nbsp;server.</p>
-<p>And since it&#8217;s the async (I/O) in Rust that we&#8217;re interested in,
-let me now present you with an assorted collection of practical experiences with&nbsp;it.</p>
-<h5>&gt;0-cost&nbsp;futures</h5>
-<p>If you read the docs&#8217; preamble to <a href="https://docs.rs/futures">the <code>futures</code> crate</a>,
-you will see it mentioning the &#8220;zero-cost&#8221; aspect of the library.
-Consistent with the philosophy behind Rust,
-it proclaims to deliver its abstractions without any&nbsp;overhead.</p>
-<p>Thing is, I&#8217;m not sure how this promise can be delivered on in&nbsp;practice.</p>
-<p>Flip through <a href="https://tokio.rs/docs/getting-started/simple-server/">the introductory tutorial to Tokio</a>,
-for example, and you will already find plenty of compromises.
-Without the crucial (but nightly-only)
-<a href="https://github.com/rust-lang/rfcs/blob/master/text/1522-conservative-impl-trait.md"><code>impl Trait</code> feature</a>,
-you are basically required to put all your futures in a <code>Box</code><sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
-They even encourage it themselves, offering a convenient
-<a href="https://docs.rs/futures/0.1.13/futures/future/trait.Future.html#method.boxed"><code>Future::boxed</code> method</a>
-exactly for this purpose, as well the matching
-<a href="https://docs.rs/futures/0.1.13/futures/future/type.BoxFuture.html"><code>BoxFuture</code> typedef</a>
-right in the&nbsp;crate.</p>
-<p>But hey, you can always just use nightly Rust, right?
-<code>impl Trait</code> will stabilize eventually, so your code should be, ahem, <em>future-proof</em> either&nbsp;way.</p>
-<p>Unfortunately, this assumes all the futures that you&#8217;re building your request handlers from
-shall never cross any thread boundaries.
-(<code>BoxFuture</code>, for example, automatically constrains them to be <code>Send</code>).
-As you&#8217;ve likely guessed, this doesn&#8217;t jive very well with computationally intensive tasks
-which are best relegated to a separate&nbsp;thread.</p>
-<p>To deal with them properly, you&#8217;re going to need a thread pool-based executor,
-which is currently implemented in the <a href="https://docs.rs/futures-cpupool"><code>futures_cpupool</code> crate</a>.
-Using it requires a lot of care, though,
-and a deep understanding of <em>both</em> types of concurrency&nbsp;involved.</p>
-<p>Evidently, this was something that I lacked at the time,
-which is why I encountered problems ensuring that my futures are properly <code>Send</code>.
-In the end, I settled on <em>making</em> them <code>Send</code> in the most straightforward
-(and completely <a href="https://github.com/Xion/rofld/commit/19d37cef4bb2e917e54c862ef138c7da4378d03e">unnecessary</a>) manner:
-by <a href="https://github.com/Xion/rofld/blob/7e7d3b160594689d2e4c80b7328f90f34546b955/src/ext.rs#L39">wrapping them in <code>Arc</code>/<code>Mutex</code></a>.
-That in itself wasn&#8217;t
-<a href="https://github.com/Xion/rofld/commit/15bcd60f76a97badb9b90721179daa0845b139dd#diff-126a37e2b594610dd09c3f228d9d1717L52">without its perils</a>,
-but at least allowed me to move&nbsp;forward.</p>
-<p>Ironically, this also shows an important, pragmatic property of the futures&#8217; system:
-sub-par hacks around it <em>are</em> possible &#8212;
-a fact you&#8217;ll be glad to know about on the proverbial day before a&nbsp;deadline.</p>
-<h5>Templates-worthy error&nbsp;messages</h5>
-<p>Other significant properties of the futures&#8217; abstraction shall include
-telling the programmer what&#8217;s wrong with his code in the simplest,
-most straightforward, and concise manner&nbsp;possible.</p>
-<p>Here, let me show you an&nbsp;example:</p>
-<p align="center">
-    <img src="http://xion.io/images/rust-futures-error.png"><br>
-    <small>
-        &#8230;which you can also behold in its
-        <a href="https://gist.github.com/Xion/df1fb7fffa1afb4bfbf2838b9c3fc4c1">
-            gist form
-        </a>.
-    </small>
-</p>
-
-<p>The reason you will encounter such incomprehensible messages
-stems from the very building blocks of async&nbsp;code.</p>
-<p>Right now, each chained operation on a future &#8212; <code>map</code>, <code>and_then</code>, <code>or_else</code>, and so on &#8212;
-produces a <em>nested type</em>.
-Every subsequent application of those methods
-&#8220;contains&#8221; (in terms of the type system) <em>all the previous ones</em>.
-Keep going, and it will eventually balloon into one big onion of <code>Chain&lt;Map&lt;OrElse&lt;Chain&lt;Map&lt;...etc...&gt;&gt;&gt;&gt;&gt;</code>.</p>
-<p align="center">
-    <img src="http://xion.io/images/meme-yo-dawg.jpeg"><br>
-    <small>Futures are like ogres.</small>
-</p>
-
-<p>I haven&#8217;t personally hit any compiler limits in this regard,
-but I&#8217;m sure it is plausible for a complicated, real-world&nbsp;program.</p>
-<p>It also gets <em>worse</em> if you use nightly Rust with <code>impl Trait</code>.
-In this case, function boundaries no longer &#8220;break&#8221; type stacking
-via <code>Box</code>ing the results into trait objects.
-Indeed, you can very well end up with some truly gigantic constructs
-as the compiler tries represent the return types of your most complex&nbsp;handlers.</p>
-<p>But even if rustc is up to snuff and can deal with those fractals just fine,
-it doesn&#8217;t necessarily mean the <em>programmer</em> can.
-Looking at those error messages,
-I had vivid flashbacks from hacking on C++ templates with ancient compilers like <span class="caps">VS2005</span>.
-The difference is, of course, that we&#8217;re not trying any arcane metaprogramming here;
-we just want to do some relatively mundane&nbsp;I/O.</p>
-<p>I have no doubt the messaging will eventually improve,
-and the mile-long types will at least get pretty-printed.
-At the moment, however, prepare for some serious squinting and&nbsp;bracket-counting.</p>
-<h5>Where is my (language)&nbsp;support?</h5>
-<p>Sadly, those long, cryptic error messages are not the only way
-in which the Rust compiler disappoints&nbsp;us.</p>
-<p>I keep mentioning <code>impl Trait</code> as a generally desirable language feature
-for writers of asynchronous code.
-This improvement is still a relatively long way from getting precisely
-<a href="https://github.com/aturon/rfcs/blob/expand-impl-trait/text/0000-expand-impl-trait.md"><em>defined</em></a>,
-much less stabilized.
-And it is only a somewhat minor improvement in the async&nbsp;ergonomics.</p>
-<p>The wishlist is vastly longer and even more&nbsp;inchoate.</p>
-<p>Saying it bluntly, right now Rust doesn&#8217;t really support the async style <em>at all</em>.
-All the combined <span class="caps">API</span> surface of futures/Tokio/Hyper/etc. is a clever,
-but ultimately contrived design,
-and it has no intentional backing in the Rust language&nbsp;itself.</p>
-<p>This is a stark contrast with numerous other languages.
-They often support asynchronous I/O as something of a first class feature.
-The list includes at least
-<a href="https://msdn.microsoft.com/en-us/library/mt674882.aspx">C#</a>,
-<a href="https://docs.python.org/3/library/asyncio-task.html">Python 3.5+</a>,
-<a href="https://docs.hhvm.com/hack/async/awaitables">Hack/<span class="caps">PHP</span></a>,
-<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function"><span class="caps">ES8</span> / JavaScript</a>,
-and basically all the functional languages.
-They all have dedicated <code>async</code>, <code>await</code>, or equivalent constructs
-that make the callback-based nature of asynchronous code essentially&nbsp;transparent.</p>
-<p>The absence of similar support puts Rust in the same bucket as frontend JavaScript circa 2010,
-where <code>.then</code>-chaining of promises reigned supreme.
-This is of course better than the callback hell of early Node,
-but I wouldn&#8217;t think that&#8217;s a particularly high bar.
-In this regard, Rust leaves plenty to be&nbsp;desired.</p>
-<p>There are <a href="https://github.com/vadimcn/rfcs/blob/coroutines2/text/0000-coroutines.md">proposals</a>,
-obviously, to bring async coroutines into Rust.
-There is an even broader wish to make the language cross the <span class="caps">OOP</span>/<span class="caps">FP</span> fence already
-and commit to the functional way; this would mean adding an equivalent of Haskell&#8217;s <code>do</code> notation.</p>
-<p>Either development could be sufficient.
-Both, however, require significant amount of design and implementation work.
-If solved now, this would easily be the most significant addition to the language
-since its 1.0 release &#8212; but the solution is currently in the <span class="caps">RFC</span> stages <em>at best</em>.</p>
-<h5>Future&lt;Ecosystem&gt;</h5>
-<p>While the core language support is lacking,
-the great as usual Rust community has been picking up some of the slack
-by establishing and cultivating a steadily growing&nbsp;ecosystem.</p>
-<p>The constellation of async-related crates clusters mostly around the two core libraries:
-<code>futures</code> crate itself and Tokio.
-Any functionality you may need while writing asynchronous should likely be found
-quite easily by searching for one of those two keywords (plus Rust, of course).
-Another way of finding what you need is to look at
-<a href="https://tokio.rs/docs/going-deeper-tokio/third-party/">the list of Tokio-related crates</a>&nbsp;directly.</p>
-<p>To be fair, I can&#8217;t really say much about the completeness of this ecosystem.
-The project didn&#8217;t really require too many external dependencies &#8212;
-the only relevant ones&nbsp;were:</p>
-<ul>
-<li><code>futures_cpupool</code> mentioned&nbsp;before</li>
-<li><code>tokio-timer</code> for imposing a timeout on caption&nbsp;requests</li>
-<li><code>tokio-signal</code> which handles <span class="caps">SIGINT</span>/Ctrl+C  and allows for a graceful&nbsp;shutdown</li>
-</ul>
-<p>Normally, you&#8217;d also want to research the async database drivers
-for your storage system of choice.
-I would not expect anything resembling the <a href="http://diesel.rs">Diesel</a> <span class="caps">ORM</span> crate, though,
-nor a web framework comparable to <a href="http://ironframework.io/">Iron</a>,
-<a href="https://fengsp.github.io/pencil/pencil/">Pencil</a>,
-or <a href="https://rocket.rs/">Rocket</a>.</p>
-<h4>Conclusions</h4>
-<p>Alright, so what can we get from this overall&nbsp;analysis?</p>
-<p>Given the rapid development of async Rust ecosystem so far,
-it is clear the technology is very promising.
-If the community maintains its usual enthusiasm and keeps funneling it into Tokio et al.,
-it won&#8217;t be long before it matures into something&nbsp;remarkable.</p>
-<p>Right now, however, it exposes way too many rough edges to fully bet on it.
-Still, there may be some applications
-where you could get away with an async Rust backend even in production.
-But personally, I wouldn&#8217;t recommend it outside of non-essential services,
-or tools internal to your&nbsp;organization.</p>
-<p>If you do use async Rust for microservices,
-I&#8217;d also advise to take steps to ensure they remain &#8220;micro&#8221;.
-Like I&#8217;ve elaborated in the earlier sections,
-there are several issues that make future-based Rust code scale poorly
-with respect to maintainability.
-Keeping it simple is therefore&nbsp;essential.</p>
-<p>To sum up, async Rust is currently an option only for the adventurous and/or small.
-Others should stick to a tried <span class="amp">&amp;</span> tested solution:
-something like Java (with <a href="http://docs.paralleluniverse.co/quasar/">Quasar</a>),
-.<span class="caps">NET</span>, Go, or perhaps node.js at the very&nbsp;least.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>It is also the crux of parallelism,
-but <a href="https://www.youtube.com/watch?v=cN_DpYBzKso">that&#8217;s different</a> and is not the focus here.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p><span class="dquo">&#8220;</span>Background&#8221; here refers to the low level, innate concurrency of the <span class="caps">OS</span> kernel
-(mediated with hardware interrupts), not the <code>epoll</code>-based event loops on the application side.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>There is a great parallel to be drawn between a trivial echo/Hello world server,
-and a 3D graphics program that only redraws an empty screen.
-Both may start at some very high performance numbers (requests/frames per second)
-but once you start adding practical stuff, those metrics must drop <em>hyperbolically</em>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-<li id="fn:4">
-<p><em>Technically</em>, you are not, but the alternative is extremely cumbersome.<br>
-In short, you&#8217;d have to follow an approach similar to custom <code>Iterator</code>s:
-define a new struct for each individual case
-(possibly just <a href="https://doc.rust-lang.org/book/structs.html#tuple-structs">newtype</a>&#8216;ing an existing one),
-and then implement the necessary trait for it.<br>
-For iterators, this works reasonably well,
-and you don&#8217;t need custom ones that often anyway.
-But futures, by their very nature, are meant to encapsulate <em>any</em> computation.
-For them, &#8220;each individual case&#8221; is literally <em>every asynchronous function</em> in your code.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/programming/rust-async-closer-look.html#rust-async-closer-look">Continue reading</a>
   </div>
 </article>
 

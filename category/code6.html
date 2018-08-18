@@ -63,6 +63,169 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/go-decorated-functions.html#go-decorated-functions">Decorated functions in&nbsp;Go</a></h2>
+    <p>
+      Posted on Fri 04 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/go.html">Go</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/decorators.html">decorators</a>      &#8226; <a href="http://xion.io/post/code/go-decorated-functions.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>One of the downsides of working with a simple and minimalistic programming language such as <a href="http://golang.org">Go</a>
+is that <a href="http://blog.atte.ro/2015/08/29/golang-code-reuse.html">abstracting for code reuse</a>
+is often rather challenging. What&#8217;s brought up most often in this context is Go&#8217;s lack of support for generics
+(higher order&nbsp;types).</p>
+<p>But here I wanted to talk about a different mechanism that &#8212; unlike generics &#8212; can be transplanted to Go
+quite successfully: function&nbsp;decorators.</p>
+<h4>Canonical&nbsp;example</h4>
+<p>Decorators are most commonly found in Python (where they can be applied not just to functions, but also classes),
+but have syntactical analogues in Java (annotations), C# (attributes), and a few other&nbsp;languages.</p>
+<p>A <em>decorator</em> looks like a modifier adorning a function definition, distinguished by its initial <code>@</code> sign:</p>
+<div class="highlight"><pre><span class="nd">@app.route</span><span class="p">(</span><span class="s">&#39;/home&#39;</span><span class="p">)</span>
+<span class="nd">@login_required</span>
+<span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
+</pre></div>
+
+
+<p>Even if you&#8217;re not familiar with the <a href="http://flask.pocoo.org">particular web framework</a> this request handler is meant for
+&#8212; or indeed, the Python language itself &#8212; it shouldn&#8217;t be too difficult to figure out what purpose the two decorators&nbsp;serve.</p>
+<p>What&#8217;s really important is that their goals are neatly separated from essential logic of the request&nbsp;handler:</p>
+<ul>
+<li>it doesn&#8217;t have to explicitly check if the user is logged in &#8212; it has the <code>@login_required</code> decorator</li>
+<li>it doesn&#8217;t have to be separately registered in some
+<a href="https://docs.djangoproject.com/en/1.8/topics/http/urls/#example">centalized <span class="caps">URL</span> routing choke point</a> &#8212;
+it has the <code>@app.route</code> decorator&nbsp;instead</li>
+</ul>
+<p>Such <em>separation of concerns</em> is a desirable quality in software, because it makes it easier
+to reason about different aspects of the&nbsp;system.</p>
+<h4>Under the&nbsp;hood</h4>
+<p>Behind this synctactic sugar and lofty phrasing, the code above is still perfectly equivalent
+to its undecorated&nbsp;version:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
+        <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="s">&quot;Login Required&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
+
+<span class="n">app</span><span class="o">.</span><span class="n">add_url_route</span><span class="p">(</span><span class="s">&#39;/home&#39;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">home</span><span class="p">)</span>
+</pre></div>
+
+
+<p>No source code transformations take place, either: <code>@login_required</code> doesn&#8217;t actually &#8220;inject&#8221; the <code>if</code> statement
+at the beginning of <code>home</code> function. What happens instead is that it takes the whole function and <em>wraps it</em>
+in a new one which also contains the crucial&nbsp;check:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">login_required</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Grossly simplified version of a decorator enforcing user login.&quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">wrapped</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">current_user</span><span class="o">.</span><span class="n">is_authenticated</span><span class="p">:</span>
+            <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="s">&quot;Login Required&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">wrapped</span>
+</pre></div>
+
+
+<p>Given this definition, decorating <code>home</code> simply means passing it to the <code>login_required</code> function, and calling its result
+a new <code>home</code>:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">home</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;user/home.html&#39;</span><span class="p">)</span>
+
+<span class="n">home</span> <span class="o">=</span> <span class="n">login_required</span><span class="p">(</span><span class="n">home</span><span class="p">)</span>
+</pre></div>
+
+
+<p>As you&#8217;ve probably guessed, the <code>@</code> syntax is nothing else than a syntatic sugar for the above.
+But how sweet a sugar it&nbsp;is!</p>
+<p><small>(The <code>@app.route</code> decorator is simultaneously simpler and more complicated. I recommend having a direct look at
+<a href="https://github.com/mitsuhiko/flask/blob/2446ca63a8d840a35ea4eac02672b24a6fcf406f/flask/app.py#L1040">its source code</a>
+for more insight).</small></p>
+<h4>What gophers can&nbsp;learn</h4>
+<p>Unlike Python, in Go, we are out of luck when it comes to dedicated language support for decorators.
+However, the general principle still applies: we can decorate functions by writing &#8212; <em>ahem</em> &#8212; decorator&nbsp;functions.</p>
+<p>Consider, for example, a trivial <code>net/http</code> request&nbsp;handler:</p>
+<div class="highlight"><pre><span class="kd">func</span> <span class="nx">hello</span><span class="p">(</span><span class="nx">w</span> <span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span> <span class="nx">r</span> <span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">fmt</span><span class="p">.</span><span class="nx">Fprint</span><span class="p">(</span><span class="nx">w</span><span class="p">,</span> <span class="s">&quot;Hello, world!\n&quot;</span><span class="p">)</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Any real web application will have many similar handlers. They are usually wired to their corresponding <span class="caps">URL</span> paths
+during program&nbsp;startup:</p>
+<div class="highlight"><pre><span class="kd">func</span> <span class="nx">main</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/hello&quot;</span><span class="p">,</span> <span class="nx">hello</span><span class="p">)</span>
+    <span class="c1">// ...</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>This approach to routing configuration provides an opportunity to decorate some (or all) of the request handlers with
+any auxiliary functionality that the application may&nbsp;require.</p>
+<h4>Handler in, handler&nbsp;out</h4>
+<p>To do that, though, we need to write the necessary decorator functions first. For a simplest possible example,
+let&#8217;s create one that automatically fills in the <code>Server:</code> header of <span class="caps">HTTP</span> response with the name and version
+of our web&nbsp;application:</p>
+<div class="highlight"><pre><span class="kd">func</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">h</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="kd">func</span><span class="p">(</span><span class="nx">w</span> <span class="nx">http</span><span class="p">.</span><span class="nx">ResponseWriter</span><span class="p">,</span> <span class="nx">r</span> <span class="o">*</span><span class="nx">http</span><span class="p">.</span><span class="nx">Request</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">w</span><span class="p">.</span><span class="nx">Header</span><span class="p">().</span><span class="nx">Set</span><span class="p">(</span><span class="s">&quot;Server&quot;</span><span class="p">,</span> <span class="s">&quot;HelloServer v0.0.1&quot;</span><span class="p">)</span>
+        <span class="nx">h</span><span class="p">(</span><span class="nx">w</span><span class="p">,</span> <span class="nx">r</span><span class="p">)</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>Using it is then a simple matter of wrapping the original handler in a decorator&nbsp;call:</p>
+<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/hello&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">hello</span><span class="p">))</span>
+</pre></div>
+
+
+<p>As it both accepts and returns a <code>http.HandlerFunc</code> &#8212; a function type matching request handlers&#8217; signatures &#8212;
+we don&#8217;t need anything else to be able to wrap our handlers in as many decorators as&nbsp;necessary:</p>
+<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">index</span><span class="p">))</span>
+<span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/home&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">LoginRequired</span><span class="p">(</span><span class="nx">home</span><span class="p">)))</span>
+<span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/share&quot;</span><span class="p">,</span> <span class="nx">WithServerHeader</span><span class="p">(</span><span class="nx">LoginRequired</span><span class="p">(</span><span class="nx">CsrfProtected</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Share</span><span class="p">))))</span>
+</pre></div>
+
+
+<p>It&#8217;s possible simply by the means of ordinary function&nbsp;composition.</p>
+<h4>Going&nbsp;meta</h4>
+<p>Looking at the last line of the example above &#8212; which is made-up but could very well come from actual production code
+&#8212; you probably can&#8217;t help but notice that stacking function calls like that creates a somewhat messy amalgamation
+of parentheses. Beyond three or four items, a decorator chain such as this one becomes rather unwieldy to&nbsp;follow.</p>
+<p>If we&#8217;re concerned about readability, it&#8217;s possible to alleviate the issue by taking another step up
+the abstraction ladder. Rather than composing the decorators explicitly, we can write a function that does it for&nbsp;us:</p>
+<div class="highlight"><pre><span class="kd">type</span> <span class="nx">HttpHandlerDecorator</span> <span class="kd">func</span><span class="p">(</span><span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span>
+
+<span class="kd">func</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">h</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span><span class="p">,</span> <span class="nx">decors</span> <span class="o">...</span><span class="nx">HttpHandlerDecorator</span><span class="p">)</span> <span class="nx">http</span><span class="p">.</span><span class="nx">HandlerFunc</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">decors</span> <span class="p">{</span>
+        <span class="nx">d</span> <span class="o">:=</span> <span class="nx">decors</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="nx">decors</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="nx">i</span><span class="p">]</span>  <span class="c1">// iterate in reverse</span>
+        <span class="nx">h</span> <span class="p">=</span> <span class="nx">d</span><span class="p">(</span><span class="nx">h</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="nx">h</span>
+<span class="p">}</span>
+</pre></div>
+
+
+<p>and thus eliminate all the&nbsp;parentheses:</p>
+<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/share&quot;</span><span class="p">,</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Share</span><span class="p">,</span>
+    <span class="nx">WithServerHeader</span><span class="p">,</span> <span class="nx">LoginRequired</span><span class="p">,</span> <span class="nx">CsrfProtected</span><span class="p">))</span>
+</pre></div>
+
+
+<p>This technique proves especially valuable if the decorators themselves are&nbsp;parameterized:</p>
+<div class="highlight"><pre><span class="nx">http</span><span class="p">.</span><span class="nx">HandleFunc</span><span class="p">(</span><span class="s">&quot;/api/notifications&quot;</span><span class="p">,</span> <span class="nx">Handler</span><span class="p">(</span><span class="nx">api</span><span class="p">.</span><span class="nx">Notifications</span><span class="p">,</span>
+    <span class="nx">WithServerHeader</span><span class="p">,</span> <span class="nx">LoginRequired</span><span class="p">,</span> <span class="nx">Cached</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Duration</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span><span class="o">*</span><span class="nx">time</span><span class="p">.</span><span class="nx">Minute</span><span class="p">)))</span>
+</pre></div>
+
+
+<p>In practice, you may find it valuable to wrap the complete <code>http.HandleFunc</code> call to accept a request handler
+along with its decorator chain, or the equivalent of such a call in any of the numerous
+<a href="https://corner.squareup.com/2014/05/evaluating-go-frameworks.html">Go web frameworks</a>.</p>
+      <a class="btn" href="http://xion.io/post/code/go-decorated-functions.html#go-decorated-functions">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/html-interruptive-fadeout.html#html-interruptive-fadeout">Interruptible fade-out of <span class="caps">DOM</span>&nbsp;elements</a></h2>
     <p>
       Posted on Sun 30 August 2015 in <a href="http://xion.io/category/code.html">Code</a>

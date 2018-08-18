@@ -63,6 +63,494 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/programming/haskell-retrospective.html#haskell-retrospective">A Haskell&nbsp;retrospective</a></h2>
+    <p>
+      Posted on Sat 18 August 2018 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/haskell.html">Haskell</a>,      <a href="http://xion.io/tag/functional-programming.html">functional programming</a>,      <a href="http://xion.io/tag/type-systems.html">type systems</a>,      <a href="http://xion.io/tag/facebook.html">Facebook</a>      &#8226; <a href="http://xion.io/post/programming/haskell-retrospective.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Approximately a year ago,
+I had the opportunity to work on <a href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/">Sigma</a>
+&#8212; a large, distributed system that protects Facebook users from spam and other kinds of&nbsp;abuse.</p>
+<p>One reason it was a pretty unique experience is that Sigma is almost entirely a <em>Haskell</em> codebase.
+It was the first time I got to work with the language in a professional setting,
+so I was eager to see how it performs in a real-world, production-grade&nbsp;application.</p>
+<p>In this (rather long) post, I&#8217;ll draw on this experience
+and highlight Haskell&#8217;s notable features from a practical, engineering standpoint.
+In other words, I&#8217;ll be interested in how much does it help with solving actual problems
+that arise in the field of software development <span class="amp">&amp;</span>&nbsp;maintenance.</p>
+<h4>Haskell&nbsp;Who?</h4>
+<p>Before we start, however,
+it seems necessary to clarify what &#8220;Haskell&#8221; are we actually talking&nbsp;about.</p>
+<p>Granted, this may be a little surprising.
+From a far-away vantage point,
+Haskell is typically discussed as a rather uniform language,
+and it is often treated as synonymous with <em>functional programming</em> in&nbsp;general.</p>
+<p>But if you look closer, that turns out to be a bit of a misrepresentation.
+In reality, Haskell is a complex manifold of different components,
+some of which can be thought as their own sublanguages.
+Roughly speaking, Haskell
+&#8212; as it&#8217;s used in the industry and in the <span class="caps">OSS</span> world today &#8212;
+should be thought of as a cake with at least the following&nbsp;layers:</p>
+<ul>
+<li>
+<p>The base Haskell language, as defined by the Haskell &#8216;98 and 2010 reports.
+At least in theory, this is the <em>portable</em> version of the language
+that any conforming compiler is supposed to accept.
+In practice, given <a href="http://taylor.fausak.me/2017/11/15/2017-state-of-haskell-survey-results/#question-14">the absolute monopoly of <span class="caps">GHC</span></a>,
+it is merely a theoretical base that needs to be significantly augmented
+in order to reach some level of practical&nbsp;usability.</p>
+</li>
+<li>
+<p>A bunch of <span class="caps">GHC</span> extensions that are
+<a href="http://dev.stephendiehl.com/hask/#the-benign">widely considered</a>
+mandatory for any real-world project.
+Some, like <code>TupleSections</code> or <code>MultiParamTypeClasses</code>,
+are mostly there to fix some surprising feature gaps
+that would be more confusing if you had worked around them instead.
+Others, like <code>GADTs</code> or <code>DataKinds</code>,
+open up completely new avenues for type-level&nbsp;abstractions.</p>
+</li>
+<li>
+<p>A repertoire of common third-party libraries with unique DSLs,
+like <a href="https://hackage.haskell.org/package/conduit"><em>conduit</em></a>,
+<a href="https://hackage.haskell.org/package/pipes"><em>pipes</em></a>,
+or <a href="https://hackage.haskell.org/package/lens-tutorial-1.0.3/docs/Control-Lens-Tutorial.html"><em>lens</em></a>.
+Unlike many &#8220;regular&#8221; packages that merely bring in some domain-specific <span class="caps">API</span>,
+these fundamental libraries shape both the deeper architecture
+and the surface-level look <span class="amp">&amp;</span> feel of any Haskell codebase that uses&nbsp;them.</p>
+</li>
+<li>
+<p>A selection of <a href="https://ocharles.org.uk/blog/posts/2014-12-01-24-days-of-ghc-extensions.html">less common extensions</a>
+which are nevertheless encountered in Haskell code with some&nbsp;regularity.</p>
+</li>
+<li>
+<p><a href="https://wiki.haskell.org/Template_Haskell">Template Haskell</a>,
+the language for compile-time metaprogramming whose main application is probably <em>generics</em>.<br>
+To be clear, neither &#8220;template&#8221; nor &#8220;generics&#8221; have anything to do with the usual meanings
+of those terms in C++ and Java/C#/Go<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.
+Rather, it refers to a kind of <span class="caps">AST</span>-based &#8220;preprocessing&#8221;
+that allows Haskell code to operate on the generic <em>structure</em> of user-defined types:
+their constructors, parameters, and record fields<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.<br>
+Direct use of <span class="caps">TH</span> in application code is extremely rare,
+but many projects rely on libraries which utilize it behind the scenes.
+A great example would be <a href="https://hackage.haskell.org/package/persistent-2.7.1/docs/Database-Persist.html">Persistent</a>,
+a database interface library where the <span class="caps">ORM</span>
+uses Template Haskell to construct record types from a <span class="caps">DB</span> schema at compile&nbsp;time.</p>
+</li>
+</ul>
+<h4>There is a language in my type&nbsp;system</h4>
+<p>What&#8217;s striking about this ensemble of features and ideas
+is that most of them don&#8217;t seem to follow from the ostensible premise of the language:
+that it is functional, pure / referentially transparent, and non-strict / lazily evaluated.
+Instead, they are mostly a collection of progressively more sophisticated refinements
+and applications of Haskell&#8217;s <em>type system</em>.</p>
+<p>This singular focus on type theory &#8212; especially in the recent years<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup> &#8212;
+is probably why many people in the wider programming world think
+it is necessary to grok advanced type system concepts
+if you even want to dabble in functional&nbsp;programming</p>
+<p>That is, of course, patently untrue<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+<em>Some</em> features of a strong static type system are definitely useful to have in a functional language.
+You can look at <a href="http://elm-lang.org/">Elm</a>
+to see <a href="http://package.elm-lang.org/packages/elm-lang/core/5.1.1/Result#map3">how awkward</a>
+things become when you deprive an <span class="caps">FP</span> language of its typeclasses
+and <a href="http://package.elm-lang.org/packages/elm-lang/core/5.1.1/Result#andThen">composition sugar</a>.</p>
+<p>But when the focus on type systems becomes too heavy,
+the concepts <a href="https://wiki.haskell.org/GHC/Type_system">keep piling up</a>
+and the language becomes increasingly impenetrable.
+Eventually, you may end up with an ecosystem where the recommended way to implement an <span class="caps">HTTP</span> <span class="caps">API</span>
+is to call upon
+<a href="http://haskell-servant.readthedocs.io/en/stable/tutorial/Server.html#a-first-example">half a dozen compiler extensions</a>
+in order to specify it as
+<a href="http://haskell-servant.readthedocs.io/en/stable/tutorial/Server.html#from-combinators-to-handler-arguments">one humongous type</a>.</p>
+<p>But hey, isn&#8217;t it desirable to have this kind of increased type&nbsp;safety?</p>
+<p>In principle, the answer would of course be yes.
+However, the price we pay here is in the precious currency of <em>complexity</em>,
+and it often turns out to be way too high.
+When libraries, frameworks, and languages get complicated and abstract,
+it&#8217;s not just safety and/or productivity that can (hopefully) increase &#8212;
+it is also the burden on developers&#8217; thought processes.
+While the exact threshold of diminishing or even negative returns is hard to pinpoint,
+it can definitely be reached even by the smartest and most talented teams.
+Add in the usual obstacles of software engineering &#8212; shifting requirements,
+deadlines, turnover &#8212; and you may encounter it much sooner than you&nbsp;think.</p>
+<p>For some, this is a sufficient justification to basically
+<a href="https://golang.org/">give up on type systems</a> altogether.
+And while I&#8217;d say such a knee-jerk reaction is rather excessive and unwarranted,
+it is at least equally harmful to letting your typing regime grow in boundless complexity.
+Both approaches are just too extreme to stand the test of&nbsp;practicality.</p>
+<h4>The legacy of bleeding&nbsp;edge</h4>
+<p>In other words, Haskell <em>is</em> hard and this <em>does</em> count as one of its serious problems.
+This conclusion isn&#8217;t exactly novel or surprising,
+even if some people would <a href="http://dave.fayr.am/posts/2011-08-19-lets-go-shopping.html">still argue with it</a>.</p>
+<p>Suppose, however, that we have somehow caused this issue to disappear completely.
+Let&#8217;s say that through some kind of divine intervention,
+it was made so that the learning curve of Haskell
+is no longer a problem for the majority of programmers.
+Maybe we found a magic lamp and &#8212; for the lack of better ideas &#8212;
+we wished that everyone be as proficient
+in applicative parsers as they are in inheritance&nbsp;hierarchies.</p>
+<p>Even in this hypothetical scenario, I posit that
+the value proposition of Haskell would <em>still</em> be a tough&nbsp;sell.</p>
+<p>There is this old quote from Bjarne Stroustrup (creator of C++)
+where he says that programming languages divide into those everyone complains about,
+and those that no one uses.<br>
+The first group consists of old, established technologies
+that managed to accrue significant complexity debt through years and decades of evolution.
+All the while, they&#8217;ve been adapting to the constantly shifting perspectives
+on what are the best industry practices.
+Traces of those adaptations can still be found today,
+sticking out like a leftover appendix or residual tail bone &#8212;
+or like the built-in support for <span class="caps">XML</span> in&nbsp;Java.</p>
+<p>Languages that &#8220;no one uses&#8221;, on the other hand,
+haven&#8217;t yet passed the industry threshold of sufficient maturity and stability.
+Their ecosystems are still cutting edge, and their future is uncertain,
+but they sometimes champion some really compelling paradigm shifts.
+As long as you can bear with things that are rough around the edges,
+you can take advantage of their novel&nbsp;ideas.</p>
+<p>Unfortunately for Haskell,
+it manages to combine the <em>worst parts</em> of both of these&nbsp;worlds.</p>
+<p>On one hand, it is a surprisingly old language,
+clocking more than two decades of fruitful research around many innovative concepts.
+Yet on the other hand, it bears the signs of a fresh new technology,
+with relatively few production-grade libraries,
+scarce coverage of some domains (e.g. <span class="caps">GUI</span> programming),
+and not too many stories of commercial&nbsp;successes.</p>
+<h4>There are many ways to do&nbsp;it</h4>
+<p>Nothing shows better the problems of Haskell&#8217;s evolution over the years
+than the various approaches to handling <em>strings</em> and <em>errors</em> that it now has.<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup></p>
+<h5>String&nbsp;theory</h5>
+<p>Historically, <code>String</code> has been defined as a list of <code>Char</code>acters,
+which is normally denoted as the <code>[Char]</code> type.
+The good thing about this representation is that many string-based algorithms
+can simply be written using just the list&nbsp;functions.</p>
+<p>The bad thing is that Haskell lists are the so-called <em>cons lists</em>.
+They consist of the single element (called <code>head</code>),
+followed by another list of the remaining elements (called <code>tail</code>).
+This makes them roughly equivalent to what the data structures theory
+calls a <em>singly-linked list</em>
+&#8212; a rarely used construct that has a number of undesirable&nbsp;characteristics:</p>
+<ul>
+<li>linear time (<code>O(n)</code>) for finding a specific element in the&nbsp;list</li>
+<li>linear time for finding an element with a specific <em>index</em> in the&nbsp;list</li>
+<li>linear time for insertion in the middle of the&nbsp;list</li>
+<li>poor cache coherency due to scattered allocations of list nodes<sup id="fnref:6"><a class="footnote-ref" href="#fn:6" rel="footnote">6</a></sup></li>
+</ul>
+<p>On top of that, keeping only a single character inside each node
+results in a significant waste of&nbsp;memory.</p>
+<p>Given those downsides,
+it isn&#8217;t very surprising that virtually no serious Haskell program
+uses <code>String</code>s for any meaningful text processing.
+The community-accepted replacement is <a href="https://hackage.haskell.org/package/text">the <em>text</em> package</a>,
+whose implementation stores strings inside packed arrays, i.e. just as you would expect.
+As a result, Haskell has at least two main types of &#8220;strings&#8221; &#8212; or even <em>three</em>,
+since <code>Text</code> has both lazy and strict&nbsp;variants.</p>
+<p>That&#8217;s not all, however:
+there is also <a href="https://hackage.haskell.org/package/bytestring">the <em>bytestring</em> package</a>.
+Although technically it implements generic byte buffers,
+its <span class="caps">API</span> has been <a href="https://hackage.haskell.org/package/bytestring-0.10.8.2/docs/Data-ByteString.html#g:11">pretty rich and enticing</a>.
+As a result, many other packages would rather use <code>ByteString</code>s directly in their interfaces
+than to incur the conversions to and from <code>Text</code>.<br>
+And just like in case of <code>Text</code>,
+separate lazy and strict variants of <code>ByteString</code> are also available.
+But unlike <code>Text</code>, byte strings also have <code>Word8</code> and <code>Char8</code> versions,
+where the latter is designed to handle legacy cases of <span class="caps">ASCII</span>-exclusive text&nbsp;support.</p>
+<p>Well, I hope you kept count of all these types!
+I also hope you can memorize the correct way of converting between them,
+because it&#8217;s commonplace to see them used simultaneously.
+This may sometimes happen even within the same library,
+but it definitely occurs in application code
+that utilizes many different dependencies.
+What it usually results in are numerous occurrences of something like <code>Text.pack . foo . Text.unpack</code>,
+with conversion functions copiously sprinkled in
+to help win in the <a href="http://javran.github.io/posts/2014-02-28-type-tetris-and-typeclassopedia.html">Type Tetris</a>.</p>
+<h5>Errors and how to handle&nbsp;them</h5>
+<p>A somewhat similar issue applies to error handling.
+Over the years, Haskell has tried many approaches to this problem,
+often mixing techniques that are very rarely found in a single language,
+like exceptions combined with result&nbsp;types.</p>
+<p>Nowadays, there is some consensus about those
+<a href="https://prime.haskell.org/wiki/Libraries/Proposals/MonadFail">mistakes of the past</a>,
+but the best we got is their deprecation:
+the current version of <span class="caps">GHC</span> still supports them&nbsp;all.</p>
+<p>What are all those techniques? Here&#8217;s an abridged&nbsp;list:</p>
+<ul>
+<li>the <code>error</code> function, terminating the program with a message
+  (which is obviously&nbsp;discouraged)</li>
+<li>the <code>fail</code> method of the <code>Monad</code> typeclass
+  (which is now deprecated and moved to <code>MonadFail</code>)</li>
+<li><a href="https://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Error.html#t:MonadError">the <code>MonadError</code> class</a>
+  with the associated <code>ErrorT</code> transformer, now deprecated in favor&nbsp;of&#8230;</li>
+<li>a <em>different</em> <a href="https://hackage.haskell.org/package/mtl-2.2.1/docs/Control-Monad-Except.html#t:MonadError"><code>MonadError</code> class</a>,
+  with <code>ExceptT</code> as the new&nbsp;transformer</li>
+<li><a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Control-Exception.html">exceptions in the <code>IO</code> monad</a>,
+  normally raised by the standard I/O calls to signal abnormal conditions and error;
+  however, libraries and application code are free to <a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Control-Exception.html#g:2">also throw them</a>
+  and use for their own error&nbsp;handling</li>
+<li>the <code>Either</code> sum type / monad, which is essentially a type-safe version of the venerable return&nbsp;codes</li>
+</ul>
+<p>If you really stretched the definition of error handling,
+I could also imagine counting <code>Maybe</code>/<code>MaybeT</code> as yet another method.
+But even without it, that&#8217;s half a dozen distinct approaches
+which you are likely to encounter in the wild in one form or&nbsp;another.</p>
+<h4>Implicit is better than&nbsp;explicit</h4>
+<p>The other kind of troublesome legacy of Haskell
+relates to the various design choices in the language itself.
+They reflect ideas straight from the time they were conceived in,
+which doesn&#8217;t necessarily agree with the best engineering practices as we understand them <em>now</em>.</p>
+<h5>Leaky&nbsp;modules</h5>
+<p>Take the <em>module system</em>, for&nbsp;example.</p>
+<p>Today, it is rather uncontroversial that the purpose of splitting code into multiple submodules
+is to isolate it as much as possible and prevent accidental dependencies.
+The benefit of such isolation is better internal cohesion for each module.
+This can simplify testing, improve readability, foster simplicity,
+and reduce cognitive burden on the&nbsp;maintainers.</p>
+<p>Contemporary languages help achieving this goal
+by making inter-module dependencies explicit.
+If you want to use a symbol (functions, class) from module A inside another module B,
+you typically have to&nbsp;both:</p>
+<ul>
+<li>declare it <em>public</em> in module&nbsp;A</li>
+<li>explicitly <em>import</em> its name in module&nbsp;B</li>
+</ul>
+<p>The first step helps to ensure that the <span class="caps">API</span> of module A is limited and tractable.
+The second step does the same to the external dependencies of module&nbsp;B.</p>
+<p>Unfortunately, Haskell requires neither of those steps.
+In fact, it encourages precisely the <em>opposite</em> of well-defined, self-contained modules,
+all by the virtue of its default&nbsp;behaviors:</p>
+<ul>
+<li>the default module declaration (<code>module Foo where ...</code>)
+implicitly declares <em>every symbol</em> defined in the module <code>Foo</code>
+as public and importable by&nbsp;others</li>
+<li>the default import statement (<code>import Foo</code>) brings in <em>every public symbol</em>
+from the module <code>Foo</code> into the global namespace of the current&nbsp;module</li>
+</ul>
+<p>In essence, this is like putting <code>public</code> on each and every class or method
+that you&#8217;d define in a Java project,
+while simultaneously using nothing but wildcard (star) imports.
+In a very short order, you will end up with project
+where everything depends on everything else, and nothing can be developed in&nbsp;isolation.</p>
+<h5>Namespaces are apparently a bad&nbsp;idea</h5>
+<p>Thankfully, it is possible to avoid this pitfall
+by explicitly declaring both your exported and imported&nbsp;symbols:</p>
+<div class="highlight"><pre><span class="c1">-- Foo.hs --</span>
+<span class="kr">module</span> <span class="nn">Foo</span> <span class="p">(</span> <span class="nf">foo</span><span class="p">,</span> <span class="nf">bar</span> <span class="p">)</span> <span class="kr">where</span>
+
+<span class="nf">foo</span> <span class="ow">=</span> <span class="o">...</span>
+<span class="nf">bar</span> <span class="ow">=</span> <span class="o">...</span>
+<span class="nf">baz</span> <span class="ow">=</span> <span class="o">...</span>  <span class="c1">-- not exported</span>
+
+<span class="c1">-- Bar.hs --</span>
+<span class="kr">import</span> <span class="nn">Foo</span> <span class="p">(</span><span class="nf">foo</span><span class="p">)</span>
+<span class="c1">-- `bar` is inaccessible here, but `foo` is available</span>
+</pre></div>
+
+
+<p>But while this helps fighting the tangle of dependencies,
+it still results in cluttering the namespace of any non-trivial module
+with a significant number of imported&nbsp;symbols.</p>
+<p>In many other languages, you can instead import the module as a whole
+and only refer to its members using <em>qualified names</em>.
+This is possible in Haskell as well, though it requires yet another variant
+of the <code>import</code> statement:</p>
+<div class="highlight"><pre><span class="kr">import</span> <span class="k">qualified</span> <span class="nn">Data.Text</span> <span class="k">as</span> <span class="n">Text</span>
+
+<span class="nf">duplicateWords</span> <span class="ow">::</span> <span class="kt">Text</span><span class="o">.</span><span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span><span class="o">.</span><span class="kt">Text</span>
+<span class="nf">duplicateWords</span> <span class="ow">=</span> <span class="kt">Text</span><span class="o">.</span><span class="n">unwords</span> <span class="o">.</span> <span class="n">map</span> <span class="p">(</span><span class="kt">Text</span><span class="o">.</span><span class="n">unwords</span> <span class="o">.</span> <span class="n">replicate</span> <span class="mi">2</span><span class="p">)</span> <span class="o">.</span> <span class="kt">Text</span><span class="o">.</span><span class="n">words</span>
+</pre></div>
+
+
+<p>What if you want both, though? In the above code, for example,
+the qualified name <code>Text.Text</code> looks a little silly,
+especially when it&#8217;s such a common type.
+It would be nice to import it directly, so that we can use it simply as <code>Text</code>.</p>
+<p>Unfortunately, this is only possible when using <em>two</em> <code>import</code> statements:</p>
+<div class="highlight"><pre><span class="kr">import</span> <span class="nn">Data.Text</span> <span class="p">(</span><span class="kt">Text</span><span class="p">)</span>
+<span class="kr">import</span> <span class="k">qualified</span> <span class="nn">Data.Text</span> <span class="k">as</span> <span class="n">Text</span>
+
+<span class="nf">duplicateWords</span> <span class="ow">::</span> <span class="kt">Text</span> <span class="ow">-&gt;</span> <span class="kt">Text</span>
+<span class="nf">duplicateWords</span> <span class="ow">=</span> <span class="kt">Text</span><span class="o">.</span><span class="n">unwords</span> <span class="o">.</span> <span class="n">map</span> <span class="p">(</span><span class="kt">Text</span><span class="o">.</span><span class="n">unwords</span> <span class="o">.</span> <span class="n">replicate</span> <span class="mi">2</span><span class="p">)</span> <span class="o">.</span> <span class="kt">Text</span><span class="o">.</span><span class="n">words</span>
+</pre></div>
+
+
+<p>You will find this duplication pervasive throughout Haskell codebases.
+Given how it affects the most important third-party packages (like <code>text</code> and <code>bytestring</code>),
+there have been a few proposals to improve the situation<sup id="fnref:7"><a class="footnote-ref" href="#fn:7" rel="footnote">7</a></sup>,
+but it seems that none can go through the syntax bikeshedding&nbsp;phase.</p>
+<p>Contrast this with Rust, for example, where it&#8217;s common to see imports such as&nbsp;this:</p>
+<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">io</span><span class="o">::</span><span class="p">{</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">Read</span><span class="p">};</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">read_first_half</span><span class="p">(</span><span class="n">path</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="nb">Path</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">io</span><span class="o">::</span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// (omitted)</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>where <code>self</code> conveniently stands for the module as a&nbsp;whole.</p>
+<h5>Wild&nbsp;records</h5>
+<p>Another aspect of the difficulties with keeping your namespaces in check
+relates to Haskell <em>record types</em> &#8212; its rough equivalent of <code>struct</code>s from C and&nbsp;others.</p>
+<p>When you define a record&nbsp;type:</p>
+<div class="highlight"><pre><span class="kr">data</span> <span class="kt">User</span> <span class="ow">=</span> <span class="kt">User</span> <span class="p">{</span> <span class="n">usrFirstName</span> <span class="ow">::</span> <span class="kt">String</span>
+                 <span class="p">,</span> <span class="n">usrLastName</span> <span class="ow">::</span> <span class="kt">String</span>
+                 <span class="p">,</span> <span class="n">usrEmail</span> <span class="ow">::</span> <span class="kt">String</span>
+                 <span class="p">}</span> <span class="kr">deriving</span> <span class="p">(</span><span class="kt">Show</span><span class="p">)</span>
+</pre></div>
+
+
+<p>you are declaring not one but multiple different names,
+and dumping them all straight into the global namespace.
+These names&nbsp;include:</p>
+<ul>
+<li>the record <em>type</em> (here, <code>User</code>)</li>
+<li>its <em>type constructor</em> (also <code>User</code>, second one&nbsp;above)</li>
+<li>all of its fields (<code>usrFirstName</code>, <code>usrLastName</code>, <code>usrEmail</code>)</li>
+</ul>
+<p>Yep, thats right.
+Because Haskell has no special syntax for accessing record fields,
+each field declaration creates an unqualified getter function.
+Combined with the lack of function overloading,
+this creates many opportunities for name&nbsp;collisions.</p>
+<p>This is why in the above example,
+<a href="https://en.wikipedia.org/wiki/Hungarian_notation">Hungarian notation</a> is used to prevent those clashes.
+Despite its age and almost complete disuse in basically every other language,
+it is still a widely accepted practice in Haskell<sup id="fnref:8"><a class="footnote-ref" href="#fn:8" rel="footnote">8</a></sup>.</p>
+<h4>Purity beats&nbsp;practicality</h4>
+<p>We have previously discussed the multiple ways of working with strings
+and handling errors in Haskell. While somewhat confusing at times,
+there at least appears to be an agreement in the community as to which one
+should generally be&nbsp;preferred.</p>
+<p>This is not the case for some subtler and more abstract&nbsp;topics.</p>
+<p>Haskell is, famously,
+a <a href="https://en.wikipedia.org/wiki/Purely_functional_programming"><em>purely functional</em> programming language</a>.
+Evaluating functions, in a mathematical sense,
+is all a Haskell program is supposed to be doing.
+But the obvious problem is
+that such a program wouldn&#8217;t be able to do anything actually <em>useful</em>;
+there needs to be some way for it to <em>effect</em> the environment it runs in,
+if only to print the results it&nbsp;computed.</p>
+<p>How to reconcile the functional purity with real-world applications
+is probably the most important problem
+that the Haskell language designers have to contend with.
+After a couple of decades of research <em>and</em> industrial use
+it still doesn&#8217;t have a satisfactory&nbsp;answer.</p>
+<p>Yes, there is the <code>IO</code> monad, but it is a very blunt instrument.
+It offers a distinction between pure code and &#8220;effectful&#8221; code,
+but allows for no granularity or structure for the latter.
+An <code>IO</code>-returning function can do literally anything,
+while a pure function can only compute some value based on its arguments.
+Most code, however, is best placed somewhere between those two&nbsp;extremes.</p>
+<p>How to represent different varieties of <em>effects</em> (filesystem, logging, network, etc.)?<br>
+How to express them as function constraints that can be verified by the compiler?<br>
+How to compose them? How to extend them?<br></p>
+<p>These (and others) are still very much open questions in the Haskell community.
+The traditional way of dealing with them are <em>monad transformers</em>,
+but they suffer from many shortcomings<sup id="fnref:9"><a class="footnote-ref" href="#fn:9" rel="footnote">9</a></sup>.
+More recent solutions like <a href="http://hackage.haskell.org/package/extensible-effects">effects</a>
+or <a href="http://www.haskellforall.com/2012/06/you-could-have-invented-free-monads.html">free monads</a> are promising,
+but exhibit performance issues that likely won&#8217;t be solvable without full compiler support.
+And even so, you can <a href="https://markkarpov.com/post/free-monad-considered-harmful.html">convincingly argue against</a>
+those new approaches,
+which suggests that we may ultimately need something else&nbsp;entirely.</p>
+<p>Of course, this state of affairs doesn&#8217;t really prevent anyone
+from writing useful applications in Haskell.
+&#8220;Regular&#8221; monads are still a fine choice.
+Indeed, even if you end up stuffing most of your code inside plain <code>IO</code>,
+it will already be a step up compared to most other&nbsp;languages.</p>
+<h4>Good&nbsp;Enough™</h4>
+<p>Incidentally, something similar could probably be said about the language as a&nbsp;whole.</p>
+<p>Yes, it has numerous glaring flaws and some not-so-obvious shortcomings.<br>
+Yes, it requires disciplined coding style and attention to readability.<br>
+Yes, it will force you to courageously tackle problems
+that are completely unknown to programmers using other languages.<br>
+In the end, however, you will probably find it better than most&nbsp;alternatives.</p>
+<p>Basically, Haskell is like pizza:
+even when it&#8217;s bad, it is still <em>pretty good</em>.</p>
+<p>But what&#8217;s possibly the best thing about it
+is that you don&#8217;t even really need to adopt Haskell in order to benefit from its innovations
+(and avoid the legacy&nbsp;warts).</p>
+<p>There is already a breed of mainstream languages
+that can aptly be characterized as &#8220;Haskell-lite&#8221;:
+heavily influenced by <span class="caps">FP</span> paradigms but without subscribing to them completely.
+The closest example in this category is of course Scala,
+while the newest one would be Rust.<br>
+In many aspects, they offer a great compromise
+that provides some important functional features
+while sparing you most of the teething issues
+that Haskell still has after almost 30 years.
+Functional purists may not be completely satisfied,
+but at least they&#8217;ll get to keep their typeclasses and&nbsp;monoids.</p>
+<p>And what if you don&#8217;t want to hear about this <span class="caps">FP</span> nonsense at all?&#8230;
+Well, I&#8217;m afraid it will get harder and harder to avoid.
+These days, it&#8217;s evidently fine for a language to omit generics
+but it seems inconceivable to ditch <a href="https://gobyexample.com/closures">first-class functions</a>.
+Even the traditional <span class="caps">OOP</span> powerhouse like Java
+cannot do without
+<a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html">support for anonymous (&#8220;lambda&#8221;) functions</a>
+anymore.
+And let&#8217;s not forget
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises#Chaining">all</a>
+<a href="https://docs.oracle.com/javase/8/docs/api/java/util/Optional.html#flatMap-java.util.function.Function-">the</a>
+<a href="http://msdn.microsoft.com/en-us/library/system.linq.enumerable.selectmany.aspx">numerous</a>
+<a href="https://docs.oracle.com/javase/8/docs/api/java/util/stream/Stream.html#flatMap-java.util.function.Function-">examples</a>
+of monadic constructs
+that pervade many of the mature APIs, libraries, and&nbsp;languages.</p>
+<p>So even if you, understandably, don&#8217;t really want to come to Haskell,
+it&#8217;s looking more and more likely that Haskell will soon come to you&nbsp;:)</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>In case of Go, I&#8217;m of course referring to a feature that&#8217;s notoriously <em>missing</em> from the language.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>For a close analogue in languages other than Haskell,
+you can look at the
+<a href="https://doc.rust-lang.org/book/first-edition/procedural-macros.html">current state of procedural macros</a>
+in Rust (commonly known as &#8220;custom derives&#8221;).&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>What seems to excite the Haskell community in 2018, for example,
+are things like <a href="https://ghc.haskell.org/trac/ghc/wiki/LinearTypes">linear types</a>
+and <a href="https://typesandkinds.wordpress.com/2016/07/24/dependent-types-in-haskell-progress-report/">dependent types</a>.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>The obvious counterexample is <a href="https://en.wikipedia.org/wiki/Clojure">Clojure</a>
+and its cousins in the Lisp family of languages.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+<li id="fn:5">
+<p>Although
+<a href="https://www.reddit.com/r/haskell/comments/8ilw75/there_are_too_many_prettyprinting_libraries/">the abundance of pretty-printing libraries</a>
+is high up there, too :)&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
+</li>
+<li id="fn:6">
+<p>This can be mitigated somewhat by using a contiguous chunk of memory
+through a dedicated <em>arena allocator</em>, or implementing the list as an array.&#160;<a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text">&#8617;</a></p>
+</li>
+<li id="fn:7">
+<p>See for example <a href="https://theam.github.io/require/">this project</a>.&#160;<a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text">&#8617;</a></p>
+</li>
+<li id="fn:8">
+<p>Some <span class="caps">GHC</span> extensions like <code>DisambiguateRecordFields</code> allow for correct type inference
+even in case of &#8220;overloaded&#8221; field names, though.&#160;<a class="footnote-backref" href="#fnref:8" rev="footnote" title="Jump back to footnote 8 in the text">&#8617;</a></p>
+</li>
+<li id="fn:9">
+<p>To name a few:
+they don&#8217;t compose well (e.g. can only have one instance of a particular monad in the stack);
+they can cause some <a href="https://www.fpcomplete.com/blog/2017/06/tale-of-two-brackets">extremely tricky bugs</a>;
+they don&#8217;t really cooperate with the standard library which uses <code>IO</code> everywhere
+(often requiring tricks like <a href="https://github.com/fpco/unliftio">this</a>).&#160;<a class="footnote-backref" href="#fnref:9" rev="footnote" title="Jump back to footnote 9 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/programming/haskell-retrospective.html#haskell-retrospective">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/gisht-recap.html#gisht-recap">Recap of the gisht&nbsp;project</a></h2>
     <p>
       Posted on Fri 24 November 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -2127,112 +2615,6 @@ This ship seems to have sailed by now, as the community has collectively decided
 <p>It&#8217;s just a little ironic that in a language that is so focused on safety,
 everyone is perfectly happy with an <em>unstable compiler</em>.</p>
       <a class="btn" href="http://xion.io/post/programming/rust-nightly-vs-stable.html#rust-nightly-vs-stable">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/python-dont-use-click.html#python-dont-use-click">Please don&#8217;t use&nbsp;Click</a></h2>
-    <p>
-      Posted on Fri 20 May 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/cli.html">CLI</a>,      <a href="http://xion.io/tag/ui.html">UI</a>,      <a href="http://xion.io/tag/click.html">Click</a>      &#8226; <a href="http://xion.io/post/programming/python-dont-use-click.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p><em>&#8230;not for standalone programs&nbsp;anyway.</em></p>
-<p>Chances are, you have written some command line programs in Python. This is quite probable even if you normally code
-in some other language. And if you have, it is not unlikely that you needed to parse the <code>argv</code> of your program at one
-point or&nbsp;another.</p>
-<p>There are plenty of options here, both in the standard library as well as among third party packages. One does stand out,
-however, and it&#8217;s mostly for how it is often overused. I&#8217;m talking about <a href="http://click.pocoo.org/">Click</a>&nbsp;here.</p>
-<p>If you wanted to use it in your next Python program, I hereby urge you to&nbsp;reconsider.</p>
-<h4>What&#8217;s the&nbsp;fuss?</h4>
-<p><img style="float:right; margin-left: 8px; margin: bottom: 7px" src="http://xion.io/images/click-logo.png" alt="click_">
-The somewhat bizarrely named Click library is described as a &#8220;package for creating beautiful
-command line interfaces&#8221;. Its main trick is the ability to create subcommands by adorning Python functions with the
-<code>@click.command()</code> decorator<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. It then makes them coalesce into an argument parser, equipped with the necessary
-dispatching&nbsp;logic.</p>
-<p>This idea isn&#8217;t new, of course. Prior art goes back at least seven years to the now-abandoned
-<a href="https://opster.readthedocs.io">opster</a> package. Click, however, was the first one of its kind to garner noticeable
-popularity, which is easily attributed to <a href="http://lucumr.pocoo.org/">whom it&#8217;s been authored by</a>.</p>
-<p>So while my arguments against using this kind of <span class="caps">CLI</span> framework would apply to any package implementing the paradigm,
-it just happens that Click is currently its most prominent example. Purely for the sake of convenience, I will therefore
-refer to it as if it was interchangeable with the whole concept. Because why not? Whatever you may say about
-the library&#8217;s name, it&#8217;s hard to imagine a more concise moniker than a simple <em>Click</em>.</p>
-<p>What&#8217;s wrong, then, with the way Click handles command line&nbsp;interfaces?</p>
-<h4><span class="caps">CLI</span>: Little&nbsp;Interfaces</h4>
-<p>It&#8217;s how it encourages to treat them as an <em>accidental afterthought</em> rather than a deliberate design&nbsp;decision.</p>
-<p>For applications invoked repeatedly from a terminal, their command line arguments and flags are the primary means of
-user interaction<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>. It is how users communicate their intent to perform an action; provide the neccessary input data
-to carry it throgh; decide how they want to receive the output; and control many other aspects of the programs execution.
-Absent graphical components and widgets, the command line is virtually the only way to interact with a terminal&nbsp;program.</p>
-<p>In other words, it is <strong>the <span class="caps">UI</span></strong>.</p>
-<p>And how important the <span class="caps">UI</span> is for <em>any</em> application? It seems to be important enough that entire fields of study are devoted
-to reducing friction of human-computer interaction. In many projects, the emphasis on user interface design is on par
-with that of actual software engineering.<br>
-Like everything, of course, it is susceptible to trends and fads (such as the recent &#8220;mobile/responsive everything!&#8221;
-craze). But its significance remains undiminished. Quite the opposite: in the age of ubiquitous computing,
-user interfaces are probably more important than&nbsp;ever.</p>
-<p>Yes, this includes <span class="caps">CLI</span>. One of the main reasons we turn to the command line are <em>speed</em> and <em>efficacy</em>. Common tasks must
-utilize short and convenient syntax that is quick to integrate into user&#8217;s muscle memory. Others should not only be
-possible, but <em>discoverable</em> and <em>accessible</em> without going through reams of <code>man</code> pages.</p>
-<p>Any terminal program intended for frequent use by humans should therefore strive to excel in those two qualities.
-But except for <a href="http://linux.die.net/man/1/echo">the simplest of cases</a>, it won&#8217;t happen by itself.
-Designing an efficient <span class="caps">CLI</span> for any non-trivial application is a challenging and demanding&nbsp;task.</p>
-<h4>It doesn&#8217;t&nbsp;click</h4>
-<p>With Click, however, we&#8217;re encouraged to just wing&nbsp;it.</p>
-<p>Click tells us to slap some decorators on our top-level functions and call it a day. Sure, you can dig deep enough
-and uncover the underlying layers of abstraction that may eventually allow you do things for which <code>argparse</code> has
-a <a href="https://docs.python.org/3/library/argparse.html#mutual-exclusion">first-class support</a>.</p>
-<p>By default, however, Click shoehorns your programs into
-<a href="http://click.pocoo.org/5/quickstart/#basic-concepts">predefined patterns</a> that, incidentally, mirror those of some
-<a href="http://click.pocoo.org/5/complex/#building-a-git-clone">least intuitive</a> command-line tools in&nbsp;existence.</p>
-<p>Indeed, the whole idea of subdiving your program into several distinct is already suspect, for it appears at odds
-with the fundamental Unix philosophy of
-<a href="https://en.wikipedia.org/wiki/Unix_philosophy#Do_One_Thing_and_Do_It_Well">doing one thing well</a>. While it is
-occasionally justified, it shouldn&#8217;t be the first thing that comes to your mind. But that&#8217;s completely at odds with the
-Click&#8217;s approach, where <em>not</em> ending up with multiple distinct commands is something you have to consciously&nbsp;avoid.</p>
-<h4>&#8230;though it sometimes&nbsp;might</h4>
-<p>So, what <em>am</em> I suggesting you use instead libraries such as Click?&#8230; Nothing outrageous,&nbsp;really.</p>
-<p>If you care about your command line interface, consider just using
-<a href="https://docs.python.org/3/library/argparse.html">the <code>argparse</code> module</a>. Yes, it will force you to create parser objects,
-add arguments <span class="amp">&amp;</span> flags to it, and in general pay some attention to the whole business. When it comes to <span class="caps">UI</span>, it&#8217;s always
-good to make it an explicit concern, maybe even sufficient to warrant
-<a href="https://github.com/Xion/gisht/blob/e86af37388573f00a4d6f282feca76ead88725d8/gisht/args/parser.py">its own module</a>.</p>
-<p>Alternatively, the <a href="https://github.com/docopt/docopt"><code>docopt</code> library</a> provides another take on the <span class="caps">UI</span>-first approach
-to <span class="caps">CLI</span>, though it is more limited in its capabilities<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
-<p>Finally, I&#8217;m not advocating to ditch Click in <em>all</em> scenarios. There&#8217;s plenty of situations when we&#8217;re interested in
-getting <em>any</em> <span class="caps">CLI</span> up and running, and not so much in making the most efficient and intuitive interface possible. The prime
-example is any kind of automation scripts that are ancillary to some bigger project, like <em>manage.py</em> is in Django<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
-The Python ecosystem doesn&#8217;t really have dedicated task runners that are as featureful as <a href="http://gruntjs.com">Grunt</a>
-or <a href="http://gulpjs.com/">Gulp</a>, and that makes Click a viable and compelling option<sup id="fnref:5"><a class="footnote-ref" href="#fn:5" rel="footnote">5</a></sup>.</p>
-<p>But for standalone programs whose <span class="caps">CLI</span> is the main interface? Yeah, not&nbsp;really.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Oddly enough, that pair of parentheses seems to be mandatory.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Environment variables and config files deserve a honorary mention, of course. But those are usually derivatives of
-the command line arguments, containing e.g. the default values for flags.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>Click&#8217;s <a href="http://click.pocoo.org/5/why/#why-not-docopt-etc">own documentation</a> actually describes quite nicely
-how theirs and docopt&#8217;s philosophies differ in a way that&#8217;s consistent with this article.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-<li id="fn:4">
-<p>Incidentally, this appears to be a major motivation behind creating Click in the first place:
-to support web applications built upon on the <a href="http://flask.pocoo.org/">Flask</a> framework, and possibly obviate the need
-for extensions such as <a href="http://flask-script.readthedocs.io/en/latest/">Flask-Script</a>.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-<li id="fn:5">
-<p>This saying, there are some task runners which offer similar experience, like <a href="http://pyinvoke.org">Invoke</a>.&#160;<a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/programming/python-dont-use-click.html#python-dont-use-click">Continue reading</a>
   </div>
 </article>
 

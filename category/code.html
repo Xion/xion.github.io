@@ -63,6 +63,311 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-examples.html#rust-examples">Add examples to your Rust&nbsp;libraries</a></h2>
+    <p>
+      Posted on Wed 28 February 2018 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/cargo.html">Cargo</a>,      <a href="http://xion.io/tag/examples.html">examples</a>,      <a href="http://xion.io/tag/documentation.html">documentation</a>,      <a href="http://xion.io/tag/packaging.html">packaging</a>      &#8226; <a href="http://xion.io/post/code/rust-examples.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>When you&#8217;re writing a library for other programs to depend on,
+it is paramount to think how the developers are going to use it in their&nbsp;code.</p>
+<p>The best way to ensure they have a pleasant experience
+is to <em>put yourself in their shoes</em>.
+Forget the internal details of your package, and consider only its outward interface.
+Then, come up with a realistic use case and just <em>implement it</em>.</p>
+<p>In other words, you should create complete, end-to-end,
+and (somewhat) usable <em>example applications</em>.</p>
+<h4>Examples are&nbsp;trouble</h4>
+<p>You may think this is asking a lot, and I wouldn&#8217;t really disagree&nbsp;here.</p>
+<p>In most languages and programming platforms,
+it is indeed quite cumbersome to create example apps.
+This happens for at least several different&nbsp;reasons:</p>
+<ul>
+<li>
+<p><strong>It typically requires bootstrapping an entire project from scratch.</strong>
+  If you are lucky, you will have something like <code>create-react-app</code>
+  to get you going relatively quickly.
+  Still, you need to wire up the new project so that it depends on the <em>source code</em> of your library
+  rather than its published version,
+  and this tends to be a non-standard option &#8212; if it is available at&nbsp;all.</p>
+</li>
+<li>
+<p><strong>It&#8217;s unclear where should the example code live.</strong>
+  Should you just throw it away, once it has served its immediate purpose?
+  I&#8217;m sure this would discourage many people from creating examples in the first place.
+  It&#8217;s certainly better to keep them in the version control,
+  allowing their code to serve as additional documentation.
+  <br><br>
+  But if you intend to do this,
+  you need to be careful not to deploy the example along with your library
+  when you upload it to the package registry for your language.
+  This may require maintaining an explicit blacklist and/or whitelist,
+  in the vein of <a href="https://docs.python.org/2/distutils/sourcedist.html#the-manifest-in-template"><code>MANIFEST</code> files</a>
+  in&nbsp;Python.</p>
+</li>
+<li>
+<p><strong>Examples may break as the library changes.</strong>
+  Although example apps aren&#8217;t integration tests that have a clear, expected outcome,
+  they should at the very least <em>compile correctly</em>.
+  <br><br>
+  The only way to ensure that is to include them in the build/test pipeline of your library.
+  To accomplish this, however, you may need to complicate your <abbr title="continuous integration"><span class="caps">CI</span></abbr> setup,
+  perhaps by introducing additional languages like Bash or&nbsp;Python.</p>
+</li>
+<li>
+<p><strong>It&#8217;s harder to maintain quality of example code.</strong>
+  Any linters and static analyzers that you&#8217;re normally running will likely need to be configured
+  to also apply to the examples.
+  On the other hand, however, you probably don&#8217;t want those checkers to be <em>too strict</em>
+  (it&#8217;s just example code, after all), so you may want to turn off some of the warnings,
+  adjust the level of others, and so&nbsp;on.</p>
+</li>
+</ul>
+<p>So essentially, writing examples involves quite a lot of hassle.
+It would be great if the default tooling of your language
+helped to lessen the burden at least a <em>little</em>&nbsp;bit.</p>
+<p>Well, good news! If you&#8217;re a <a href="http://rust-lang.org">Rust</a> programmer,
+the language has basically got you&nbsp;covered.</p>
+<p>Cargo &#8212; the standard build tool and package manager for Rust &#8212;
+has some dedicated features to support <em>examples</em> as a first-class concept.
+While it doesn&#8217;t completely address all the pain points outlined above,
+it goes a long way towards minimizing&nbsp;them.</p>
+<h4>What are Cargo&nbsp;examples?</h4>
+<p>In Cargo&#8217;s parlance, an <em>example</em> is nothing else
+but a Rust source code of a standalone executable<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>
+that typically resides in a single <code>.rs</code> file.
+All such files should be places in the <code>examples/</code> directory,
+at the same level as <code>src/</code> and the <code>Cargo.toml</code> manifest itself<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<p>Here&#8217;s the simplest example of, ahem, an <em>example</em>:</p>
+<div class="highlight"><pre><span class="c1">// examples/hello.rs</span>
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello from an example!&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>You can run it through the typical <code>cargo run</code> command;
+simply pass the example name after the <code>--example</code> flag:</p>
+<div class="highlight"><pre>$ cargo run --example hello
+Hello from an example!
+</pre></div>
+
+
+<p>It is also possible to run the example with some additional&nbsp;arguments:</p>
+<div class="highlight"><pre>$ cargo run --example hello2 -- Alice
+Hello, Alice!
+</pre></div>
+
+
+<p>which are relayed directly to the underlying&nbsp;binary:</p>
+<div class="highlight"><pre><span class="c1">// examples/hello2.rs</span>
+<span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">env</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">env</span><span class="o">::</span><span class="n">args</span><span class="p">().</span><span class="n">skip</span><span class="p">(</span><span class="mi">1</span><span class="p">).</span><span class="n">next</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">.</span><span class="n">unwrap_or</span><span class="p">(</span><span class="s">&quot;world&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()));</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you can see, the way we run examples is very similar to how we&#8217;d run
+<a href="https://doc.rust-lang.org/cargo/reference/manifest.html#the-project-layout">the <code>src/bin</code> binaries</a>,
+which some people use as normal entry points to their Rust&nbsp;programs.</p>
+<p>The important thing is that you don&#8217;t have to worry what to do with your example code anymore.
+All you need to do is drop it in the <code>examples/</code> directory,
+and let Cargo do the&nbsp;rest.</p>
+<h4>Dependency&nbsp;included</h4>
+<p>Of course in reality,
+your examples will be at least a <em>little</em> more complicated than that.
+For one, they will surely call into your library to use its <span class="caps">API</span>,
+which means they need to depend on it <span class="amp">&amp;</span> import its&nbsp;symbols.</p>
+<p>Fortunately, this doesn&#8217;t complicate things even one&nbsp;bit.</p>
+<p>The library crate itself is already an <em>implied dependency</em> of any code
+inside the <code>examples/</code> directory.
+This is automatically handled by Cargo,
+so you don&#8217;t have to modify <code>Cargo.toml</code> (or do anything else really)
+to make it&nbsp;happen.</p>
+<p>So without any additional effort,
+you can just to link to your library crate in the usual manner,
+i.e. by putting <code>extern crate</code> on top of the Rust&nbsp;file:</p>
+<div class="highlight"><pre><span class="c1">// examples/real.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">thing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;I made a thing: {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">thing</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>This goes even further, and extends to any dependency <em>of the library itself</em>.
+All such third-party crates are automatically available to the example code,
+which proves handy in common cases such as <a href="http://tokio.rs">Tokio</a>-based asynchronous&nbsp;APIs:</p>
+<div class="highlight"><pre><span class="c1">// example/async.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">tokio_core</span><span class="p">;</span><span class="w">  </span><span class="c1">// assuming it&#39;s in mylib&#39;s [dependencies]</span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">core</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tokio_core</span><span class="o">::</span><span class="n">reactor</span><span class="o">::</span><span class="n">Core</span><span class="o">::</span><span class="n">new</span><span class="p">().</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">thing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">core</span><span class="p">.</span><span class="n">run</span><span class="p">(</span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing_asynchronously</span><span class="p">()).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;I made a thing: {:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">thing</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>More&nbsp;deps</h4>
+<p>Sometimes, however, it is very useful to pull in an additional package or two,
+just for the example&nbsp;code.</p>
+<p>A typical case may involve <em>logging</em>.</p>
+<p>If your library uses the usual <a href="https://docs.rs/log"><code>log</code> crate</a> to output debug messages,
+you probably want to see them printed out when you run your examples.
+Since the <code>log</code> crate is just a <a href="https://en.wikipedia.org/wiki/Facade_pattern">facade</a>,
+it doesn&#8217;t offer any built-in way to pipe log messages to standard output.
+To handle this part,
+you need something like <a href="http://docs.rs/env_logger">the <code>env_logger</code> package</a>:</p>
+<div class="highlight"><pre><span class="c1">// example/with_logging.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">env_logger</span><span class="p">;</span><span class="w"></span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">env_logger</span><span class="o">::</span><span class="n">init</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing</span><span class="p">());</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>To be able to import <code>env_logger</code> like this,
+it natually has to be declared as a dependency in our <code>Cargo.toml</code>.</p>
+<p>We won&#8217;t put it in the <code>[dependencies]</code> section of the manifest,
+however, as it&#8217;s not needed by the library code.
+Instead, we should place it in a
+<a href="https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#development-dependencies">separate section</a>
+called <code>[dev-dependencies]</code>:</p>
+<div class="highlight"><pre><span class="k">[dev-dependencies]</span>
+<span class="na">env_logger</span> <span class="o">=</span> <span class="s">&quot;0.5&quot;</span>
+</pre></div>
+
+
+<p>Packages listed there are shared by tests, benchmarks, and &#8212; yes, examples.
+They are not, however, linked into regular builds of your library,
+so you don&#8217;t have to worry about bloating it with unnecessary&nbsp;code.</p>
+<h4>Growing&nbsp;bigger</h4>
+<p>So far, we have seen examples that span just a single Rust file.
+Practical applications tend to be bigger than that,
+so it&#8217;d be nice if we could provide some multi-file examples as&nbsp;well.</p>
+<p>This is easily done, although for some reason it doesn&#8217;t seem to be mentioned
+in <a href="https://doc.rust-lang.org/cargo/reference/manifest.html#examples">the official docs</a>.</p>
+<p>In any case, the approach is identical to
+<a href="https://doc.rust-lang.org/cargo/reference/manifest.html#the-project-layout">executables inside <code>src/bin/</code></a>.
+Basically, if we have a single <code>foo.rs</code> file with executable code,
+we can expand it to a <code>foo/</code> subdirectory with <code>foo/main.rs</code> as the entry point.
+Then, we can add whatever other submodules we want &#8212;
+just like we would do for a regular Rust binary&nbsp;crate:</p>
+<div class="highlight"><pre><span class="c1">// examples/multifile/main.rs</span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">env_logger</span><span class="p">;</span><span class="w"></span>
+<span class="k">extern</span><span class="w"> </span><span class="n">crate</span><span class="w"> </span><span class="n">mylib</span><span class="p">;</span><span class="w"></span>
+
+<span class="kn">mod</span><span class="w"> </span><span class="n">util</span><span class="p">;</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">env_logger</span><span class="o">::</span><span class="n">init</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">ingredient</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">util</span><span class="o">::</span><span class="n">create_ingredient</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">thing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mylib</span><span class="o">::</span><span class="n">make_a_thing_with</span><span class="p">(</span><span class="n">ingredient</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">thing</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre><span class="c1">// examples/multifile/util.rs</span>
+
+<span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">create_ingredient</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">u64</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="mi">42</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Of course, it won&#8217;t be often that examples this large are necessary.
+Showing how a library can scale to bigger applications can, however,
+be very encouraging to potential&nbsp;users.</p>
+<h4>Maintaining&nbsp;maintainability</h4>
+<p>Thus far, we have discussed how to create small and larger examples,
+how to use additional third-party crates in example programs,
+and how to easily build <span class="amp">&amp;</span> run them using built-in Cargo&nbsp;commands.</p>
+<p>All this effort spent on writing examples would be of little use
+if we couldn&#8217;t ensure that they <em>work</em>.</p>
+<p>Like every type of code,
+examples are prone to breakage whenever the underlying <span class="caps">API</span> changes.
+If the library is actively developed, its interface represents a moving target.
+It is quite expected that changes may sometimes cause old examples to stop&nbsp;compiling.</p>
+<p>Thankfully, Cargo is very dilligent in reporting such breakages.
+Whenever you&nbsp;run:</p>
+<div class="highlight"><pre>$ cargo test
+</pre></div>
+
+
+<p><em>all examples are built</em> simultaneously with the execution of your regular test suite<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
+You get the compilation guarantee for your examples essentially for free
+&#8212; there is no need to even edit your <code>.travis.yml</code>,
+or to adjust your continuous integration setup in any other&nbsp;way!</p>
+<p>Pretty neat,&nbsp;right?</p>
+<p>This saying, you should keep in mind that
+simply compiling your examples on a regular basis is not a foolproof guarantee
+that their code never becomes outdated.
+Examples are <em>not</em> integration tests,
+and they won&#8217;t catch important changes in your implementation
+that aren&#8217;t breaking the&nbsp;interface.</p>
+<h4>Examples-Driven&nbsp;Development?</h4>
+<p>You may be wondering then, what&#8217;s exactly the point of writing examples?
+If you got tests on one hand to verify correctness,
+and documentation on the other hand to inform your users,
+then having a bunch of dedicated executable examples may seem&nbsp;superfluous.</p>
+<p>To me, however, an impeccable test suite and amazing docs
+&#8212; which also remain comprehensive and awesome for an entire lifetime of the library! &#8212;
+sound a bit too much like a perfect world :)
+Adding examples to the mix can almost always improve things,
+and their maintenance burden should, in most cases, be very&nbsp;minimal.</p>
+<p>But I have also found out that starting off with examples early on
+is a great way to <em>validate the interface design</em>.</p>
+<p>Once the friction of creating small test programs has been eliminated,
+they become indispensable for prototyping new features.
+Wanna try out that new thing you&#8217;ve just added?
+Simple: just make a quick example for it, run it, and see what&nbsp;happens!</p>
+<p>In many ways, doing this feels similar to trying out things in a
+<abbr title="Run Eval Print Loop"><span class="caps">REPL</span></abbr>
+&#8212; something that&#8217;s almost exclusive to dynamic/interpreted languages.
+But unlike mucking around in Python shell, examples are <em>not</em> throwaway code:
+they become part of your project, and remain useful for both you <span class="amp">&amp;</span> your&nbsp;users.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It is also possible to create examples
+<a href="https://doc.rust-lang.org/cargo/reference/manifest.html#examples">which are themselves just libraries</a>.
+I don&#8217;t think this is particularly useful, though,
+since all you can do with such examples is build them,
+so they don&#8217;t provide any additional value over normal tests
+(and especially <a href="https://doc.rust-lang.org/beta/rustdoc/documentation-tests.html">doc tests</a>).&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Because they are outside of the <code>src/</code> directory,
+examples do not become a part of your library&#8217;s code, and are not deployed to <a href="https://crates.io">crates.io</a>.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>You can also run <code>cargo build --examples</code> to only compile the examples,
+without running any kind of tests.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-examples.html#rust-examples">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-unfold-pagination.html#rust-unfold-pagination">Unfolding a Stream of paginated&nbsp;items</a></h2>
     <p>
       Posted on Wed 24 January 2018 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1865,228 +2170,6 @@ I&#8217;d assume you have already <a href="https://www.python.org/doc/essays/lis
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/python-generator-args.html#python-generator-args">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/rust-let-unit.html#rust-let-unit">The &#8220;let&#8221; type trick in&nbsp;Rust</a></h2>
-    <p>
-      Posted on Wed 01 February 2017 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/types.html">types</a>,      <a href="http://xion.io/tag/pattern-matching.html">pattern matching</a>      &#8226; <a href="http://xion.io/post/code/rust-let-unit.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Here&#8217;s a neat little trick
-that&#8217;s especially useful if you&#8217;re just starting out with&nbsp;Rust.</p>
-<p>Because the language uses <a href="https://en.wikipedia.org/wiki/Type_inference">type inference</a> all over the place
-(or at least within a single function),
-it can often be difficult to figure out the type of an expression by yourself.
-Such knowledge is very handy in resolving compiler errors,
-which may be rather complex when generics and traits are&nbsp;involved.</p>
-<p>The formula itself is very simple.
-Its shortest, most common version &#8212; and arguably the cleverest one, too &#8212;
-is the following <code>let</code> binding:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>In virtually all cases, this binding will cause a type error on its own,
-so it&#8217;s not something you&#8217;d leave permanently in your regular&nbsp;code.</p>
-<p>But the important part here is the exact error message you&nbsp;get:</p>
-<div class="highlight"><pre>error[E0308]: mismatched types
-  --&gt; &lt;anon&gt;:42:13
-   |
-42 |         let () = some_expression;
-   |             ^^ expected f64, found ()
-   |
-   = note: expected type `f64`
-   = note:    found type `()`
-</pre></div>
-
-
-<p>The type expected by Rust here (in this example, <code>f64</code>)
-is also the type of <code>some_expression</code>. No more, no&nbsp;less.</p>
-<p>There is nothing particularly wrong with using this technique
-and not caring too much how it works under the hood.
-But if you do want to know a little more what exactly is going on here,
-the rest of this post covers it in some&nbsp;detail.</p>
-<h4>The&nbsp;unit</h4>
-<p>Firstly, you may be wondering about this curious <code>()</code> type
-that the compiler has apparently found in the statement above.
-The official name for it is the <em>unit type</em>,
-and it has several notable&nbsp;characteristics:</p>
-<ol>
-<li>There exists only one value<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> of this type: <code>()</code> (same symbol as the type&nbsp;itself).</li>
-<li>It represents an empty tuple and has therefore the size of&nbsp;zero.</li>
-<li>It is the type of any expression that&#8217;s turned into a <em>statement</em>.</li>
-</ol>
-<p>That last fact is particularly interesting,
-as it makes <code>()</code> appear in error messages that are more indicative of syntactic mishaps
-rather than mismatched&nbsp;types:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">positive_signum</span><span class="p">(</span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="mi">1</span><span class="k">i32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="mi">0</span><span class="k">i32</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>error[E0308]: mismatched types
- --&gt; &lt;anon&gt;:2:17
-  |
-2 |     if x &gt; 0 { 1i32 }
-  |                ^^^^ expected (), found i32
-  |
-  = note: expected type `()`
-  = note:    found type `i32`
-</pre></div>
-
-
-<p>If you think about it, however, it makes perfect sense.
-The last expression inside a function body is the return value.
-This also means that everything <em>before</em> it has to be a statement:
-an expression of type <code>()</code>.</p>
-<p>Working its way backward,
-Rust will therefore expect only such expressions before the final <code>0i32</code>.
-This, in turn, puts the same constraint on the body of the <code>if</code> statement.
-The expression <code>1i32</code> (with its type of <code>i32</code>) clearly violates it,
-causing the above error<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
-<h4><span class="dquo">&#8220;</span>Expanded&#8221;&nbsp;version</h4>
-<p>A natural question now arises:
-is <code>()</code> inside of the <code>let () = ...</code> formula a <em>type</em> <code>()</code> or a <em>value</em> <code>()</code>?&#8230;</p>
-<p>To answer that,
-it&#8217;s quite helpful to compare and contrast the original binding with its longer&nbsp;&#8220;equivalent&#8221;:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">_</span><span class="o">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">some_expression</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>This statement is conceptually very similar to our original one.
-The error message it causes can also be used to debug issues with type&nbsp;inference.</p>
-<p>Despite some cryptic symbols, the syntax here should also be more familiar.
-It occurs in many typical, ordinary bindings you can see in everyday Rust code.
-Here&#8217;s an&nbsp;example:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">42</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>where it&#8217;s abundantly clear that <code>i32</code> is the type of variable <code>x</code>.</p>
-<p>Analogously above, you can see that
-an unnamed symbol (<code>_</code>, the underscore) is declared to be of type <code>()</code>.</p>
-<p>So in this alternate phrasing, <code>()</code> denotes a <em>type</em>.</p>
-<h4>Let a pattern&nbsp;emerge</h4>
-<p>What about the original form, <code>let () = ...</code>?
-There is no explicit type declaration here (i.e. no colon),
-and a pair of empty parentheses isn&#8217;t a name that could be assigned a new&nbsp;value.</p>
-<p>What exactly is happening there,&nbsp;then?&#8230;</p>
-<p>Well, it isn&#8217;t really anything special.
-While it may look exceptional, and totally unlike common usages of <code>let</code>,
-it is in fact exactly the same thing as a mundane <code>let x = 5</code>.
-The potential misconception here is about the exact meaning of <code>x</code>.</p>
-<p>The simple version is that it&#8217;s a name for the bound expression.<br>
-But the actual truth is that it&#8217;s a <em>pattern</em> which is matched against that&nbsp;expression.</p>
-<p>The terms &#8220;pattern&#8221; and &#8220;matching&#8221; here refer to the same mechanism
-that occurrs within <a href="https://doc.rust-lang.org/book/match.html">the <code>match</code> statement</a>.
-You could even imagine a peculiar form of desugaring,
-where a <code>let</code> statement is converted into a semantically equivalent <code>match</code>:</p>
-<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">original</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">6</span><span class="p">;</span><span class="w"></span>
-<span class="w">    </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-
-<span class="k">fn</span><span class="w"> </span><span class="n">desugared</span><span class="p">()</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">i32</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">        </span><span class="n">x</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="mi">6</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
-<span class="w">            </span><span class="n">y</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">y</span><span class="w"></span>
-<span class="w">        </span><span class="p">}</span><span class="w"></span>
-<span class="w">    </span><span class="p">}</span><span class="w"></span>
-<span class="p">}</span><span class="w"></span>
-</pre></div>
-
-
-<p>This analogy works perfectly<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>, because the patterns here are <em>irrefutable</em>:
-any value can match them, as all we&#8217;re doing is giving the value a name.
-Should the case be any different, Rust would reject our <code>let</code> statement &#8212;
-just like it rejects a <code>match</code> block that doesn&#8217;t include branches for all possible&nbsp;outcomes.</p>
-<h4>An empty&nbsp;pattern</h4>
-<p>But just because a pattern has to always match the expression,
-it doesn&#8217;t mean only simple identifiers like <code>x</code> or <code>y</code> are permitted in <code>let</code>.
-If Rust is able to statically ensure a match,
-it is perfectly <span class="caps">OK</span> to use a pattern with an internal structure<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>:</p>
-<div class="highlight"><pre><span class="kn">use</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">num</span><span class="o">::</span><span class="n">Wrapping</span><span class="p">;</span><span class="w"></span>
-<span class="kd">let</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Wrapping</span><span class="p">(</span><span class="mi">42</span><span class="p">);</span><span class="w"></span>
-</pre></div>
-
-
-<p>Of course, something like this is just superfluous and silly.
-Same mechanism, however, is also behind the ability to &#8220;initialize multiple&nbsp;variables&#8221;:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">y</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span><span class="w"></span>
-</pre></div>
-
-
-<p>What really happens is that we take a <em>tuple expression</em> <code>(0, 1)</code>
-and match it against a pattern <code>(x, y)</code>.
-Because it is trivially satisified,
-we have the symbols <code>x</code> and <code>y</code> bound to the tuple elements.
-For all intents and purposes, this is equivalent to having two separate <code>let</code> statements:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"></span>
-<span class="kd">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w"></span>
-</pre></div>
-
-
-<p>Of course, a 2-tuple is not the only pattern of this kind we can use in <code>let</code>.
-Others possible patterns include, for example, the <em>0-tuple</em>.</p>
-<p>Or, as we express it in Rust, <code>()</code>:</p>
-<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">();</span><span class="w"></span>
-</pre></div>
-
-
-<p>Now that&#8217;s a truly useless statement!
-But it also harkens straight to our debug binding.
-It should be pretty clear now how it&nbsp;works:</p>
-<ul>
-<li>The <code>()</code> stanza on the left is neither a type nor a name, but a <em>pattern</em>.</li>
-<li>The expression on the right is being <em>matched</em> against this&nbsp;pattern.</li>
-<li>Because the types of both of those things differ, the compiler signals an appropriate&nbsp;error.</li>
-</ul>
-<p>The curious thing is that there is nothing inherently magical about using <code>()</code> on the left hand side.
-It&#8217;s simply the shortest pattern we can put after <code>let</code>.
-It&#8217;s also one that&#8217;s extremely unlikely to actually match the right hand side,
-which ensures we get the desired error.
-But if you substituted something equally exotic and rare &#8212; say, <code>(x, ((y, z), Wrapping(w)))</code> &#8212;
-it would work equally well as a rudimentary type&nbsp;detector.</p>
-<p>Except for one thing, of course: nobody wants to type this much!
-Borne out of this frugality (and/or laziness), a custom thus emerged to use <code>()</code>.</p>
-<p>Short, sweet, and <em>clever</em>.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>A more formal, type-theoretic formulation of this fact
-is saying that <code>()</code> is <em>inhabited</em> by only one value.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>In case you are wondering, one possible fix here is to <code>return 1i32;</code> inside the <code>if</code>.
-An (arguably more idiomatic) alternative is to put <code>0i32</code> in an <code>else</code> branch,
-turning the entire <code>if</code> construct into the last &#8212; and only &#8212; expression in the function body.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>Note how each nested <code>match</code> is also introducing a new scope,
-exactly like the
-<a href="https://doc.rust-lang.org/1.10.0/book/references-and-borrowing.html#thinking-in-scopes">canonical desugaring</a>
-of <code>let</code> which is often used to explain lifetimes and borrowing.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-<li id="fn:4">
-<p>Unfortunately, Rust isn&#8217;t currently capable of proving that the pattern is irrefutable in all obvious cases.
-For example, <code>let Some(x) = Some(42);</code> will be rejected due to the existence of a <code>None</code> variant in <code>Option</code>,
-even though it isn&#8217;t actually used in the (constant) expression on the right.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/rust-let-unit.html#rust-let-unit">Continue reading</a>
   </div>
 </article>
 
