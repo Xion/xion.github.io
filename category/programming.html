@@ -63,6 +63,82 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/programming/another-npm-snafu.html#another-npm-snafu">Yes, the npm ecosystem is at&nbsp;fault</a></h2>
+    <p>
+      Posted on Tue 27 November 2018 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/npm.html">npm</a>,      <a href="http://xion.io/tag/javascript.html">Javascript</a>,      <a href="http://xion.io/tag/open-source.html">open source</a>,      <a href="http://xion.io/tag/package-manager.html">package manager</a>,      <a href="http://xion.io/tag/security.html">security</a>      &#8226; <a href="http://xion.io/post/programming/another-npm-snafu.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Even if you are like me and don&#8217;t use any (server-side) Javascript, or node.js, or npm,
+it may feel like every other week there are news about
+<a href="https://github.com/dominictarr/event-stream/issues/116">yet another npm snafu</a>.</p>
+<p>The latest incident could be the most severe one yet,
+at least from the security standpoint.
+<a href="https://arstechnica.com/information-technology/2018/11/hacker-backdoors-widely-used-open-source-software-to-steal-bitcoin/">In a nutshell</a>,
+the owner of <em>event-stream</em> &#8212; a popular package even by npm standards &#8212;
+had transferred ownership of it to another person.
+The new owner would then publish a new version of the package
+which contained a targeted backdoor, intended to <em>steal large amounts of Bitcoin</em>
+from the users of one particular wallet&nbsp;provider.</p>
+<p>Quite a step up from <a href="https://www.theregister.co.uk/2016/03/23/npm_left_pad_chaos/">the <em>left-pad</em> fiasco</a>, isn&#8217;t&nbsp;it?&#8230;</p>
+<p>Like it usually happens with any major incident,
+lots of people are eager to put the blame on someone, or something, as quickly as possible.
+Rather unsurprisingly, the original owner of <em>event-stream</em> came up as a pretty obvious target.
+Without his abdication of ownership rights, the argument goes,
+the entire ordeal wouldn&#8217;t have happened in the first place.
+More broadly, as a maintainer of a popular package,
+<a href="https://github.com/dominictarr/event-stream/issues/116#issuecomment-441161123">he owes it to the community</a>
+to make sure it remains available and safe to use,
+now and for the foreseeable&nbsp;future.</p>
+<p>But if those are the responsibilities, then what are the rewards?&#8230;
+Well, in the author&#8217;s own words,
+<a href="https://gist.github.com/dominictarr/9fd9c1024c94592bc7268d36b8d83b3a">&#8220;you get literally nothing from maintaing a popular package&#8221;</a>.
+Looks like once the fun of it wears off, it&#8217;s just all work and no play,
+for little to no tangible&nbsp;benefit.</p>
+<p>This problem is of course not specific to Javascript or npm.
+Here&#8217;s, for example,
+<a href="https://gist.github.com/richhickey/1563cddea1002958f96e7ba9519972d9">a good take on the issue</a>
+from the creator of <a href="https://clojure.org/">Clojure</a>.</p>
+<p>However, this <em>doesn&#8217;t mean</em> every other package manager is equally susceptible
+to the sort of issues that have shaken npm <a href="https://blog.npmjs.org/post/173526807575/reported-malicious-module-getcookies">time</a>
+and
+<a href="https://blog.npmjs.org/post/163723642530/crossenv-malware-on-the-npm-registry">time again</a>.
+To say the same thing could&#8217;ve happened to Python/Ruby/Go/Haskell/etc. is vacuous.
+While factually true, it&#8217;s an instance of the
+<a href="https://www.lesswrong.com/posts/dLJv2CoRCgeC2mPgj/the-fallacy-of-gray">Fallacy of Grey</a>:
+a claim that because nothing is <em>ideal</em>, everything must be <em>equally flawed</em>.</p>
+<p>In reality, the Javascript ecosystem facilitated by npm is
+<a href="https://www.reddit.com/r/programming/comments/a0kxmw/i_dont_know_what_to_say_backdoor_in_popular/eaij0rt/">singularly vulnerable</a>
+to problems of this kind.
+It follows directly from how granular the npm packages are, and how wide and deep their dependency trees&nbsp;get.</p>
+<p>Indeed, it would be quite a fascinating exercise to quantify the difference numerically,
+by comparing the average size of a dependency graph between npm, PyPI, Rubygems, Hoogle, and so on.
+It&#8217;s rather obvious npm would come as a &#8220;winner&#8221;, likely with Rust&#8217;s Cargo not very far&nbsp;behind.</p>
+<p>Apparently, this not unintentional either &#8212;
+the node.js community seems to <a href="https://twitter.com/joepie91/status/1065193459349446656">like it this way</a>.
+But as the yesterday&#8217;s incident has exposed,
+this state of affairs relies on the distributed conscientiousness of <em>very</em> many parties
+&#8212; in this case, npm package authors.
+When one inevitably falters, the impact reaches far and wide,
+rippling through the massively intertwined npm&nbsp;registry.</p>
+<p>While it may be satisfying, then, to blame the package owner as the immediate culprit,
+it&#8217;s way more productive to consider how the damage could have been&nbsp;mitigated.</p>
+<p>We can, for example, look at the unimaginably dense dependency graph of npm &#8212;
+if anyone ever dared to visualize it in its entirety &#8212;
+and realize it shouldn&#8217;t really have so many edges.
+Had it been little sparser, more similar to the graphs of PyPI or Ruby,
+then removing (i.e. compromising) a single leaf node would&#8217;ve had proportionally smaller&nbsp;impact.</p>
+<p>So yes, it&#8217;s true that all package managers are exposed to the risk of compromised packages.
+It is, however, something that can be estimated and compared &#8212; and unfortunately,
+it is clear that for npm, this risk is currently the&nbsp;largest.</p>
+      <a class="btn" href="http://xion.io/post/programming/another-npm-snafu.html#another-npm-snafu">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/haskell-retrospective.html#haskell-retrospective">A Haskell&nbsp;retrospective</a></h2>
     <p>
       Posted on Sat 18 August 2018 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -2459,162 +2535,6 @@ For them, &#8220;each individual case&#8221; is literally <em>every asynchronous
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/programming/rust-async-closer-look.html#rust-async-closer-look">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/rust-nightly-vs-stable.html#rust-nightly-vs-stable">A tale of two&nbsp;Rusts</a></h2>
-    <p>
-      Posted on Sat 24 December 2016 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/nightly-rust.html">nightly Rust</a>,      <a href="http://xion.io/tag/stable-rust.html">stable Rust</a>,      <a href="http://xion.io/tag/rocketrs.html">Rocket.rs</a>      &#8226; <a href="http://xion.io/post/programming/rust-nightly-vs-stable.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>The writing has been on the wall for many months now,
-but I think the time has come when we can officially declare&nbsp;it.</p>
-<blockquote>
-<p>Stable Rust is dead. Nightly Rust is the only&nbsp;Rust.</p>
-</blockquote>
-<h4>Say&nbsp;what?</h4>
-<p>If you&#8217;re out of the loop,
-<a href="http://rust-lang.org/">Rust</a> is this newfangled system programming language.
-Rust is meant to fit in the niches normally occupied by C,
-so its domain includes performance-sensitive and safety-critical applications.
-Embedded programming, <span class="caps">OS</span> kernels, databases, servers,
-and similar low-level pieces of computing and networking infrastructure
-are all within its&nbsp;purview.</p>
-<p>Of course, this &#8220;replacing C&#8221; thing is still an ambition that&#8217;s years or decades away.
-But in theory, there is nothing preventing it from happening.
-The main thing Rust would need here is <em>time</em>: time to buy trust of developers
-by having been used in real-world, production scenarios without&nbsp;issues.</p>
-<p>To facilitate this (and for other reasons),
-Rust has been using <a href="https://doc.rust-lang.org/stable/book/release-channels.html">three <em>release channels</em></a>
-with varying frequency of updates.
-There are the <em>stable</em>, <em>beta</em>, and <em>nightly</em> Rust.
-Of those, beta is pretty much an
-<a href="https://en.wikipedia.org/wiki/Software_release_life_cycle#Release_candidate"><span class="caps">RC</span></a>
-for a future stable release,
-so there aren&#8217;t many differences at all between the first two&nbsp;channels.</p>
-<h4>Nightly&nbsp;perks</h4>
-<p>This cannot be said about&nbsp;nightly.</p>
-<p>In fact, nightly Rust is essentially <em>its own language</em>.</p>
-<p>First, there is a number of exclusive language features that are only available on nightly.
-They are all guarded by numerous <code>#![feature(...)]</code> gates
-which are required to activate them.
-Because stable Rust doesn&#8217;t accept any such directive,
-trying to compile code that uses them will fail on a non-nightly&nbsp;compiler.</p>
-<p>This has been justified as a necessary step for testing out new features
-in real scenarios, or at least those that resemble (stable) reality as close as possible.
-Indeed, many features <em>did</em> eventually land in stable Rust by going through this route
-&#8212; a recent example would be <a href="https://m4rw3r.github.io/rust-questionmark-operator">the <code>?</code> operator</a>,
-an error-handling measure analogous to the <code>try!</code> macro.</p>
-<p>But some features take a lot of time to stabilize.
-And few (like <code>zero_one</code> which guards the numeric traits
-<a href="https://doc.rust-lang.org/std/num/trait.Zero.html"><code>Zero</code></a>
-and <a href="https://doc.rust-lang.org/std/num/trait.One.html"><code>One</code></a>) may even be deprecated
-without ever getting out of the nightly&nbsp;channel.</p>
-<h4>Unplugged</h4>
-<p>Secondly, and most importantly, there is at least one feature
-that won&#8217;t get stabilized <strong>ever</strong>:</p>
-<div class="highlight"><pre><span class="cp">#![feature(plugin)]</span><span class="w"></span>
-</pre></div>
-
-
-<p>And it&#8217;s all by&nbsp;design.</p>
-<p>This <code>plugin</code> switch is what&#8217;s necessary to include <code>#![plugin(...)]</code> directives.
-Those in turn activate <em>compiler plugins</em>:
-user-provided additions to the compiler itself.
-Plugins operate against the <span class="caps">API</span> provided directly by <code>rustc</code>
-and enhance its capabilities beyond what the language normally&nbsp;provides.</p>
-<p>Although it sounds rather ominous,
-the vast majority of plugins in the wild serve a singular purpose: <em>code generation</em>.
-They are written with the sole purpose of combating Rust&#8217;s rigidity,
-including the (perfectly expected) lack of dynamic runtime capabilities
-and the (disappointingly) stiff limits of its wanting macro&nbsp;system.</p>
-<p>This is how they are utilized by <a href="http://diesel.rs/">Diesel</a>, for example,
-a popular <span class="caps">ORM</span> and <span class="caps">SQL</span> query interface;
-or <a href="https://serde.rs/">Serde</a>, a serialization&nbsp;framework.</p>
-<p>Why compiler plugins can never be stable, though?
-It&#8217;s because the internal <span class="caps">API</span> they are coded against
-goes too deep into the compiler bowels to ever get stabilized.
-If it were, it would severely limit the ability to further develop the language
-without significant breakage of the established&nbsp;plugins.</p>
-<h4>Pseudo-stable</h4>
-<p><span class="dquo">&#8220;</span>Wait,&#8221; you may ask, &#8220;how do we even talk about «established» compiler plugins?
-Shouldn&#8217;t they be, by their very definition, <em>unstable</em>?&#8221;</p>
-<p>Well&#8230; yes. They definitely should. And therein lies the crux of the&nbsp;problem.</p>
-<p>Turns out, plugins <span class="amp">&amp;</span> nightly Rust are only <em>mostly</em> treated as&nbsp;unstable.</p>
-<p>In reality, the comfort and convenience provided by nightly versions of many libraries
-&#8212; all of which rely on compiler plugins &#8212; is difficult to overstate.
-While their stable approximations are available, they at best require rather complicated&nbsp;setup.</p>
-<p>What&#8217;s always involved is a custom build step,
-and usually a separate file for the relevant code symbols and declarations.
-In the end, we get a bunch of autogenerated modules
-whose prior non-existence during development may also confuse IDEs and autocompletion&nbsp;tools.</p>
-<p>For all those reasons and more,
-an ecosystem has developed where several popular libraries are &#8220;nightly but pseudo-stable&#8221;.
-This includes some key components in many serious applications,
-like the aforementioned <span class="caps">ORM</span> <span class="amp">&amp;</span> serialization&nbsp;crates.</p>
-<h4>The&nbsp;precedent</h4>
-<p>And so has been the state of affairs until very recently.
-The nightly Rust has been offering some extremely enticing features,
-but the stable channel was at least paid a lip service to.
-However, the mentality among library authors that &#8220;nightly-first&#8221; is an acceptable policy
-had been strong for a long time&nbsp;now.</p>
-<p>No wonder it has finally shifted towards&nbsp;&#8220;nightly-only&#8221;.</p>
-<p>Meet <a href="http://rocket.rs">Rocket</a>,
-the latest contestant in the already rich lineup of <a href="http://www.arewewebyet.org/topics/frameworks/">Rust web frameworks</a>.
-Everything about it is really slick:
-a flashy designer website; approachable and comprehensive documentation;
-and concise, <a href="http://flask.pocoo.org/">Flask</a>-like <span class="caps">API</span> for
-<a href="https://rocket.rs/overview/#anatomy-of-a-rocket-application">routing</a>
-and response handling.
-Predictably, it&#8217;s been making quite a
-<a href="https://www.reddit.com/r/rust/comments/5jxv6u/rocket_web_framework_for_rust/">buzz</a> on
-<a href="https://www.reddit.com/r/programming/comments/5jy64x/rocket_a_web_framework_for_rust/">Reddit</a>
-and <a href="https://news.ycombinator.com/item?id=13245475">elsewhere</a>.</p>
-<p>There is just an itty bitty little problem: Rocket <em>only works on nightly</em>.
-No alternatives, no codegen shims&#8230;
-and no prospects of any change in the foreseeable future.
-Yet, there doesn&#8217;t seem to be many people concerned about this,
-so clearly this is (a new?)&nbsp;norm.</p>
-<h4>The Rusts&nbsp;split</h4>
-<p>In essence, Rust is now two separate&nbsp;languages.</p>
-<p>The stable-nightly divide has essentially evolved into something that closely resembles
-the early stages of the <a href="https://wiki.python.org/moin/Python2orPython3">2.x vs. 3.x</a> split in the Python world.
-The people still &#8220;stuck&#8221; on 2.7 (i.e. stable) were &#8220;holdouts&#8221;,
-and the future was with 3.x (nightly).
-Sure, there have been some pithy backports (feature stabilizations),
-but the interesting stuff has been happening on the other&nbsp;side.</p>
-<p>It&#8217;s astonishing that Rust managed to replicate this phenomenon
-without any major version bumps, and with no backwards-incompatible releases.
-Technically, everything is still version 1.x..
-Not even <a href="http://crates.io">Cargo</a>, the Rust package manager, recognizes the stable-nightly&nbsp;distinction.</p>
-<p>But that&#8217;s hardly any consolation when you try to install a nightly-only crate on stable Rust.
-You will download it just fine, and get all the way to compiling its code,
-only to have it error out due to unsupported <code>#![feature(...)]</code> declarations.</p>
-<h4>What&nbsp;now?</h4>
-<p>The natural question is, can this situation be effectively&nbsp;addressed?</p>
-<p>I hope it&#8217;s obvious why stable Rust cannot suddenly start supporting compiler plugins.
-Given that they rely on <code>rustc</code> internals which aren&#8217;t standardized,
-doing so would be contrary to the very definition of a &#8220;stable&#8221; release&nbsp;channel.</p>
-<p>The other option is to fully embrace nightly as <em>de facto</em> recommended toolchain.
-This has been informally happening already,
-despite the <a href="https://doc.rust-lang.org/stable/book/release-channels.html#choosing-a-version">contrary recommendations</a>
-in the official&nbsp;docs.</p>
-<p>The downsides are obvious here, though: nightly Rust is not a misnomer at all.
-The compiler is in active development and its build <a href="https://travis-ci.org/rust-lang/rust/builds">breaks often</a>.
-Some of those breakages make it into nightly releases with unsatisfying&nbsp;regularity.</p>
-<p>Of course, there was also another option:
-stick to the intended purpose of release channels and don&#8217;t build castles on the sand
-by publishing nightly-first or nightly-only crates.
-This ship seems to have sailed by now, as the community has collectively decided&nbsp;otherwise.</p>
-<p>Oh&nbsp;well.</p>
-<p>It&#8217;s just a little ironic that in a language that is so focused on safety,
-everyone is perfectly happy with an <em>unstable compiler</em>.</p>
-      <a class="btn" href="http://xion.io/post/programming/rust-nightly-vs-stable.html#rust-nightly-vs-stable">Continue reading</a>
   </div>
 </article>
 

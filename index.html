@@ -63,6 +63,81 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/programming/another-npm-snafu.html#another-npm-snafu">Yes, the npm ecosystem is at&nbsp;fault</a></h2>
+    <p>
+      Posted on Tue 27 November 2018 in <a href="http://xion.io/category/programming.html">Programming</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/npm.html">npm</a>,      <a href="http://xion.io/tag/javascript.html">Javascript</a>,      <a href="http://xion.io/tag/open-source.html">open source</a>,      <a href="http://xion.io/tag/package-manager.html">package manager</a>,      <a href="http://xion.io/tag/security.html">security</a>      &#8226; <a href="http://xion.io/post/programming/another-npm-snafu.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Even if you are like me and don&#8217;t use any (server-side) Javascript, or node.js, or npm,
+it may feel like every other week there are news about
+<a href="https://github.com/dominictarr/event-stream/issues/116">yet another npm snafu</a>.</p>
+<p>The latest incident could be the most severe one yet,
+at least from the security standpoint.
+<a href="https://arstechnica.com/information-technology/2018/11/hacker-backdoors-widely-used-open-source-software-to-steal-bitcoin/">In a nutshell</a>,
+the owner of <em>event-stream</em> &#8212; a popular package even by npm standards &#8212;
+had transferred ownership of it to another person.
+The new owner would then publish a new version of the package
+which contained a targeted backdoor, intended to <em>steal large amounts of Bitcoin</em>
+from the users of one particular wallet&nbsp;provider.</p>
+<p>Quite a step up from <a href="https://www.theregister.co.uk/2016/03/23/npm_left_pad_chaos/">the <em>left-pad</em> fiasco</a>, isn&#8217;t&nbsp;it?&#8230;</p>
+<p>Like it usually happens with any major incident,
+lots of people are eager to put the blame on someone, or something, as quickly as possible.
+Rather unsurprisingly, the original owner of <em>event-stream</em> came up as a pretty obvious target.
+Without his abdication of ownership rights, the argument goes,
+the entire ordeal wouldn&#8217;t have happened in the first place.
+More broadly, as a maintainer of a popular package,
+<a href="https://github.com/dominictarr/event-stream/issues/116#issuecomment-441161123">he owes it to the community</a>
+to make sure it remains available and safe to use,
+now and for the foreseeable&nbsp;future.</p>
+<p>But if those are the responsibilities, then what are the rewards?&#8230;
+Well, in the author&#8217;s own words,
+<a href="https://gist.github.com/dominictarr/9fd9c1024c94592bc7268d36b8d83b3a">&#8220;you get literally nothing from maintaing a popular package&#8221;</a>.
+Looks like once the fun of it wears off, it&#8217;s just all work and no play,
+for little to no tangible&nbsp;benefit.</p>
+<p>This problem is of course not specific to Javascript or npm.
+Here&#8217;s, for example,
+<a href="https://gist.github.com/richhickey/1563cddea1002958f96e7ba9519972d9">a good take on the issue</a>
+from the creator of <a href="https://clojure.org/">Clojure</a>.</p>
+<p>However, this <em>doesn&#8217;t mean</em> every other package manager is equally susceptible
+to the sort of issues that have shaken npm <a href="https://blog.npmjs.org/post/173526807575/reported-malicious-module-getcookies">time</a>
+and
+<a href="https://blog.npmjs.org/post/163723642530/crossenv-malware-on-the-npm-registry">time again</a>.
+To say the same thing could&#8217;ve happened to Python/Ruby/Go/Haskell/etc. is vacuous.
+While factually true, it&#8217;s an instance of the
+<a href="https://www.lesswrong.com/posts/dLJv2CoRCgeC2mPgj/the-fallacy-of-gray">Fallacy of Grey</a>:
+a claim that because nothing is <em>ideal</em>, everything must be <em>equally flawed</em>.</p>
+<p>In reality, the Javascript ecosystem facilitated by npm is
+<a href="https://www.reddit.com/r/programming/comments/a0kxmw/i_dont_know_what_to_say_backdoor_in_popular/eaij0rt/">singularly vulnerable</a>
+to problems of this kind.
+It follows directly from how granular the npm packages are, and how wide and deep their dependency trees&nbsp;get.</p>
+<p>Indeed, it would be quite a fascinating exercise to quantify the difference numerically,
+by comparing the average size of a dependency graph between npm, PyPI, Rubygems, Hoogle, and so on.
+It&#8217;s rather obvious npm would come as a &#8220;winner&#8221;, likely with Rust&#8217;s Cargo not very far&nbsp;behind.</p>
+<p>Apparently, this not unintentional either &#8212;
+the node.js community seems to <a href="https://twitter.com/joepie91/status/1065193459349446656">like it this way</a>.
+But as the yesterday&#8217;s incident has exposed,
+this state of affairs relies on the distributed conscientiousness of <em>very</em> many parties
+&#8212; in this case, npm package authors.
+When one inevitably falters, the impact reaches far and wide,
+rippling through the massively intertwined npm&nbsp;registry.</p>
+<p>While it may be satisfying, then, to blame the package owner as the immediate culprit,
+it&#8217;s way more productive to consider how the damage could have been&nbsp;mitigated.</p>
+<p>We can, for example, look at the unimaginably dense dependency graph of npm &#8212;
+if anyone ever dared to visualize it in its entirety &#8212;
+and realize it shouldn&#8217;t really have so many edges.
+Had it been little sparser, more similar to the graphs of PyPI or Ruby,
+then removing (i.e. compromising) a single leaf node would&#8217;ve had proportionally smaller&nbsp;impact.</p>
+<p>So yes, it&#8217;s true that all package managers are exposed to the risk of compromised packages.
+It is, however, something that can be estimated and compared &#8212; and unfortunately,
+it is clear that for npm, this risk is currently the&nbsp;largest.</p>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/haskell-retrospective.html#haskell-retrospective">A Haskell&nbsp;retrospective</a></h2>
     <p>
       Posted on Sat 18 August 2018 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -2542,117 +2617,6 @@ The other common name for it is a <em>tagged union</em>.&#160;<a class="footnote
 </li>
 <li id="fn:4">
 <p>It only supports unitary enums of up to 32 variants.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/programming/o-nlogn-isnt-bad.html#o-nlogn-isnt-bad">O(n log n) isn&#8217;t&nbsp;bad</a></h2>
-    <p>
-      Posted on Thu 19 October 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/algorithms.html">algorithms</a>,      <a href="http://xion.io/tag/complexity.html">complexity</a>,      <a href="http://xion.io/tag/big-o.html">Big O</a>      &#8226; <a href="http://xion.io/post/programming/o-nlogn-isnt-bad.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Most programmers should be familiar with the Big O notation of computational complexity.
-This is how, in very theoretical terms, we are describing the relative differences in the performance of&nbsp;algorithms.</p>
-<p>Excluding the case of constant time complexity (<code>O(1)</code>),
-the vast majority of practical algorithms falls into one of the following&nbsp;classes:</p>
-<ul>
-<li><code>O(log n)</code></li>
-<li><code>O(n)</code></li>
-<li><code>O(n log n)</code></li>
-<li><code>O(n²)</code></li>
-</ul>
-<p>The further down a class is on this list, the worse (less efficient) it gets.
-What may not be completely obvious, however, is the magnitude of&nbsp;differences.</p>
-<p>Let&#8217;s have a closer&nbsp;look.</p>
-<h4>The best and the&nbsp;worst</h4>
-<p>First, it&#8217;s pretty easy when it comes to the extreme points.
-A logarithmic complexity is clearly great,
-because the number of operations barely even grows as the size of input increases.
-For <code>N</code> of one million,  the (natural<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>) logarithm is equal to about 14.
-For one <em>trillion</em> &#8212; million times more &#8212; <code>log n</code> is only&nbsp;27!</p>
-<p>Such amazing scalability is one of the reasons
-why databases, for example,
-can execute queries extremely efficiently even for millions or billions of&nbsp;records.</p>
-<p>On the other end, an algorithm that has quadratic complexity
-will only do well for very small datasets.
-It can still be useful in practice,
-especially as a small-input optimization of some larger procedure<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>,
-or because of some other desirable properties (like good&nbsp;parallelizability).</p>
-<p>Outside of those carefully selected cases, however,
-the computational requirements of <code>O(n²)</code> for any large dataset are usually too&nbsp;great.</p>
-<h4>Middle&nbsp;ground</h4>
-<p>As for the remaining two classes,
-the linear one (<code>O(n)</code>) is probably the easiest to reason&nbsp;about.</p>
-<p>In a linear algorithm,
-the number of operations increases steadily along with the size of input.<br>
-For thousand elements, you need roughly a thousand steps (times a constant factor).<br>
-For a million, there will be a million operations&nbsp;necessary.</p>
-<p>Thus, by itself, the linear scaling doesn&#8217;t get any better or worse when data gets bigger<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
-In many cases, it means there is nothing to be exploited in the structure of input set
-that could make the running time any better
-(compared to e.g. the reliance of logarithmic searches on sorted order).
-Typically, all the data must be traversed at least once in its&nbsp;entirety.</p>
-<p>All in all, it can be a decent time complexity,
-but it&#8217;s nothing to write home&nbsp;about.</p>
-<h4>A function has no&nbsp;name</h4>
-<p>What about <code>O(n log n)</code>, then?
-It falls between the linear and the quadratic,
-which suggests that it&#8217;s somewhere half-way between mediocre and awful.
-We don&#8217;t even have a widely used word for it,
-meaning it is probably not even that&nbsp;important.</p>
-<p>Both of those suppositions are&nbsp;wrong.</p>
-<p>First, <code>O(n log n)</code> isn&#8217;t even remotely close to the &#8220;median&#8221; (whatever that means) of <code>O(n)</code> and <code>O(n²)</code>.
-In reality, its asymptotic rate of growth places it very close to the former.
-You can see this pretty clearly by looking at the following&nbsp;plot:</p>
-<p style="text-align:center">
-    <img src="http://xion.io/images/time-complexity.png" alt="Time complexity plot"><br>
-    <small>
-        <a href="http://coding-geek.com/how-databases-work/">Source</a>
-    </small>
-</p>
-
-<p>The gap between <code>O(n)</code> and <code>O(n log n)</code> barely even widens,
-even as the values on vertical axis increase to the limits of&nbsp;practicality.</p>
-<p>Indeed, the <code>log n</code> part of the function grows slowly enough
-that, for many practical purposes, it can be considered a large &#8220;constant&#8221; in the complexity formula.
-Some complicated algorithm that&#8217;s technically linear may therefore be a <em>worse</em> choice
-than a simpler solution with <code>O(n log n)</code> scaling.</p>
-<h4>Sorting it&nbsp;out</h4>
-<p>What are the typical situations where <code>O(n log n)</code> arises in practice?
-Very often, it has to do with establishing some kind of <em>ordering</em> of the input
-which includes at least one of the&nbsp;following:</p>
-<ul>
-<li>a wholesale sorting of it (using pairwise&nbsp;comparison)</li>
-<li>repeated queries for the current maximum or minimum (via a priority&nbsp;queue)</li>
-</ul>
-<p>Considering that many practical algoithms &#8212;
-from <a href="https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm">pathfinding</a>
-to <a href="https://en.wikipedia.org/wiki/Huffman_coding">compression</a> &#8212;
-utilize some form of sorting or sorted data structures,
-it makes <code>O(n log n)</code> quite an important complexity&nbsp;class.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Natural logarithm has a base of <em>e</em> = 2.71828183&#8230;
-The exact choice of logarithm base doesn&#8217;t matter for asymptotic complexity,
-because it changes only the constant coefficient in the <code>O(f(n))</code> function.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>A widely used example is <a href="https://en.wikipedia.org/wiki/Timsort">Timsort</a>
-which switches from merge sort (<code>O(log n)</code>) to insertion sort (<code>O(n²)</code>)
-when the array slice is short enough to warrant it.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p>In reality, practical factors like memory/cache size, <span class="caps">OS</span> scheduling behavior,
-and a myriad of other things can make the actual running time scale sublinearly beyond a certain point.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

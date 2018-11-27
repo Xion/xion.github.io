@@ -1,5 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2018-08-18T13:07:00+02:00</updated><entry><title>A Haskell retrospective</title><link href="http://xion.io/post/programming/haskell-retrospective.html" rel="alternate"></link><updated>2018-08-18T13:07:00+02:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-08-18:post/programming/haskell-retrospective.html</id><summary type="html">&lt;p&gt;Approximately a year ago,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2018-11-27T19:27:00+01:00</updated><entry><title>Yes, the npm ecosystem is at fault</title><link href="http://xion.io/post/programming/another-npm-snafu.html" rel="alternate"></link><updated>2018-11-27T19:27:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-11-27:post/programming/another-npm-snafu.html</id><summary type="html">&lt;p&gt;Even if you are like me and don&amp;#8217;t use any (server-side) Javascript, or node.js, or npm,
+it may feel like every other week there are news about
+&lt;a href="https://github.com/dominictarr/event-stream/issues/116"&gt;yet another npm snafu&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;The latest incident could be the most severe one yet,
+at least from the security standpoint.
+&lt;a href="https://arstechnica.com/information-technology/2018/11/hacker-backdoors-widely-used-open-source-software-to-steal-bitcoin/"&gt;In a nutshell&lt;/a&gt;,
+the owner of &lt;em&gt;event-stream&lt;/em&gt; &amp;#8212; a popular package even by npm standards &amp;#8212;
+had transferred ownership of it to another person.
+The new owner would then publish a new version of the package
+which contained a targeted backdoor, intended to &lt;em&gt;steal large amounts of Bitcoin&lt;/em&gt;
+from the users of one particular wallet&amp;nbsp;provider.&lt;/p&gt;
+&lt;p&gt;Quite a step up from &lt;a href="https://www.theregister.co.uk/2016/03/23/npm_left_pad_chaos/"&gt;the &lt;em&gt;left-pad&lt;/em&gt; fiasco&lt;/a&gt;, isn&amp;#8217;t&amp;nbsp;it?&amp;#8230;&lt;/p&gt;
+&lt;p&gt;Like it usually happens with any major incident,
+lots of people are eager to put the blame on someone, or something, as quickly as possible.
+Rather unsurprisingly, the original owner of &lt;em&gt;event-stream&lt;/em&gt; came up as a pretty obvious target.
+Without his abdication of ownership rights, the argument goes,
+the entire ordeal wouldn&amp;#8217;t have happened in the first place.
+More broadly, as a maintainer of a popular package,
+&lt;a href="https://github.com/dominictarr/event-stream/issues/116#issuecomment-441161123"&gt;he owes it to the community&lt;/a&gt;
+to make sure it remains available and safe to use,
+now and for the foreseeable&amp;nbsp;future.&lt;/p&gt;
+&lt;p&gt;But if those are the responsibilities, then what are the rewards?&amp;#8230;
+Well, in the author&amp;#8217;s own words,
+&lt;a href="https://gist.github.com/dominictarr/9fd9c1024c94592bc7268d36b8d83b3a"&gt;&amp;#8220;you get literally nothing from maintaing a popular package&amp;#8221;&lt;/a&gt;.
+Looks like once the fun of it wears off, it&amp;#8217;s just all work and no play,
+for little to no tangible&amp;nbsp;benefit.&lt;/p&gt;
+&lt;p&gt;This problem is of course not specific to Javascript or npm.
+Here&amp;#8217;s, for example,
+&lt;a href="https://gist.github.com/richhickey/1563cddea1002958f96e7ba9519972d9"&gt;a good take on the issue&lt;/a&gt;
+from the creator of &lt;a href="https://clojure.org/"&gt;Clojure&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;However, this &lt;em&gt;doesn&amp;#8217;t mean&lt;/em&gt; every other package manager is equally susceptible
+to the sort of issues that have shaken npm &lt;a href="https://blog.npmjs.org/post/173526807575/reported-malicious-module-getcookies"&gt;time&lt;/a&gt;
+and
+&lt;a href="https://blog.npmjs.org/post/163723642530/crossenv-malware-on-the-npm-registry"&gt;time again&lt;/a&gt;.
+To say the same thing could&amp;#8217;ve happened to Python/Ruby/Go/Haskell/etc. is vacuous.
+While factually true, it&amp;#8217;s an instance of the
+&lt;a href="https://www.lesswrong.com/posts/dLJv2CoRCgeC2mPgj/the-fallacy-of-gray"&gt;Fallacy of Grey&lt;/a&gt;:
+a claim that because nothing is &lt;em&gt;ideal&lt;/em&gt;, everything must be &lt;em&gt;equally flawed&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;In reality, the Javascript ecosystem facilitated by npm is
+&lt;a href="https://www.reddit.com/r/programming/comments/a0kxmw/i_dont_know_what_to_say_backdoor_in_popular/eaij0rt/"&gt;singularly vulnerable&lt;/a&gt;
+to problems of this kind.
+It follows directly from how granular the npm packages are, and how wide and deep their dependency trees&amp;nbsp;get.&lt;/p&gt;
+&lt;p&gt;Indeed, it would be quite a fascinating exercise to quantify the difference numerically,
+by comparing the average size of a dependency graph between npm, PyPI, Rubygems, Hoogle, and so on.
+It&amp;#8217;s rather obvious npm would come as a &amp;#8220;winner&amp;#8221;, likely with Rust&amp;#8217;s Cargo not very far&amp;nbsp;behind.&lt;/p&gt;
+&lt;p&gt;Apparently, this not unintentional either &amp;#8212;
+the node.js community seems to &lt;a href="https://twitter.com/joepie91/status/1065193459349446656"&gt;like it this way&lt;/a&gt;.
+But as the yesterday&amp;#8217;s incident has exposed,
+this state of affairs relies on the distributed conscientiousness of &lt;em&gt;very&lt;/em&gt; many parties
+&amp;#8212; in this case, npm package authors.
+When one inevitably falters, the impact reaches far and wide,
+rippling through the massively intertwined npm&amp;nbsp;registry.&lt;/p&gt;
+&lt;p&gt;While it may be satisfying, then, to blame the package owner as the immediate culprit,
+it&amp;#8217;s way more productive to consider how the damage could have been&amp;nbsp;mitigated.&lt;/p&gt;
+&lt;p&gt;We can, for example, look at the unimaginably dense dependency graph of npm &amp;#8212;
+if anyone ever dared to visualize it in its entirety &amp;#8212;
+and realize it shouldn&amp;#8217;t really have so many edges.
+Had it been little sparser, more similar to the graphs of PyPI or Ruby,
+then removing (i.e. compromising) a single leaf node would&amp;#8217;ve had proportionally smaller&amp;nbsp;impact.&lt;/p&gt;
+&lt;p&gt;So yes, it&amp;#8217;s true that all package managers are exposed to the risk of compromised packages.
+It is, however, something that can be estimated and compared &amp;#8212; and unfortunately,
+it is clear that for npm, this risk is currently the&amp;nbsp;largest.&lt;/p&gt;</summary><category term="npm"></category><category term="Javascript"></category><category term="open source"></category><category term="package manager"></category><category term="security"></category></entry><entry><title>A Haskell retrospective</title><link href="http://xion.io/post/programming/haskell-retrospective.html" rel="alternate"></link><updated>2018-08-18T13:07:00+02:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-08-18:post/programming/haskell-retrospective.html</id><summary type="html">&lt;p&gt;Approximately a year ago,
 I had the opportunity to work on &lt;a href="https://code.facebook.com/posts/745068642270222/fighting-spam-with-haskell/"&gt;Sigma&lt;/a&gt;
 &amp;#8212; a large, distributed system that protects Facebook users from spam and other kinds of&amp;nbsp;abuse.&lt;/p&gt;
 &lt;p&gt;One reason it was a pretty unique experience is that Sigma is almost entirely a &lt;em&gt;Haskell&lt;/em&gt; codebase.
@@ -2148,244 +2209,4 @@ and the default/argumentless/trivial constructors in C++ &lt;em&gt;et al&lt;/em&
 for infix application: &lt;code&gt;response &amp;lt;- sendRequest $ POST `toUrl` url&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="functional programming"></category><category term="currying"></category><category term="partial application"></category><category term="Haskell"></category><category term="API"></category><category term="abstraction"></category></entry><entry><title>Small Rust crates I (almost) always use</title><link href="http://xion.io/post/code/rust-little-crates.html" rel="alternate"></link><updated>2017-10-31T15:21:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-10-31:post/code/rust-little-crates.html</id><summary type="html">&lt;p&gt;Alternative clickbait title: &lt;em&gt;My Little Crates: Rust is Magic&lt;/em&gt;&amp;nbsp;:-)&lt;/p&gt;
-&lt;hr /&gt;
-&lt;p&gt;Due to its relatively scant standard library,
-programming in Rust inevitably involves pulling in a good number of third-party&amp;nbsp;dependencies.&lt;/p&gt;
-&lt;p&gt;Some of them deal with problems that are solved with built-ins
-in languages that take a more &amp;#8220;batteries included&amp;#8221; approach.
-A good example would be the Python&amp;#8217;s &lt;code&gt;re&lt;/code&gt; module,
-whose moral equivalent in the Rust ecosystem is &lt;a href="http://docs.rs/regex"&gt;the &lt;em&gt;regex&lt;/em&gt; crate&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;Things like regular expressions, however, represent comparatively large problems.
-It isn&amp;#8217;t very surprising that dedicated libraries exist to address them.
-It is less common for a language to offer &lt;em&gt;small&lt;/em&gt; packages
-that target very specialized&amp;nbsp;applications.&lt;/p&gt;
-&lt;p&gt;As in, one function/type/macro-kind of specialized,
-or perhaps only a little larger than&amp;nbsp;that.&lt;/p&gt;
-&lt;p&gt;In this post, we&amp;#8217;ll take a whirlwind tour through a bunch of such essential&amp;nbsp;&amp;#8220;micropackages&amp;#8221;.&lt;/p&gt;
-&lt;h4&gt;either&lt;/h4&gt;
-&lt;p&gt;Rust has the built-in &lt;code&gt;Result&lt;/code&gt; type, which is a sum&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt; of an &lt;code&gt;Ok&lt;/code&gt; outcome or an &lt;code&gt;Err&lt;/code&gt;or.
-It forms the basis of a general error handling mechanism in the&amp;nbsp;language.&lt;/p&gt;
-&lt;p&gt;Structurally, however, &lt;code&gt;Result&amp;lt;T, E&amp;gt;&lt;/code&gt; is just an alternative between the types &lt;code&gt;T&lt;/code&gt; and &lt;code&gt;E&lt;/code&gt;.
-You may want to use such an enum for other purposes
-than representing results of fallible operations.
-Unfortunately, because of the strong inherent meaning of &lt;code&gt;Result&lt;/code&gt;,
-such usage would be unidiomatic and highly&amp;nbsp;confusing.&lt;/p&gt;
-&lt;p&gt;This is why the &lt;a href="http://docs.rs/either"&gt;&lt;em&gt;either&lt;/em&gt; crate&lt;/a&gt; exists.
-It contains the following &lt;code&gt;Either&lt;/code&gt; type:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Either&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;L&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;R&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Left&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;L&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Right&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;R&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;While it is isomorphic to &lt;code&gt;Result&lt;/code&gt;,
-it carries no connotation to the entrenched error handling practices&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;.
-Additionally, it offers symmetric combinator methods such as &lt;code&gt;map_left&lt;/code&gt;
-or &lt;code&gt;right_and_then&lt;/code&gt; for chaining computations involving the &lt;code&gt;Either&lt;/code&gt; values.&lt;/p&gt;
-&lt;h4&gt;lazy_static&lt;/h4&gt;
-&lt;p&gt;As a design choice, Rust doesn&amp;#8217;t allow for safe access to global mutable variables.
-The semi-standard way of introducing those into your code
-is therefore &lt;a href="http://docs.rs/lazy_static"&gt;the &lt;em&gt;lazy_static&lt;/em&gt; crate&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;However, the most important usage for it is to declare lazy initialized &lt;em&gt;constants&lt;/em&gt;
-of more complex&amp;nbsp;types:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;lazy_static&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;TICK_INTERVAL&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Duration&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Duration&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from_secs&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;7&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;24&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;60&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="mi"&gt;60&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The trick isn&amp;#8217;t entirely transparent&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;,
-but it&amp;#8217;s the best you can do until we get a proper support
-for &lt;a href="https://github.com/rust-lang/rfcs/issues/322"&gt;compile-time expressions&lt;/a&gt; in the&amp;nbsp;language.&lt;/p&gt;
-&lt;h4&gt;maplit&lt;/h4&gt;
-&lt;p&gt;To go nicely with the crate above &amp;#8212;
-and to act as a natural syntactic follow-up to
-&lt;a href="https://doc.rust-lang.org/1.3.0/std/macro.vec!.html"&gt;the standard &lt;code&gt;vec![]&lt;/code&gt; macro&lt;/a&gt; &amp;#8212;
-we&amp;#8217;ve got the &lt;a href="http://docs.rs/maplit"&gt;&lt;em&gt;maplit&lt;/em&gt; crate&lt;/a&gt;.&lt;/p&gt;
-&lt;p&gt;What it does is add &lt;code&gt;HashMap&lt;/code&gt; and &lt;code&gt;HashSet&lt;/code&gt; &lt;span class="dquo"&gt;&amp;#8220;&lt;/span&gt;literals&amp;#8221; by defining
-some very simple &lt;code&gt;hashmap!&lt;/code&gt; and &lt;code&gt;hashset!&lt;/code&gt; macros:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;lazy_static&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;IMAGE_EXTENSIONS&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;HashMap&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;&amp;#39;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hashmap&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;gif&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;GIF&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;jpeg&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;JPEG&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;jpg&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;JPG&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;png&amp;quot;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;ImageFormat&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;PNG&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;};&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Internally, &lt;code&gt;hashmap!&lt;/code&gt; expands to the appropriate amount of &lt;code&gt;HashMap::insert&lt;/code&gt; calls,
-returning the finished hash map with all the keys and values&amp;nbsp;given.&lt;/p&gt;
-&lt;h4&gt;try_opt&lt;/h4&gt;
-&lt;p&gt;Before the &lt;code&gt;?&lt;/code&gt; operator was introduced to Rust,
-the idiomatic way of propagating erroneous &lt;code&gt;Result&lt;/code&gt;s was the &lt;code&gt;try!&lt;/code&gt; macro.&lt;/p&gt;
-&lt;p&gt;A similar macro can also be implemented for &lt;code&gt;Option&lt;/code&gt; types
-so that it propagates the &lt;code&gt;None&lt;/code&gt;s upstream.
-The &lt;a href="http://docs.rs/try_opt"&gt;&lt;em&gt;try_opt&lt;/em&gt; crate&lt;/a&gt; is doing precisely that,
-and the macro can be used in a straightforward&amp;nbsp;manner:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;parse_ipv4&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="nb"&gt;Option&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u8&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;lazy_static&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="k"&gt;static&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;ref&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;RE&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Regex&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Regex&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="s-Raw"&gt;r&amp;quot;^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$&amp;quot;&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;RE&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;captures&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;s&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;c&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;d&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;caps&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;4&lt;/span&gt;&lt;span class="p"&gt;)).&lt;/span&gt;&lt;span class="n"&gt;as_str&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;Some&lt;/span&gt;&lt;span class="p"&gt;((&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;a&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;b&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;c&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;try_opt&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;d&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;ok&lt;/span&gt;&lt;span class="p"&gt;()),&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Until Rust supports &lt;code&gt;?&lt;/code&gt; for &lt;code&gt;Option&lt;/code&gt;s (which is &lt;a href="https://github.com/rust-lang/rust/issues/31436"&gt;planned&lt;/a&gt;),
-this &lt;code&gt;try_opt!&lt;/code&gt; macro can serve as an acceptable&amp;nbsp;workaround.&lt;/p&gt;
-&lt;h4&gt;exitcode&lt;/h4&gt;
-&lt;p&gt;It is a common convention in basically every mainstream &lt;span class="caps"&gt;OS&lt;/span&gt;
-that a process has finished with an error
-if it exits with a code different than 0 (zero),
-Linux divides the space of error codes &lt;a href="http://www.tldp.org/LDP/abs/html/exitcodes.html"&gt;further&lt;/a&gt;,
-and &amp;#8212; along with &lt;span class="caps"&gt;BSD&lt;/span&gt; &amp;#8212; it also includes the &lt;em&gt;sysexits.h&lt;/em&gt; header with some more specialized&amp;nbsp;codes.&lt;/p&gt;
-&lt;p&gt;These have been adopted by great many programs
-and &lt;a href="https://docs.python.org/3.0/library/os.html#os.EX_OK"&gt;languages&lt;/a&gt;.
-In Rust, those semi-standard names for common errors can be used, too.
-All you need to do is add &lt;a href="http://docs.rs/exitcode"&gt;the &lt;em&gt;exitcode&lt;/em&gt; crate&lt;/a&gt; to your&amp;nbsp;project:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;main&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;args&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;parse&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;unwrap_or_else&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="o"&gt;|&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;print_args_error&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;e&lt;/span&gt;&lt;span class="p"&gt;).&lt;/span&gt;&lt;span class="n"&gt;unwrap&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;process&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;exit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;exitcode&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;USAGE&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;});&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;In addition to constants like &lt;code&gt;USAGE&lt;/code&gt; or &lt;code&gt;TEMPFAIL&lt;/code&gt;,
-the &lt;em&gt;exitcode&lt;/em&gt; crate also defines an &lt;code&gt;ExitCode&lt;/code&gt; alias
-for the integer type holding the exit codes.
-You can use it, among other things, as a return type of your top-level&amp;nbsp;functions:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;process&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;exit&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;code&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-
-&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;do_stuff&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;options&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Options&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;exitcode&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;ExitCode&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// ...&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;h4&gt;enum-set&lt;/h4&gt;
-&lt;p&gt;In Java, there is a specialization of the general &lt;code&gt;Set&lt;/code&gt; interface
-that works for enum types:
-&lt;a href="https://docs.oracle.com/javase/7/docs/api/java/util/EnumSet.html"&gt;the &lt;code&gt;EnumSet&lt;/code&gt; class&lt;/a&gt;.
-Its members are represented very compactly as &lt;em&gt;bits&lt;/em&gt; rather than hashed&amp;nbsp;elements.&lt;/p&gt;
-&lt;p&gt;A similar (albeit slightly less powerful&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;) structure has been implemented
-in the &lt;a href="http://docs.rs/enum-set"&gt;&lt;em&gt;enum-set&lt;/em&gt; crate&lt;/a&gt;. Given a &lt;code&gt;#[repr(u32)]&lt;/code&gt; enum&amp;nbsp;type:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="cp"&gt;#[repr(u32)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="cp"&gt;#[derive(Clone, Copy, Debug Eq, Hash, PartialEq)]&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="k"&gt;enum&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Monday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Tuesday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Wednesday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Thursday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Friday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Saturday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Sunday&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;you can create an &lt;code&gt;EnumSet&lt;/code&gt; of its&amp;nbsp;variants:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;weekend&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;EnumSet&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;EnumSet&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="n"&gt;weekend&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;insert&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Saturday&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="n"&gt;weekend&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;insert&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;Sunday&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;as long as you provide a simple trait impl that specifies
-how to convert those enum values to and from &lt;code&gt;u32&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;enum_set&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;CLike&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;for&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Weekday&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;to_u32&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="w"&gt;            &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;*&lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;as&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;unsafe&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;from_u32&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kt"&gt;u32&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;-&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Self&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;std&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;mem&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;transmute&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;v&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;The advantage is having a set structure represented by a single, unsigned 32-bit integer,
-leading to &lt;em&gt;O&lt;/em&gt;(1) complexity of &lt;em&gt;all&lt;/em&gt; common set operations.
-This includes membership checks, the union of two sets, their intersection, difference, and so&amp;nbsp;on.&lt;/p&gt;
-&lt;h4&gt;antidote&lt;/h4&gt;
-&lt;p&gt;As part of fulfilling the promise of Fearless Concurrency™,
-Rust offers multiple synchronization primitives
-that are all defined in &lt;a href="https://doc.rust-lang.org/std/sync/"&gt;the &lt;code&gt;std::sync&lt;/code&gt; module&lt;/a&gt;.
-One thing that &lt;code&gt;Mutex&lt;/code&gt;, &lt;code&gt;RwLock&lt;/code&gt;, and similar mechanisms there have in common
-is that their locks can become &amp;#8220;poisoned&amp;#8221; if a thread panicks while holding them.
-As a result, acquiring a lock requires handling the potential &lt;code&gt;PoisonError&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;For many programs, however, lock poisoning is not even a remote,
-but a straight-up &lt;em&gt;impossible&lt;/em&gt; situation.
-If you follow the best practices of concurrent resource sharing,
-you won&amp;#8217;t be holding locks for more than a few instructions,
-devoid of &lt;code&gt;unwrap&lt;/code&gt;s or any other opportunity to &lt;code&gt;panic!()&lt;/code&gt;.
-Unfortunately, you cannot prove this to the Rust compiler statically,
-so it will still require you to handle a &lt;code&gt;PoisonError&lt;/code&gt; that cannot&amp;nbsp;happen.&lt;/p&gt;
-&lt;p&gt;This is where the aptly named &lt;a href="http://docs.rs/antidote"&gt;&lt;em&gt;antidote&lt;/em&gt; crate&lt;/a&gt; crate offers help.
-In it, you can find all the same locks &lt;span class="amp"&gt;&amp;amp;&lt;/span&gt; guards &lt;span class="caps"&gt;API&lt;/span&gt; that is offered by &lt;code&gt;std::sync&lt;/code&gt;,
-just without the &lt;code&gt;PoisonError&lt;/code&gt;.
-In many cases, this removal has radically simplified the interface,
-for example by turning &lt;code&gt;Result&amp;lt;Guard, Error&amp;gt;&lt;/code&gt; return types into just &lt;code&gt;Guard&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;The caveat, of course, is that you need to ensure all threads holding these &amp;#8220;immunized&amp;#8221; locks&amp;nbsp;either:&lt;/p&gt;
-&lt;ul&gt;
-&lt;li&gt;don&amp;#8217;t panic at all;&amp;nbsp;or&lt;/li&gt;
-&lt;li&gt;don&amp;#8217;t leave guarded resources in an inconsistent state if they &lt;em&gt;do&lt;/em&gt;&amp;nbsp;panic&lt;/li&gt;
-&lt;/ul&gt;
-&lt;p&gt;Like it&amp;#8217;s been mentioned earlier,
-the best way to make that happen is to keep lock-guarded critical sections minimal and&amp;nbsp;infallible.&lt;/p&gt;
-&lt;h4&gt;matches&lt;/h4&gt;
-&lt;p&gt;Pattern matching is one of the most important features of Rust,
-but some of the relevant language constructs have awkward shortcomings.
-The &lt;code&gt;if let&lt;/code&gt; conditional, for example, cannot be combined with boolean&amp;nbsp;tests:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_good&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;and thus requires additional nesting, or a different approach&amp;nbsp;altogether.&lt;/p&gt;
-&lt;p&gt;Thankfully, to help with situations like this,
-there is the &lt;a href="http://docs.rs/matches"&gt;&lt;em&gt;matches&lt;/em&gt; crate&lt;/a&gt; with a bunch of convenient macros.
-Besides &lt;a href="https://docs.rs/matches/0.1.6/matches/macro.matches.html"&gt;its namesake, &lt;code&gt;matches!&lt;/code&gt;&lt;/a&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;if&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;matches&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Foo&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;_&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&amp;amp;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;y&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;is_good&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;it also exposes assertion macros
-(&lt;a href="https://docs.rs/matches/0.1.6/matches/macro.assert_matches.html"&gt;&lt;code&gt;assert_match!&lt;/code&gt;&lt;/a&gt;
-and &lt;a href="https://docs.rs/matches/0.1.6/matches/macro.debug_assert_matches.html"&gt;&lt;code&gt;debug_assert_match!&lt;/code&gt;&lt;/a&gt;)
-that can be used in both production and test&amp;nbsp;code.&lt;/p&gt;
-&lt;hr /&gt;
-&lt;p&gt;This concludes the overview of small Rust crates, at least for&amp;nbsp;now.&lt;/p&gt;
-&lt;p&gt;To be certain, these crates are by far not the only ones that are small in size
-and simultaneously almost indispensable.
-Many more great libraries can be found
-e.g. in the &lt;a href="https://github.com/rust-unofficial/awesome-rust#libraries"&gt;Awesome Rust registry&lt;/a&gt;,
-though obviously you could argue if all of them are truly &amp;#8220;micro&amp;#8221;&amp;nbsp;;-)&lt;/p&gt;
-&lt;p&gt;If you know more crates in the similar vein,
-make sure to mention them in the&amp;nbsp;comments!&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;A &lt;em&gt;sum type&lt;/em&gt; consists of several alternatives,
-out of which only one has been picked for a particular instance.
-The other common name for it is a &lt;em&gt;tagged union&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;Unless you come from Haskell, that is, where &lt;code&gt;Either&lt;/code&gt; is the equivalent of Rust&amp;#8217;s &lt;code&gt;Result&lt;/code&gt; :)&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;You will occasionally need an explicit &lt;code&gt;*&lt;/code&gt; to trigger the &lt;code&gt;Deref&lt;/code&gt; coercion it uses.&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:4"&gt;
-&lt;p&gt;It only supports unitary enums of up to 32 variants.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="libraries"></category></entry></feed>
+&lt;/div&gt;</summary><category term="functional programming"></category><category term="currying"></category><category term="partial application"></category><category term="Haskell"></category><category term="API"></category><category term="abstraction"></category></entry></feed>
