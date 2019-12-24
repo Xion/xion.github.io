@@ -63,6 +63,172 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
+    <p>
+      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
+<p>For a long time, I resisted the appeal of various incremental improvements
+that early 3.x releases offered.
+And the world agreed with me:
+a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
+<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
+<p>As if to compensate for years of &#8220;good enough&#8221;,
+Python 3 development team has given in to a steadily accelerating feature creep.
+Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
+(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
+but it nevertheless causes an increasingly wide functional gap
+between the 2.x and 3.x&nbsp;series.</p>
+<p>Starting from around Python 3.5, this gap becomes really noticeable,
+even when partially bridged with many excellent backports.
+The ecosystem support is also mostly there,
+at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
+<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
+<p>Given all those portents,
+even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
+For better or for worse, 3.x is how Python will look like in the coming years and decades.
+Might as well prepare for&nbsp;it.</p>
+<p>In this post, I will discuss some important issues
+one should be aware of before trying to switch from Python 2 to 3.
+I won&#8217;t be talking about all the minute changes and additions,
+but cover the more significant, broader concepts
+that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
+<p>The two concepts I&#8217;ll be mentioning here are
+<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
+<h4>Unicode&nbsp;handling</h4>
+<p>You have probably heard it before.
+Python 3 was going to solve your Unicode problems once and for all.
+You haven&#8217;t believed it, of course,
+like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
+<p>Still, it may be rather surprising to learn
+that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
+<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
+<p>In any case, either version of Python gets the most important thing about Unicode right.
+They both distinguish, at the type level,
+between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
+The type that holds the latter is called <code>bytes</code> in both versions,
+while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
+<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
+where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
+<p>But where Python 2 does poorly is in the choice of defaults.
+You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
+That <code>str</code> is a fully functional string type,
+even though it can only contain <span class="caps">ASCII</span> characters.
+Moreover, it is also the <em>default</em>:
+quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
+<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
+<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
+If you already deal with Unicode correctly in your programs
+&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
+your main benefit will be not having to write that <code>u""</code> quotes anymore.
+Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
+rather than letting you write &#8220;working&#8221; programs
+that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
+<h4>Laziness by&nbsp;default</h4>
+<p>The second major change that Python 3 brings is of similar nature.
+It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
+<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
+are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
+Included in these are functions like <code>map</code> or <code>filter</code>,
+as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
+<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
+<ul>
+<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
+<li><code>xrange</code> is now just <code>range</code></li>
+<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
+</ul>
+<p>and so&nbsp;on.</p>
+<p>In some cases, this is exactly what happens.
+For example, there is virtually no downside to the new implementation of <code>range</code>,
+especially considering the way it is used most&nbsp;often.</p>
+<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
+Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
+their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
+i.e. the most simplistic and limited flavor of Python iterables.
+Working with them is trickier and more error-prone than with lists,
+which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
+that generators expose us&nbsp;to.</p>
+<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
+by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
+and using its functions in place of the built-ins.
+What you could gain in return was increased performance, and a lesser memory footprint.
+All those benefits came from making the computations <em>lazy</em>
+and refraining from storage of the intermediate&nbsp;results.</p>
+<p>In Python 3, however, laziness is <em>preordained</em>.
+Even if we don&#8217;t need or care about the aforementioned perks,
+we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
+<p>One option is to embrace lazy evaluation fully,
+and adapt to handling unspecified iterables throughout our code bases.<br>
+The risk is an increased frequency of bugs stemming from generator misuse &#8212;
+including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
+deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
+<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
+wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
+in order to &#8220;sanitize&#8221; them for later (re)use.<br>
+Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
+<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
+</pre></div>
+
+
+<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
+    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
+    <span class="c"># ...the rest of a long function...</span>
+</pre></div>
+
+
+<p>Even if you choose the first path, and somehow use lazy generators everywhere,
+conversions are still required at the serialization&nbsp;boundaries:</p>
+<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
+<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
+</pre></div>
+
+
+<p>At least in this case, the lazy iterable will vocally fail with an exception,
+rather than silently doing nothing (in case of repeated iteration)
+or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
+<h4>from __future__ import&nbsp;doubts</h4>
+<p>So, here they are: the highlights of Python 3.
+If you are disappointed they all turned out to be mixed blessings,
+don&#8217;t worry: you are
+<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
+<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
+<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
+<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
+<p>The truth is that Python 3 is more finnicky, less forgiving,
+and much less beginner-friendly than its predecessor.
+Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
+by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
+<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
+Perhaps it&#8217;s not a coincidence
+that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
+has passed between the first public version of Python (0.9)
+and the release of Python 3.0.
+By no conceivable means it is a toy language anymore,
+and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
+<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
+<p>It&#8217;s becoming harder to claim the language favors simplicity
+over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
+It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
+is the <em>obvious</em> way to do it.<br>
+It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
+and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
+<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
+The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
+But who knows? Maybe after two decades,
+a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
+<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
+are about to get&nbsp;in!</p>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">for loops in&nbsp;Rust</a></h2>
     <p>
       Posted on Tue 26 July 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1226,86 +1392,6 @@ Code produced by <code>compile</code>, however, isn&#8217;t associated with any 
 to refer to <em>global</em> variables. Because Python uses different bytecode instructions for referencing local and global
 names (<code>LOAD_FAST</code> vs <code>LOAD_GLOBAL</code>), the result of <code>compile</code> may differ from a piece of bytecode produced in the regular
 manner.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/thoughts/in-microsoft-we-trust.html#in-microsoft-we-trust">In Microsoft we&nbsp;trust</a></h2>
-    <p>
-      Posted on Fri 08 April 2016 in <a href="http://xion.io/category/thoughts.html">Thoughts</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/microsoft.html">Microsoft</a>,      <a href="http://xion.io/tag/windows.html">Windows</a>,      <a href="http://xion.io/tag/github.html">GitHub</a>,      <a href="http://xion.io/tag/apple.html">Apple</a>,      <a href="http://xion.io/tag/facebook.html">Facebook</a>,      <a href="http://xion.io/tag/google.html">Google</a>,      <a href="http://xion.io/tag/tech-culture.html">tech culture</a>      &#8226; <a href="http://xion.io/post/thoughts/in-microsoft-we-trust.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Just like many other people, I was following news from the last week&#8217;s
-<a href="https://build.microsoft.com/"><span class="caps">BUILD</span> conference</a> with piqued interest. The ability to run Linux userland programs
-on Windows &#8212; including, of course,
-<a href="http://techcrunch.com/2016/03/30/be-very-afraid-hell-has-frozen-over-bash-is-coming-to-windows-10/">bash</a> &#8212;
-is something to be excited about. If nothing else, it should dramatically improve Windows support of new programming
-languages that seem to pop up all the&nbsp;time.</p>
-<p>There was something else, however, that I couldn&#8217;t help but notice. The reactions of tech communities to this and similar developments focused very frequently on Microsoft&nbsp;itself.</p>
-<p>The beloved &#8220;new Microsoft&#8221;,
-as <a href="https://www.reddit.com/r/programming/comments/4cqm9y/xamarin_becomes_free_and_opensource/d1kjwl8">some call it</a>,
-embraces open source, supports Linux, and generally does almost a full 180 with their stance on
-proprietary vs. free software. The circumstances fit this narrative rather snuggly, too: a new <span class="caps">CEO</span> makes a clean break
-with the past to pivot the company in this new world ruled by mobile and&nbsp;cloud.</p>
-<p>Still&#8230; <em>love</em>? Even considering how Internet comments are grotesquely exaggerated most of the time, that&#8217;s quite
-a declaration. The sentiment is nowhere near isolated either. But it&#8217;s not a question whether this infatuation
-has a rational merit, or whether those feelings will eventually turn out to be&nbsp;misplaced.</p>
-<p>The question is: why does it exist at all? We are talking about a <em>company</em> here, a for-profit organization.
-How can such a language even enter the&nbsp;picture?</p>
-<p>Then I realized this is not really a new phenomenon. Quite the opposite: the broad developer community seems to
-always need a company to champion its core values. Nowadays, we&#8217;re simply trying to find someone new
-to carry the&nbsp;standard.</p>
-<p>Why? Because we feel that our old heroes have forsaken&nbsp;us.</p>
-<h4>Hall of past&nbsp;fame</h4>
-<p>Take <strong>GitHub</strong> for example. Once a darling of the open source community, it&#8217;s been suffering sharp criticism
-for many months now. Rightfully or not, many people aren&#8217;t exactly excited &#8212; to put it mildly &#8212; about changes to
-the <a href="https://github.com/blog/2146-organizations-can-now-block-abusive-users">policy</a>
-and <a href="https://github.com/blog/2039-adopting-the-open-code-of-conduct">atmosphere</a> at GitHub,
-typified by the ill-fated <a href="http://www.businessinsider.com/githubs-ceo-ditches-meritocracy-rug-2014-1">meritocracy rug</a>.
-The widely backed and long standing <a href="https://github.com/dear-github/dear-github">plea for a few critical features</a>
-has only recently stopped falling on deaf ears. And in the background, there are always concerns about GitHub simply
-<a href="https://news.ycombinator.com/item?id=10823128">becoming too big</a>, and exterting too much control over
-the open source&nbsp;ecosystem.</p>
-<p><em>Nota bene</em>, the very same ecosystem it had once been lauded for&nbsp;nurturing.</p>
-<p>Among the other flagship tech companies, <strong>Apple</strong> or <strong>Facebook</strong> have never garnered much good will. Sure, they are
-recognized for the pure utilitarian value of hardware they produce; or convenience, broad applicability, and stability
-of APIs they offer. Facebook may be scoring some additional points for trying to
-<a href="https://facebook.github.io/react/">sort out</a> the mess of frontend development, but many say it&#8217;s
-<a href="https://medium.com/@ericclemmons/javascript-fatigue-48d4011b6fc4#.j740brod8">not doing anybody any favors</a>.
-Neither company is easy to portray as a paragon of openness, though, and it&#8217;s probably easier to argue
-<a href="http://www.ibtimes.co.uk/apples-closed-ecosystem-threatening-derail-technological-revolution-1535944">the exact opposite</a>.</p>
-<p>And then there is <strong>Google</strong>, of course<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>. Some time in the past few years, a palpable shift occurred in how
-the company is perceived by the techie crowd. It&#8217;s difficult to pinpoint the exact pivotal moment, and the
-<a href="https://googleblog.blogspot.com.au/2013/03/a-second-spring-of-cleaning.html">one event that leaps to attention</a>
-doesn&#8217;t seem sufficient to explain it. But the tone has been set,
-allowing <a href="http://google-opensource.blogspot.com/2015/03/farewell-to-google-code.html">news</a> to be
-<a href="https://www.reddit.com/r/programming/comments/2yt73v/google_to_close_google_code_open_source_project/cpdb6xs">molded</a>
-to fit it. Add this to the usual backdrop of complaints about the
-<a href="https://www.reddit.com/r/cscareerquestions/comments/2ll864/my_horrible_google_interview_experience/">onerous</a>
-interview process and general fearmongering, and the picture doesn&#8217;t look very&nbsp;bright.</p>
-<h4>Shades of&nbsp;grey</h4>
-<p>No similar woes seem to have been plaguing Microsoft as of late, even though their record of recent &#8220;unwholesome&#8221; deeds
-isn&#8217;t exactly
-<a href="http://www.theinquirer.net/inquirer/news/2447177/updategate-windows-10-is-resetting-default-apps-back-to-microsoft-stock">clean</a>
-either. Does it mean they are indeed the most fitting candidate for a (new) enterprise ally of the hacker&nbsp;community?&#8230;</p>
-<p>Or maybe we can finally recognize the whole notion as the utterly silly concept it actually is. Hard to shake though
-it be, this quasi-Manicheic mentality of assigning labels of virtue or sin is, at best, a naive idealism. At worst,
-it&#8217;s a peculiar kind of harmful partisanship that technologists are particularly susceptible to. You may recognize it
-as something that has a <a href="https://en.wikipedia.org/wiki/Editor_war">very long tradition</a> in the hacker&nbsp;community.</p>
-<p>But it doesn&#8217;t mean it&#8217;s a tradition worth&nbsp;keeping.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>I have no illusions I will be attributed any objectivity, but it bears mentioning
-<a href="http://xion.io/page/about.html">again</a> that nothing I say here is representative of anything but my own opinions.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

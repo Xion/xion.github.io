@@ -63,6 +63,296 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">for loops in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Tue 26 July 2016 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/loops.html">loops</a>,      <a href="http://xion.io/tag/iterators.html">iterators</a>      &#8226; <a href="http://xion.io/post/code/rust-for-loop.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In this post, I&#8217;m going to talk about the <code>for</code> loop construct in <a href="https://rust-lang.org">Rust</a>,
+as well as the related concepts of <em>iterators</em> and&nbsp;&#8220;iterables&#8221;.</p>
+<p>Depending on your programming language background,
+they may seem somewhat familiar in terms of syntax <span class="amp">&amp;</span> semantics,
+or rather mysterious and surprising.
+Their closest analogues exist in Python,
+but programmers of Java, C#, or (modern) C++ should recognize many relevant features and ideas as&nbsp;well.</p>
+<h4>Basics</h4>
+<p>The syntax of a <code>for</code> loop is so modest it&#8217;s almost spartan<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;2&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;3&quot;</span><span class="p">];</span><span class="w"></span>
+<span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you would expect, <a href="https://is.gd/qtxqLD">this prints three lines</a> with <code>1</code>, <code>2</code>, <code>3</code>.
+What is probably not as obvious is that
+over the course of this loop the <code>v</code> vector was <em>expended</em>.
+Trying to <a href="https://is.gd/1mv7RV">use it</a> after the iteration,
+we&#8217;ll get a borrow checker&nbsp;error:</p>
+<div class="highlight"><pre>&lt;anon&gt;:6:22: 6:23 error: use of moved value: `v` [E0382]
+&lt;anon&gt;:4         println!(&quot;{}&quot;, x);
+&lt;anon&gt;:5     }
+&lt;anon&gt;:6     println!(&quot;{:?}&quot;, v);
+                              ^
+</pre></div>
+
+
+<p>In Rust jargon, the vector has been <strong>moved</strong> into the loop.
+Its ownership &#8212; and that of its individual elements &#8212; has been transfered there permanently.
+While definitely surprising when compared to other languages,
+this behavior is consistent with Rust&#8217;s ubiquitous policy of moving values by&nbsp;default.</p>
+<p>Still, you may not expect it here
+because moving ownership is mostly seen at the function call boundaries.
+For most intents and purposes, however,
+you can picture a <code>for_each</code> function like this to be the equivalent of the <code>for</code> loop&nbsp;above:</p>
+<div class="highlight"><pre><span class="n">for_each</span><span class="p">(</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
+</pre></div>
+
+
+<p>This also gives us a hint on how we could prevent the move from happening.
+Rather than taking the vector itself,
+the function could accept only a reference to&nbsp;it:</p>
+<div class="highlight"><pre><span class="n">for_each_ref</span><span class="p">(</span><span class="o">&amp;</span><span class="n">v</span><span class="p">,</span><span class="w"> </span><span class="o">|</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">));</span><span class="w"></span>
+</pre></div>
+
+
+<p>After we translate this <a href="https://is.gd/Zrq0JL">back to the looping syntax</a>:</p>
+<div class="highlight"><pre><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+<span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{:?}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">v</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>we won&#8217;t get any more objections from the&nbsp;compiler.</p>
+<h4>Iterators and &#8220;iterables&#8221; in&nbsp;Rust</h4>
+<p>It is important to emphasize that this new ampersand symbol (<code>&amp;</code>)
+is by no means a part of the syntax of the <code>for</code> loop itself.
+We have actually changed <em>what object</em> we&#8217;re iterating here.
+It is no longer <code>Vec&lt;T&gt;</code> &#8212; a vector itself &#8212; but <code>&amp;Vec&lt;T&gt;</code>, an immutable reference to it.
+As a consequence, <code>x</code> is not a <code>T</code> (the element type) anymore,
+but a <code>&amp;T</code> &#8212; a <em>reference</em> to an element<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.</p>
+<p>So it seems that in Rust, both <code>Vec&lt;T&gt;</code> and <code>&amp;Vec&lt;T&gt;</code> are what we would call &#8220;iterables&#8221;:
+collections (or other objects) that we can get iterate over.
+The usual way this is implemented in various programming languages
+is by introducing an <em>iterator</em>&nbsp;object.</p>
+<p>The iterator keeps track of what element it&#8217;s currently pointing to
+and supports at least the following basic&nbsp;operations:</p>
+<ul>
+<li>getting the current&nbsp;element</li>
+<li>advancing to the next&nbsp;element</li>
+<li>signaling when no more elements are&nbsp;available</li>
+</ul>
+<p>Some languages provide separate iterator methods for each of those tasks,
+but Rust chooses to combine them all into one.
+You can see that when looking at the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>:
+<code>next</code> is the only method to be provided by its&nbsp;implementations.</p>
+<h4>Desugaring with&nbsp;into-iterators</h4>
+<p>How is the iterator object created,&nbsp;though?</p>
+<p>In a typical Rust manner, this job is delegated to another trait.
+This one is called <code>IntoIterator</code>,
+and it roughly corresponds to the &#8220;iterable&#8221; concept I&#8217;ve alluded to&nbsp;earlier:</p>
+<div class="highlight"><pre><span class="c1">// (simplified)</span>
+<span class="k">trait</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="p">;</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>What is uniquely Rusty is the fact that <code>into_iter</code> &#8212; the sole method of this trait &#8212;
+doesn&#8217;t just create a new iterator for the collection.
+Instead, it effectively <em>consumes</em> the whole thing,
+leaving the new iterator as its only remnant and the only way to access the items<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.</p>
+<p>This, of course, is a direct manifestation of the Rust&#8217;s move-by-default policy.
+In this case, it protects us from the common problem of <strong>iterator invalidation</strong>
+which is probably all-too-familiar to C++ programmers.
+Because the collection is essentially &#8220;converted&#8221; to an iterator here, it is&nbsp;impossible:</p>
+<ul>
+<li>for more than one iterator to exist at a&nbsp;time</li>
+<li>to modify the collection while any iterators are in&nbsp;scope</li>
+</ul>
+<p>Doesn&#8217;t all this &#8220;moving&#8221; and &#8220;consuming&#8221; sound familiar, by the way?
+I&#8217;ve mentioned earlier that when we iterate over a vector with a <code>for</code> loop,
+we essentially move it &#8220;into the&nbsp;loop&#8221;.</p>
+<p>As you can probably deduce by now,
+what really happens is that <code>IntoIterator::into_iter</code> is invoked on the vector.
+Its result &#8212; the iterator object &#8212; is then repeatedly <code>next</code><span class="quo">&#8216;</span>ed until it returns <code>None</code>.</p>
+<p>In a way, a <code>for</code> loop like&nbsp;this:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>is therefore nothing else but a syntactic sugar for the following expanded&nbsp;version:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">iter</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="n">v</span><span class="p">);</span><span class="w"></span>
+<span class="k">loop</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">iter</span><span class="p">.</span><span class="n">next</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">Some</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">            </span><span class="c1">// body</span>
+<span class="w">        </span><span class="p">},</span><span class="w"></span>
+<span class="w">        </span><span class="nb">None</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">break</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>You can see quite clearly that <code>v</code> is unusable not only after the loop ends,
+but before it even <em>begins</em>.
+This is because it has been moved into <code>iter</code> &#8212; into an iterator &#8212;
+through an <code>into_iter</code> method&#8230; of <code>IntoIterator</code>!</p>
+<p>Simple, huh?&nbsp;:)</p>
+<blockquote>
+<p><code>for</code> loop is just a syntactic sugar for an <code>IntoIterator::into_iter</code> invocation,
+followed by repeated calling of <code>Iterator::next</code>.</p>
+</blockquote>
+<h4>The&nbsp;ampersand</h4>
+<p>On a more serious note, this move isn&#8217;t something that we&#8217;d always want to happen.
+Fortunately, we know a way to prevent it.
+Rather than iterating over the vector itself, use a <em>reference</em> to&nbsp;it:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The great thing about this syntax is that everything said above still applies,
+up to and including the desugaring procedure.
+The <code>into_iter</code> method is still being invoked,
+except that this time it is done on the <em>reference to the collection</em> &#8212;
+<code>&amp;Vec&lt;T&gt;</code> rather than <code>Vec&lt;T&gt;</code>:</p>
+<div class="highlight"><pre><span class="c1">// (simplified)</span>
+<span class="k">impl</span><span class="w"> </span><span class="n">IntoIterator</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="o">&amp;</span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">into_iter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Iterator</span><span class="o">&lt;</span><span class="n">Item</span><span class="o">=&amp;</span><span class="n">T</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The result is therefore an iterator that yields <em>references</em> to the elements (<code>&amp;T</code>),
+rather than elements themselves (<code>T</code>).
+And because <code>self</code> above is also a reference,
+the collection isn&#8217;t really moved anywhere,
+which is why we can freely access it after the loop&nbsp;ends.</p>
+<p>The exact same thing happens when looping over a <em>mutable</em>&nbsp;reference:</p>
+<div class="highlight"><pre><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// body</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>except that this time <code>into_iter</code> is called for <code>&amp;mut Vec&lt;T&gt;</code>.
+Result is therefore of type <code>Iterator&lt;Item=&amp;mut T&gt;</code>,
+enabling us to modify the elements as we go through&nbsp;them.</p>
+<p>No further compiler machinery is required to support those two cases,
+because everything is already handled by the same&nbsp;trait.</p>
+<blockquote>
+<p>The <code>IntoIterator</code> desugaring works the same way for collections
+<em>and</em> both immutable and mutable references to&nbsp;them.</p>
+</blockquote>
+<h4>What about the iter()&nbsp;method?</h4>
+<p>So far, we&#8217;ve talked about regular <code>for</code> loops,
+and the very imperative style of computation they&nbsp;represent.</p>
+<p>If you are more inclined towards functional programming, though,
+you may have seen and written rather different constructs,
+combining various &#8220;fluent&#8221; methods into expressions such as this&nbsp;one:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">numbers</span><span class="p">.</span><span class="n">iter</span><span class="p">()</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>Methods like <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.map"><code>map</code></a>
+and <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.filter"><code>filter</code></a> here
+are called <em>iterator adapters</em>,
+and they are all defined on the <a href="https://doc.rust-lang.org/std/iter/trait.Iterator.html"><code>Iterator</code> trait</a>.
+Not only are they very powerful and numerous,
+but they can also be supplemented through several <a href="https://crates.io/crates/itertools">third-party crates</a>.</p>
+<p>In order to take advantage of the adapters, however,
+we need to obtain an iterator for our collection first.
+We know that <code>into_iter</code> is the way loops normally do it,
+so in principle we could follow the same approach&nbsp;here:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">doubled_odds</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">_</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">IntoIterator</span><span class="o">::</span><span class="n">into_iter</span><span class="p">(</span><span class="o">&amp;</span><span class="n">numbers</span><span class="p">)</span><span class="w"></span>
+<span class="w">    </span><span class="p">.</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="mi">0</span><span class="p">).</span><span class="n">map</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">x</span><span class="o">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">2</span><span class="p">).</span><span class="n">collect</span><span class="p">();</span><span class="w"></span>
+</pre></div>
+
+
+<p>To spare us the verbosity of this explicit syntax,
+collections normally offer an <code>iter</code> method which is exactly equivalent<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>.
+This method is what you will normally see in chained expressions like the one&nbsp;above.</p>
+<blockquote>
+<p><code>v.iter()</code> is just a shorthand for <code>IntoIterator::into_iter(&amp;v)</code>.</p>
+</blockquote>
+<h4>Why not&nbsp;both?</h4>
+<p>The last thing to note is that Rust mandates neither loops nor iterator adapters
+when writing code that operates on collections of elements.
+When optimizations are turned on in the <a href="http://doc.crates.io/manifest.html#the-profile-sections">release mode</a>,
+both versions should compile to equally efficient machine code,
+with closures inlined and loops unrolled where&nbsp;necessary.</p>
+<p>Choosing one style over the other is therefore a matter of convention and style.
+Sometimes the right choice may actually be a <em>mix</em> of both approaches,
+and Rust allows it without any&nbsp;complaints:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">print_prime_numbers_upto</span><span class="p">(</span><span class="n">n</span><span class="o">:</span><span class="w"> </span><span class="kt">i32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Prime numbers lower than {}:&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="p">(</span><span class="mf">2.</span><span class="p">.</span><span class="n">n</span><span class="p">).</span><span class="n">filter</span><span class="p">(</span><span class="o">|&amp;</span><span class="n">i</span><span class="o">|</span><span class="w"> </span><span class="n">is_prime</span><span class="p">(</span><span class="n">i</span><span class="p">))</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;{}&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">x</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Like before, this is possible through the same <code>for</code> loop desugaring
+that involves the <code>IntoIterator</code> trait.
+In this case, Rust will simply use a
+<a href="https://github.com/rust-lang/rust/blob/bbfcb471db0799a7d92d62e66cf44bbd68051675/src/libcore/iter/traits.rs#L253">no-op implementation</a>
+of this trait, &#8220;converting&#8221; any existing <code>Iterator</code> <span class="dquo">&#8220;</span>into&#8221;&nbsp;itself.</p>
+<blockquote>
+<p>Iterators themselves are also &#8220;iterables&#8221;,
+implementing <code>IntoIterator::into_iter</code> as a&nbsp;pass-through.</p>
+</blockquote>
+<h4>Looping&nbsp;around</h4>
+<p>If you want to know even more about iterators and loops in Rust,
+the best source at this point is probably just
+<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the official documentation</a>.
+And although mastering all the iterator adapters is of course not necessary to write effective Rust code,
+taking a careful look at least at
+<a href="http://doc.rust-lang.org/std/iter/index.html#for-loops-and-intoiterator">the <code>collect</code> method</a>
+(and the associated <a href="https://doc.rust-lang.org/std/iter/trait.FromIterator.html"><code>FromIterator</code> trait</a>)
+is definitely&nbsp;helpful.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The &#8220;two-semicolon&#8221; variant of the <code>for</code> loop doesn&#8217;t exist in Rust. Just like in Python, the equivalent is
+iterating over a <a href="http://rustbyexample.com/flow_control/for.html">range object</a>, or using a regular <code>while</code> loop
+for more complex cases.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>This shift is completely transparent in the loop&#8217;s body. The way it works is based on Rust&#8217;s special mechanism
+called <a href="https://doc.rust-lang.org/book/deref-coercions.html">the <code>Deref</code> coercions</a>.
+Without going into too much detail (as it is way out of scope for this post),
+this feature allows us to treat references to objects (<code>&amp;T</code>) as if they were the objects themselves (<code>T</code>).
+The compiler will perform the necessary <em>derefencing</em> where possible,
+or signal an error in case of a (rare) ambiguity.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>How do we know that? It&#8217;s because <code>into_iter</code> takes <code>self</code> (rather than <code>&amp;self</code> or <code>&amp;mut self</code>)
+as its first parameter. It means that the entire object for which this method is called is moved <em>into</em> its body
+(hence the method&#8217;s name).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>Curiously enough, this equivalence isn&#8217;t encoded in the type system in any way,
+making it technically just a convention. It is followed consistently at least in the standard library, though.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-for-loop.html#rust-for-loop">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">str.startswith() with tuple&nbsp;argument</a></h2>
     <p>
       Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1117,129 +1407,6 @@ take a look at the <a href="https://doc.rust-lang.org/std/cell/struct.RefCell.ht
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-borrowchk-tricks.html#rust-borrowchk-tricks">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Requirements for Python&#8217;s&nbsp;pip</a></h2>
-    <p>
-      Posted on Sun 21 February 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/pip.html">pip</a>,      <a href="http://xion.io/tag/packages.html">packages</a>,      <a href="http://xion.io/tag/dependencies.html">dependencies</a>      &#8226; <a href="http://xion.io/post/code/python-pip-requirements.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In this post I&#8217;ll describe all (hopefully all!) the various ways you can specify a single dependency for a Python&nbsp;package.</p>
-<p>This assumes <em>pip</em> is used for installation. The list of dependencies then goes either in <code>install_requires=</code>
-parameter of the <code>setup</code> function within <em>setup.py</em>, or as a separate <em>requirements.txt</em> file. Commonly, it will actually
-go in both places, with the latter being the canonical source of&nbsp;truth:</p>
-<div class="highlight"><pre><span class="kn">from</span> <span class="nn">setuptools</span> <span class="kn">import</span> <span class="n">setup</span>
-
-<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s">&#39;requirements.txt&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">rf</span><span class="p">:</span>
-    <span class="n">setup</span><span class="p">(</span>
-        <span class="c"># ...</span>
-        <span class="n">install_requires</span><span class="o">=</span><span class="n">rf</span><span class="o">.</span><span class="n">readlines</span><span class="p">(),</span>
-    <span class="p">)</span>
-</pre></div>
-
-
-<p>More details about this approach can be found in
-<a href="http://xion.org.pl/2014/01/27/anathomy-of-a-python-package/">one of my previous posts</a>.</p>
-<p>Here, I will concentrate on the format of a single line in <em>requirements.txt</em> that defines a dependency.
-There are numerous variants that <em>pip</em> supports, and they are all described in excruciating detail in
-<a href="https://www.python.org/dev/peps/pep-0440/"><span class="caps">PEP</span> 440</a>. This post shall serve as a short reference on the most useful&nbsp;ones.</p>
-<h4>Package name (and&nbsp;version)</h4>
-<p>The simplest and most common option is to identify a dependency by its package&nbsp;name:</p>
-<div class="highlight"><pre>SQLAlchemy
-</pre></div>
-
-
-<p>This will locate it in a global index of packages, which is sometimes called a &#8220;cheese shop&#8221;. Currently,
-by far the most popular package registry for Python is <a href="https://pypi.python.org">PyPI</a>, and <em>pip</em> uses it by default<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>Without any further modifiers, <em>pip</em> will download and install the &#8220;current&#8221; version of the package &#8212; either the newest,
-or the one designated explicitly by a maintainer. This obviously makes the dependency somewhat unpredictable,
-for it can mean unintended upgrades that introduce breaking changes to your&nbsp;code.</p>
-<p>To prevent this, you&#8217;d normally <em>pin</em> the dependency to an exact version<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
-<div class="highlight"><pre>SQLAlchemy==0.9.10
-</pre></div>
-
-
-<p>Other comparison operators are also&nbsp;available:</p>
-<div class="highlight"><pre>SQLAlchemy&gt;=0.9.10
-SQLAlchemy&lt;1.0.0
-</pre></div>
-
-
-<p>and can even be&nbsp;combined:</p>
-<div class="highlight"><pre>SQLAlchemy&gt;=0.9,&lt;1.0.0
-</pre></div>
-
-
-<p>Specs like that will make <em>pip</em> find the newest version that&#8217;s within given range. Assuming your dependency follows
-the <a href="http://semver.org/">semantic versioning</a> scheme, this will allow you to stay on top of any minor bugfixes
-and improvements to an older release (0.9.x here), without the risk of accidentally upgrading to a new one (1.x)
-that your code is not compatible with&nbsp;yet.</p>
-<h4>Repository <span class="caps">URL</span></h4>
-<p>Sometimes you want to live on the bleeding edge, though, and depend not just on the latest <em>release</em>,
-but the head <em>commit</em> to the package&#8217;s repository. This makes sense especially in large systems
-that are distributed among multiple repos, and where development happens in&nbsp;lockstep.</p>
-<p>For those occasions, and a few others, <em>pip</em> can recognize direct repository URLs. They are in the&nbsp;format:</p>
-<div class="highlight"><pre>$VCS+$PROTOCOL://$URL@$LABEL#egg=$PACKAGE
-</pre></div>
-
-
-<p>where the <code>$PROTOCOL</code> part can be optional if the version control system has a default there. That&#8217;s for example
-the case for <code>git</code>, which is of course the most important <span class="caps">VCS</span> you&#8217;d be interested in<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>:</p>
-<div class="highlight"><pre>git://git.example.com/somepackage#egg=somepackage
-</pre></div>
-
-
-<p>Note that the <code>#egg=$PACKAGE</code> part is not a part of the <code>$URL</code>, and it&#8217;s only there to give a local name for the package
-distribution. This is what makes it possible to refer to it later via <em>pip</em>, if only to remove it with
-<code>pip uninstall $PACKAGE</code>.
-Of course, the sanest practice is to use the PyPI moniker if&nbsp;possible.</p>
-<p>When no <code>$LABEL</code> is given, <em>pip</em> will use the <span class="caps">HEAD</span>, trunk, tip, or the equivalent default/current revision from the repo.
-Often though (at least in case of Git), you would also pick a branch, tag, or even a particular <em>commit hash</em>:</p>
-<div class="highlight"><pre>git+https://github.com/Xion/unmatcher.git@0.1.3.1#egg=unmatcher
-git+ssh://github.com/You/yourpackage.git@master#egg=yourpackage
-git+https://github.com/mitsuhiko/jinja2.git@5b498453b5898257b2287f14ef6c363799f1405a#egg=Jinja2
-</pre></div>
-
-
-<p>The last two options could be a good choice even with third party packages, when you don&#8217;t want to wait for a new PyPI
-release to get a necessary feature or an urgent bug&nbsp;fix.</p>
-<h4>Local&nbsp;filesystem</h4>
-<p>Lastly, you can ask <em>pip</em> to install a package from a local directory or archive. The former option is often used
-with the <code>-e</code> (<code>--editable</code>) flag for <code>pip install</code>. This installs the package in the so-called <em>development mode</em>,
-allowing you to edit its source code&nbsp;in-place:</p>
-<div class="highlight"><pre>$ pip install -e /home/me/Code/myotherpackage
-</pre></div>
-
-
-<p>You almost certainly don&#8217;t want to put this line in <em>requirements.txt</em>: you should still be pulling the other package
-from PyPI. But if it&#8217;s your own one  &#8212; maybe a self-contained utility library used by your main program &#8212;
-this setup will be very helpful for making changes to it, informed by your own usage of the&nbsp;package.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>This can be changed with <code>--index_url</code> flag to <code>pip install</code>. Running local indexes is a good practice
-for Python shops, especially those that rely on <code>pip install</code> as part of their deployment process.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>If the package uses <a href="http://semver.org/">semantic versioning</a>, a possible alternative to <code>==</code> is <code>~=</code>,
-which means &#8220;compatible&#8221; version. The precise meaning of this is
-<a href="https://www.python.org/dev/peps/pep-0440/#compatible-release">somewhat complicated</a>, but it roughly means that upgrades
-are permitted as long as nothing in the public interface changes.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-<li id="fn:3">
-<p><a href="https://pip.pypa.io/en/latest/reference/pip_install/#vcs-support">Other options</a> include <code>hg</code> (Mercurial),
-<code>svn</code>, and <code>bzr</code> (Bazaar).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/python-pip-requirements.html#python-pip-requirements">Continue reading</a>
   </div>
 </article>
 

@@ -63,6 +63,260 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-little-crates.html#rust-little-crates">Small Rust crates I (almost) always&nbsp;use</a></h2>
+    <p>
+      Posted on Tue 31 October 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/libraries.html">libraries</a>      &#8226; <a href="http://xion.io/post/code/rust-little-crates.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Alternative clickbait title: <em>My Little Crates: Rust is Magic</em>&nbsp;:-)</p>
+<hr />
+<p>Due to its relatively scant standard library,
+programming in Rust inevitably involves pulling in a good number of third-party&nbsp;dependencies.</p>
+<p>Some of them deal with problems that are solved with built-ins
+in languages that take a more &#8220;batteries included&#8221; approach.
+A good example would be the Python&#8217;s <code>re</code> module,
+whose moral equivalent in the Rust ecosystem is <a href="http://docs.rs/regex">the <em>regex</em> crate</a>.</p>
+<p>Things like regular expressions, however, represent comparatively large problems.
+It isn&#8217;t very surprising that dedicated libraries exist to address them.
+It is less common for a language to offer <em>small</em> packages
+that target very specialized&nbsp;applications.</p>
+<p>As in, one function/type/macro-kind of specialized,
+or perhaps only a little larger than&nbsp;that.</p>
+<p>In this post, we&#8217;ll take a whirlwind tour through a bunch of such essential&nbsp;&#8220;micropackages&#8221;.</p>
+<h4>either</h4>
+<p>Rust has the built-in <code>Result</code> type, which is a sum<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> of an <code>Ok</code> outcome or an <code>Err</code>or.
+It forms the basis of a general error handling mechanism in the&nbsp;language.</p>
+<p>Structurally, however, <code>Result&lt;T, E&gt;</code> is just an alternative between the types <code>T</code> and <code>E</code>.
+You may want to use such an enum for other purposes
+than representing results of fallible operations.
+Unfortunately, because of the strong inherent meaning of <code>Result</code>,
+such usage would be unidiomatic and highly&nbsp;confusing.</p>
+<p>This is why the <a href="http://docs.rs/either"><em>either</em> crate</a> exists.
+It contains the following <code>Either</code> type:</p>
+<div class="highlight"><pre><span class="k">enum</span><span class="w"> </span><span class="n">Either</span><span class="o">&lt;</span><span class="n">L</span><span class="p">,</span><span class="w"> </span><span class="n">R</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Left</span><span class="p">(</span><span class="n">L</span><span class="p">),</span><span class="w"></span>
+<span class="w">    </span><span class="n">Right</span><span class="p">(</span><span class="n">R</span><span class="p">),</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>While it is isomorphic to <code>Result</code>,
+it carries no connotation to the entrenched error handling practices<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>.
+Additionally, it offers symmetric combinator methods such as <code>map_left</code>
+or <code>right_and_then</code> for chaining computations involving the <code>Either</code> values.</p>
+<h4>lazy_static</h4>
+<p>As a design choice, Rust doesn&#8217;t allow for safe access to global mutable variables.
+The semi-standard way of introducing those into your code
+is therefore <a href="http://docs.rs/lazy_static">the <em>lazy_static</em> crate</a>.</p>
+<p>However, the most important usage for it is to declare lazy initialized <em>constants</em>
+of more complex&nbsp;types:</p>
+<div class="highlight"><pre><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">TICK_INTERVAL</span><span class="o">:</span><span class="w"> </span><span class="n">Duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Duration</span><span class="o">::</span><span class="n">from_secs</span><span class="p">(</span><span class="mi">7</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">24</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The trick isn&#8217;t entirely transparent<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>,
+but it&#8217;s the best you can do until we get a proper support
+for <a href="https://github.com/rust-lang/rfcs/issues/322">compile-time expressions</a> in the&nbsp;language.</p>
+<h4>maplit</h4>
+<p>To go nicely with the crate above &#8212;
+and to act as a natural syntactic follow-up to
+<a href="https://doc.rust-lang.org/1.3.0/std/macro.vec!.html">the standard <code>vec![]</code> macro</a> &#8212;
+we&#8217;ve got the <a href="http://docs.rs/maplit"><em>maplit</em> crate</a>.</p>
+<p>What it does is add <code>HashMap</code> and <code>HashSet</code> <span class="dquo">&#8220;</span>literals&#8221; by defining
+some very simple <code>hashmap!</code> and <code>hashset!</code> macros:</p>
+<div class="highlight"><pre><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">IMAGE_EXTENSIONS</span><span class="o">:</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&amp;</span><span class="n">&#39;static</span><span class="w"> </span><span class="kt">str</span><span class="p">,</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">hashmap</span><span class="o">!</span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;gif&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">GIF</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;jpeg&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">JPEG</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;jpg&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">JPG</span><span class="p">,</span><span class="w"></span>
+<span class="w">        </span><span class="s">&quot;png&quot;</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="n">ImageFormat</span><span class="o">::</span><span class="n">PNG</span><span class="p">,</span><span class="w"></span>
+<span class="w">    </span><span class="p">};</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Internally, <code>hashmap!</code> expands to the appropriate amount of <code>HashMap::insert</code> calls,
+returning the finished hash map with all the keys and values&nbsp;given.</p>
+<h4>try_opt</h4>
+<p>Before the <code>?</code> operator was introduced to Rust,
+the idiomatic way of propagating erroneous <code>Result</code>s was the <code>try!</code> macro.</p>
+<p>A similar macro can also be implemented for <code>Option</code> types
+so that it propagates the <code>None</code>s upstream.
+The <a href="http://docs.rs/try_opt"><em>try_opt</em> crate</a> is doing precisely that,
+and the macro can be used in a straightforward&nbsp;manner:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">parse_ipv4</span><span class="p">(</span><span class="n">s</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="p">(</span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span><span class="w"> </span><span class="kt">u8</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">lazy_static</span><span class="o">!</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="k">static</span><span class="w"> </span><span class="k">ref</span><span class="w"> </span><span class="n">RE</span><span class="o">:</span><span class="w"> </span><span class="n">Regex</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Regex</span><span class="o">::</span><span class="n">new</span><span class="p">(</span><span class="w"></span>
+<span class="w">            </span><span class="s-Raw">r&quot;^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$&quot;</span><span class="w"></span>
+<span class="w">        </span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">caps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">RE</span><span class="p">.</span><span class="n">captures</span><span class="p">(</span><span class="n">s</span><span class="p">));</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">1</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">2</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">3</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">caps</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="mi">4</span><span class="p">)).</span><span class="n">as_str</span><span class="p">();</span><span class="w"></span>
+<span class="w">    </span><span class="nb">Some</span><span class="p">((</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">b</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">c</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">        </span><span class="n">try_opt</span><span class="o">!</span><span class="p">(</span><span class="n">d</span><span class="p">.</span><span class="n">parse</span><span class="p">().</span><span class="n">ok</span><span class="p">()),</span><span class="w"></span>
+<span class="w">    </span><span class="p">))</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Until Rust supports <code>?</code> for <code>Option</code>s (which is <a href="https://github.com/rust-lang/rust/issues/31436">planned</a>),
+this <code>try_opt!</code> macro can serve as an acceptable&nbsp;workaround.</p>
+<h4>exitcode</h4>
+<p>It is a common convention in basically every mainstream <span class="caps">OS</span>
+that a process has finished with an error
+if it exits with a code different than 0 (zero),
+Linux divides the space of error codes <a href="http://www.tldp.org/LDP/abs/html/exitcodes.html">further</a>,
+and &#8212; along with <span class="caps">BSD</span> &#8212; it also includes the <em>sysexits.h</em> header with some more specialized&nbsp;codes.</p>
+<p>These have been adopted by great many programs
+and <a href="https://docs.python.org/3.0/library/os.html#os.EX_OK">languages</a>.
+In Rust, those semi-standard names for common errors can be used, too.
+All you need to do is add <a href="http://docs.rs/exitcode">the <em>exitcode</em> crate</a> to your&nbsp;project:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">options</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">args</span><span class="o">::</span><span class="n">parse</span><span class="p">().</span><span class="n">unwrap_or_else</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="n">print_args_error</span><span class="p">(</span><span class="n">e</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span><span class="w"></span>
+<span class="w">        </span><span class="n">std</span><span class="o">::</span><span class="n">process</span><span class="o">::</span><span class="n">exit</span><span class="p">(</span><span class="n">exitcode</span><span class="o">::</span><span class="n">USAGE</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="p">});</span><span class="w"></span>
+</pre></div>
+
+
+<p>In addition to constants like <code>USAGE</code> or <code>TEMPFAIL</code>,
+the <em>exitcode</em> crate also defines an <code>ExitCode</code> alias
+for the integer type holding the exit codes.
+You can use it, among other things, as a return type of your top-level&nbsp;functions:</p>
+<div class="highlight"><pre><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">do_stuff</span><span class="p">(</span><span class="n">options</span><span class="p">);</span><span class="w"></span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">process</span><span class="o">::</span><span class="n">exit</span><span class="p">(</span><span class="n">code</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">fn</span><span class="w"> </span><span class="n">do_stuff</span><span class="p">(</span><span class="n">options</span><span class="o">:</span><span class="w"> </span><span class="n">Options</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">exitcode</span><span class="o">::</span><span class="n">ExitCode</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// ...</span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<h4>enum-set</h4>
+<p>In Java, there is a specialization of the general <code>Set</code> interface
+that works for enum types:
+<a href="https://docs.oracle.com/javase/7/docs/api/java/util/EnumSet.html">the <code>EnumSet</code> class</a>.
+Its members are represented very compactly as <em>bits</em> rather than hashed&nbsp;elements.</p>
+<p>A similar (albeit slightly less powerful<sup id="fnref:4"><a class="footnote-ref" href="#fn:4" rel="footnote">4</a></sup>) structure has been implemented
+in the <a href="http://docs.rs/enum-set"><em>enum-set</em> crate</a>. Given a <code>#[repr(u32)]</code> enum&nbsp;type:</p>
+<div class="highlight"><pre><span class="cp">#[repr(u32)]</span><span class="w"></span>
+<span class="cp">#[derive(Clone, Copy, Debug Eq, Hash, PartialEq)]</span><span class="w"></span>
+<span class="k">enum</span><span class="w"> </span><span class="n">Weekday</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Monday</span><span class="p">,</span><span class="w"> </span><span class="n">Tuesday</span><span class="p">,</span><span class="w"> </span><span class="n">Wednesday</span><span class="p">,</span><span class="w"> </span><span class="n">Thursday</span><span class="p">,</span><span class="w"> </span><span class="n">Friday</span><span class="p">,</span><span class="w"> </span><span class="n">Saturday</span><span class="p">,</span><span class="w"> </span><span class="n">Sunday</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>you can create an <code>EnumSet</code> of its&nbsp;variants:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">weekend</span><span class="o">:</span><span class="w"> </span><span class="n">EnumSet</span><span class="o">&lt;</span><span class="n">Weekday</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">EnumSet</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="n">weekend</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">Weekday</span><span class="o">::</span><span class="n">Saturday</span><span class="p">);</span><span class="w"></span>
+<span class="n">weekend</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">Weekday</span><span class="o">::</span><span class="n">Sunday</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>as long as you provide a simple trait impl that specifies
+how to convert those enum values to and from <code>u32</code>:</p>
+<div class="highlight"><pre><span class="k">impl</span><span class="w"> </span><span class="n">enum_set</span><span class="o">::</span><span class="n">CLike</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">Weekday</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="n">to_u32</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="kt">u32</span><span class="w">            </span><span class="p">{</span><span class="w"> </span><span class="o">*</span><span class="bp">self</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">from_u32</span><span class="p">(</span><span class="n">v</span><span class="o">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">Self</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">std</span><span class="o">::</span><span class="n">mem</span><span class="o">::</span><span class="n">transmute</span><span class="p">(</span><span class="n">v</span><span class="p">)</span><span class="w"> </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>The advantage is having a set structure represented by a single, unsigned 32-bit integer,
+leading to <em>O</em>(1) complexity of <em>all</em> common set operations.
+This includes membership checks, the union of two sets, their intersection, difference, and so&nbsp;on.</p>
+<h4>antidote</h4>
+<p>As part of fulfilling the promise of Fearless Concurrency™,
+Rust offers multiple synchronization primitives
+that are all defined in <a href="https://doc.rust-lang.org/std/sync/">the <code>std::sync</code> module</a>.
+One thing that <code>Mutex</code>, <code>RwLock</code>, and similar mechanisms there have in common
+is that their locks can become &#8220;poisoned&#8221; if a thread panicks while holding them.
+As a result, acquiring a lock requires handling the potential <code>PoisonError</code>.</p>
+<p>For many programs, however, lock poisoning is not even a remote,
+but a straight-up <em>impossible</em> situation.
+If you follow the best practices of concurrent resource sharing,
+you won&#8217;t be holding locks for more than a few instructions,
+devoid of <code>unwrap</code>s or any other opportunity to <code>panic!()</code>.
+Unfortunately, you cannot prove this to the Rust compiler statically,
+so it will still require you to handle a <code>PoisonError</code> that cannot&nbsp;happen.</p>
+<p>This is where the aptly named <a href="http://docs.rs/antidote"><em>antidote</em> crate</a> crate offers help.
+In it, you can find all the same locks <span class="amp">&amp;</span> guards <span class="caps">API</span> that is offered by <code>std::sync</code>,
+just without the <code>PoisonError</code>.
+In many cases, this removal has radically simplified the interface,
+for example by turning <code>Result&lt;Guard, Error&gt;</code> return types into just <code>Guard</code>.</p>
+<p>The caveat, of course, is that you need to ensure all threads holding these &#8220;immunized&#8221; locks&nbsp;either:</p>
+<ul>
+<li>don&#8217;t panic at all;&nbsp;or</li>
+<li>don&#8217;t leave guarded resources in an inconsistent state if they <em>do</em>&nbsp;panic</li>
+</ul>
+<p>Like it&#8217;s been mentioned earlier,
+the best way to make that happen is to keep lock-guarded critical sections minimal and&nbsp;infallible.</p>
+<h4>matches</h4>
+<p>Pattern matching is one of the most important features of Rust,
+but some of the relevant language constructs have awkward shortcomings.
+The <code>if let</code> conditional, for example, cannot be combined with boolean&nbsp;tests:</p>
+<div class="highlight"><pre><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="n">Foo</span><span class="p">(</span><span class="n">_</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">y</span><span class="p">.</span><span class="n">is_good</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+</pre></div>
+
+
+<p>and thus requires additional nesting, or a different approach&nbsp;altogether.</p>
+<p>Thankfully, to help with situations like this,
+there is the <a href="http://docs.rs/matches"><em>matches</em> crate</a> with a bunch of convenient macros.
+Besides <a href="https://docs.rs/matches/0.1.6/matches/macro.matches.html">its namesake, <code>matches!</code></a>:</p>
+<div class="highlight"><pre><span class="k">if</span><span class="w"> </span><span class="n">matches</span><span class="o">!</span><span class="p">(</span><span class="n">x</span><span class="p">,</span><span class="w"> </span><span class="n">Foo</span><span class="p">(</span><span class="n">_</span><span class="p">))</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">y</span><span class="p">.</span><span class="n">is_good</span><span class="p">()</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+</pre></div>
+
+
+<p>it also exposes assertion macros
+(<a href="https://docs.rs/matches/0.1.6/matches/macro.assert_matches.html"><code>assert_match!</code></a>
+and <a href="https://docs.rs/matches/0.1.6/matches/macro.debug_assert_matches.html"><code>debug_assert_match!</code></a>)
+that can be used in both production and test&nbsp;code.</p>
+<hr />
+<p>This concludes the overview of small Rust crates, at least for&nbsp;now.</p>
+<p>To be certain, these crates are by far not the only ones that are small in size
+and simultaneously almost indispensable.
+Many more great libraries can be found
+e.g. in the <a href="https://github.com/rust-unofficial/awesome-rust#libraries">Awesome Rust registry</a>,
+though obviously you could argue if all of them are truly &#8220;micro&#8221;&nbsp;;-)</p>
+<p>If you know more crates in the similar vein,
+make sure to mention them in the&nbsp;comments!</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>A <em>sum type</em> consists of several alternatives,
+out of which only one has been picked for a particular instance.
+The other common name for it is a <em>tagged union</em>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Unless you come from Haskell, that is, where <code>Either</code> is the equivalent of Rust&#8217;s <code>Result</code> :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>You will occasionally need an explicit <code>*</code> to trigger the <code>Deref</code> coercion it uses.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+<li id="fn:4">
+<p>It only supports unitary enums of up to 32 variants.&#160;<a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/programming/o-nlogn-isnt-bad.html#o-nlogn-isnt-bad">O(n log n) isn&#8217;t&nbsp;bad</a></h2>
     <p>
       Posted on Thu 19 October 2017 in <a href="http://xion.io/category/programming.html">Programming</a>
@@ -1867,205 +2121,6 @@ someone asks about this on the #rust-beginners <span class="caps">IRC</span> app
 <p>The <code>fold</code> variant is also rife with type inference traps,
 often requiring explicit type annotations, a &#8220;no-op&#8221; <code>Err</code> arm in <code>match</code>,
 or both.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-generator-args.html#python-generator-args">Arguments to Python generator&nbsp;functions</a></h2>
-    <p>
-      Posted on Tue 14 March 2017 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/generators.html">generators</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/closures.html">closures</a>      &#8226; <a href="http://xion.io/post/code/python-generator-args.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In Python, a <em>generator function</em> is one that
-contains a <code>yield</code> statement inside the function body.
-Although this language construct has many fascinating use cases
-(<a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"><span class="caps">PDF</span></a>),
-the most common one is creating concise and readable&nbsp;iterators.</p>
-<h4>A typical&nbsp;case</h4>
-<p>Consider, for example, this simple&nbsp;function:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-        <span class="k">yield</span> <span class="n">x</span>
-        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-</pre></div>
-
-
-<p>which creates an (infinite) iterator over all multiples of given integer.
-A sample of its output looks like&nbsp;this:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">islice</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">islice</span><span class="p">(</span><span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span> <span class="mi">10</span><span class="p">))</span>
-<span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">35</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">45</span><span class="p">,</span> <span class="mi">50</span><span class="p">]</span>
-</pre></div>
-
-
-<p>If you were to replicate in a language such as Java or Rust
-&#8212; neither of which supports an equivalent of <code>yield</code> &#8212;
-you&#8217;d end up writing an <em>iterator</em> class.
-Python also has them, of&nbsp;course:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Multiples</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">of</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">of</span> <span class="o">=</span> <span class="n">of</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">=</span> <span class="mi">0</span>
-
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span>
-
-    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">of</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">current</span>
-
-    <span class="n">__next__</span> <span class="o">=</span> <span class="nb">next</span>  <span class="c"># Python 3</span>
-</pre></div>
-
-
-<p>but they are usually not the first choice<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>It&#8217;s also pretty easy to see why:
-they require explicit bookkeeping of any auxiliary state between iterations.
-Perhaps it&#8217;s not too much to ask for a trivial walk over integers,
-but it can get quite tricky if we were to iterate over recursive data structures,
-like trees or graphs. In <code>yield</code>-based generators, this isn&#8217;t a problem,
-because the state is stored within local variables on the coroutine&nbsp;stack.</p>
-<h4>Lazy!</h4>
-<p>It&#8217;s important to remember, however, that
-generator functions behave differently than regular functions do,
-even if the surface appearance often says&nbsp;otherwise.</p>
-<p>The difference I wanted to explore in this post becomes apparent
-when we add some argument checking to the initial&nbsp;example:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
-
-    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-        <span class="k">yield</span> <span class="n">x</span>
-        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-</pre></div>
-
-
-<p>With that <code>if</code> in place, passing a negative number shall result in an exception.
-Yet when we attempt to do just that, it will seem as if nothing is&nbsp;happening:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span> <span class="o">=</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span>
-</pre></div>
-
-
-<p>And to a certain degree, this is pretty much correct.
-Simply <em>calling</em> a generator function does comparatively little,
-and doesn&#8217;t actually execute any of its code!
-Instead, we get back a <em>generator object</em>:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span>
-<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x10f0ceb40</span><span class="o">&gt;</span>
-</pre></div>
-
-
-<p>which is essentially a built-in analogue to the <code>Multiples</code> iterator instance.
-Commonly, it is said that both generator functions and iterator classes are <em>lazy</em>:
-they only do work when we asked (i.e. iterated&nbsp;over).</p>
-<h4>Getting&nbsp;eager</h4>
-<p>Oftentimes, this is perfectly okay.
-The laziness of generators is in fact one of their great strengths,
-which is particularly evident in the <a href="https://pymotw.com/2/itertools/">immense usefulness</a>
-of <a href="http://docs.python.org/2/library/itertools.html">the<code>itertools</code> module</a>.</p>
-<p>On the other hand, however,
-delaying argument checks and similar operations until later may hamper debugging.
-The classic engineering principle of <a href="https://en.wikipedia.org/wiki/Fail-fast">failing fast</a>
-applies here very fittingly: any errors should be signaled immediately.
-In Python, this means raising exceptions as soon as problems are&nbsp;detected.</p>
-<p>Fortunately, it is possible to reconcile the benefits of laziness
-with (more) defensive programming.
-We can make the generator functions only a <em>little</em> more eager,
-just enough to verify the correctness of their&nbsp;arguments.</p>
-<p>The trick is simple. We shall extract an <em>inner</em> generator function
-and only call it after we have checked the&nbsp;arguments:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
-
-    <span class="k">def</span> <span class="nf">multiples</span><span class="p">():</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">x</span>
-            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-
-    <span class="k">return</span> <span class="n">multiples</span><span class="p">()</span>
-</pre></div>
-
-
-<p>From the caller&#8217;s point of view, nothing has changed in the typical&nbsp;case:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
-<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x110579190</span><span class="o">&gt;</span>
-</pre></div>
-
-
-<p>but if we try to make an incorrect invocation now,
-the problem is detected <em>immediately</em>:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">)</span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>Traceback (most recent call last):
-  File &quot;&lt;pyshell#2&gt;&quot;, line 1, in &lt;module&gt;
-    multiples(of=-5)
-  File &quot;&lt;pyshell#0&gt;&quot;, line 4, in multiples
-    raise ValueError(&quot;expected a natural number, got %r&quot; % (of,))
-ValueError: expected a natural number, got -5
-</pre></div>
-
-
-<p>Pretty neat, especially for something that requires only two lines of&nbsp;code!</p>
-<h4>The last&nbsp;(micro)optimization</h4>
-<p>Indeed, we didn&#8217;t even have to pass the arguments to the inner (generator) function,
-because they are already captured by the&nbsp;closure.</p>
-<p>Unfortunately, this also has a slight performance cost.
-A captured variable (also known as a <em>cell variable</em>) is stored on the function object itself,
-so Python has to emit
-<a href="http://holdenweb.blogspot.com/2014/07/closures-arent-easy.html">a different bytecode instruction</a>
-(<code>LOAD_DEREF</code>) that involves
-an <a href="http://stupidpythonideas.blogspot.com/2015/12/how-lookup-works.html">extra pointer dereference</a>.
-Normally, this is not a problem, but in a tight generator loop it can make a&nbsp;difference.</p>
-<p>We can eliminate this extra work<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> by passing the parameters&nbsp;explicitly:</p>
-<div class="highlight"><pre>    <span class="c"># (snip)</span>
-
-    <span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">x</span>
-            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-
-    <span class="k">return</span> <span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">)</span>
-</pre></div>
-
-
-<p>This turns them into local variables of the inner function,
-replacing the <code>LOAD_DEREF</code> instructions with (aptly named) <code>LOAD_FAST</code> ones.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Technically, the <em>Multiples</em> class is here is both an <em>iterator</em>
-(because it has the <code>next</code>/<code>__next__</code> methods) and <em>iterable</em>
-(because it has <code>__iter__</code> method that returns an iterator, which happens to be the same object).
-This is common feature of iterators that are not associated with any collection,
-like the ones defined in the built-in <a href="http://docs.python.org/2/library/itertools.html"><code>itertools</code> module</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Note that if you engage in this kind of microoptimizations,
-I&#8217;d assume you have already <a href="https://www.python.org/doc/essays/list2str/">changed your global lookup into local ones</a> :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
 </li>
 </ol>
 </div>

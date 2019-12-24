@@ -63,6 +63,205 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-generator-args.html#python-generator-args">Arguments to Python generator&nbsp;functions</a></h2>
+    <p>
+      Posted on Tue 14 March 2017 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/generators.html">generators</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/closures.html">closures</a>      &#8226; <a href="http://xion.io/post/code/python-generator-args.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>In Python, a <em>generator function</em> is one that
+contains a <code>yield</code> statement inside the function body.
+Although this language construct has many fascinating use cases
+(<a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"><span class="caps">PDF</span></a>),
+the most common one is creating concise and readable&nbsp;iterators.</p>
+<h4>A typical&nbsp;case</h4>
+<p>Consider, for example, this simple&nbsp;function:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">x</span>
+        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+</pre></div>
+
+
+<p>which creates an (infinite) iterator over all multiples of given integer.
+A sample of its output looks like&nbsp;this:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">islice</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">islice</span><span class="p">(</span><span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span> <span class="mi">10</span><span class="p">))</span>
+<span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">35</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">45</span><span class="p">,</span> <span class="mi">50</span><span class="p">]</span>
+</pre></div>
+
+
+<p>If you were to replicate in a language such as Java or Rust
+&#8212; neither of which supports an equivalent of <code>yield</code> &#8212;
+you&#8217;d end up writing an <em>iterator</em> class.
+Python also has them, of&nbsp;course:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Multiples</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">of</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">of</span> <span class="o">=</span> <span class="n">of</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">of</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">current</span>
+
+    <span class="n">__next__</span> <span class="o">=</span> <span class="nb">next</span>  <span class="c"># Python 3</span>
+</pre></div>
+
+
+<p>but they are usually not the first choice<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
+<p>It&#8217;s also pretty easy to see why:
+they require explicit bookkeeping of any auxiliary state between iterations.
+Perhaps it&#8217;s not too much to ask for a trivial walk over integers,
+but it can get quite tricky if we were to iterate over recursive data structures,
+like trees or graphs. In <code>yield</code>-based generators, this isn&#8217;t a problem,
+because the state is stored within local variables on the coroutine&nbsp;stack.</p>
+<h4>Lazy!</h4>
+<p>It&#8217;s important to remember, however, that
+generator functions behave differently than regular functions do,
+even if the surface appearance often says&nbsp;otherwise.</p>
+<p>The difference I wanted to explore in this post becomes apparent
+when we add some argument checking to the initial&nbsp;example:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">yield</span> <span class="n">x</span>
+        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+</pre></div>
+
+
+<p>With that <code>if</code> in place, passing a negative number shall result in an exception.
+Yet when we attempt to do just that, it will seem as if nothing is&nbsp;happening:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span> <span class="o">=</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span>
+</pre></div>
+
+
+<p>And to a certain degree, this is pretty much correct.
+Simply <em>calling</em> a generator function does comparatively little,
+and doesn&#8217;t actually execute any of its code!
+Instead, we get back a <em>generator object</em>:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span>
+<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x10f0ceb40</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>which is essentially a built-in analogue to the <code>Multiples</code> iterator instance.
+Commonly, it is said that both generator functions and iterator classes are <em>lazy</em>:
+they only do work when we asked (i.e. iterated&nbsp;over).</p>
+<h4>Getting&nbsp;eager</h4>
+<p>Oftentimes, this is perfectly okay.
+The laziness of generators is in fact one of their great strengths,
+which is particularly evident in the <a href="https://pymotw.com/2/itertools/">immense usefulness</a>
+of <a href="http://docs.python.org/2/library/itertools.html">the<code>itertools</code> module</a>.</p>
+<p>On the other hand, however,
+delaying argument checks and similar operations until later may hamper debugging.
+The classic engineering principle of <a href="https://en.wikipedia.org/wiki/Fail-fast">failing fast</a>
+applies here very fittingly: any errors should be signaled immediately.
+In Python, this means raising exceptions as soon as problems are&nbsp;detected.</p>
+<p>Fortunately, it is possible to reconcile the benefits of laziness
+with (more) defensive programming.
+We can make the generator functions only a <em>little</em> more eager,
+just enough to verify the correctness of their&nbsp;arguments.</p>
+<p>The trick is simple. We shall extract an <em>inner</em> generator function
+and only call it after we have checked the&nbsp;arguments:</p>
+<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
+
+    <span class="k">def</span> <span class="nf">multiples</span><span class="p">():</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">x</span>
+            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+
+    <span class="k">return</span> <span class="n">multiples</span><span class="p">()</span>
+</pre></div>
+
+
+<p>From the caller&#8217;s point of view, nothing has changed in the typical&nbsp;case:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x110579190</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>but if we try to make an incorrect invocation now,
+the problem is detected <em>immediately</em>:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">)</span>
+</pre></div>
+
+
+<!-- -->
+
+<div class="highlight"><pre>Traceback (most recent call last):
+  File &quot;&lt;pyshell#2&gt;&quot;, line 1, in &lt;module&gt;
+    multiples(of=-5)
+  File &quot;&lt;pyshell#0&gt;&quot;, line 4, in multiples
+    raise ValueError(&quot;expected a natural number, got %r&quot; % (of,))
+ValueError: expected a natural number, got -5
+</pre></div>
+
+
+<p>Pretty neat, especially for something that requires only two lines of&nbsp;code!</p>
+<h4>The last&nbsp;(micro)optimization</h4>
+<p>Indeed, we didn&#8217;t even have to pass the arguments to the inner (generator) function,
+because they are already captured by the&nbsp;closure.</p>
+<p>Unfortunately, this also has a slight performance cost.
+A captured variable (also known as a <em>cell variable</em>) is stored on the function object itself,
+so Python has to emit
+<a href="http://holdenweb.blogspot.com/2014/07/closures-arent-easy.html">a different bytecode instruction</a>
+(<code>LOAD_DEREF</code>) that involves
+an <a href="http://stupidpythonideas.blogspot.com/2015/12/how-lookup-works.html">extra pointer dereference</a>.
+Normally, this is not a problem, but in a tight generator loop it can make a&nbsp;difference.</p>
+<p>We can eliminate this extra work<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> by passing the parameters&nbsp;explicitly:</p>
+<div class="highlight"><pre>    <span class="c"># (snip)</span>
+
+    <span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
+        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">yield</span> <span class="n">x</span>
+            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
+
+    <span class="k">return</span> <span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">)</span>
+</pre></div>
+
+
+<p>This turns them into local variables of the inner function,
+replacing the <code>LOAD_DEREF</code> instructions with (aptly named) <code>LOAD_FAST</code> ones.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>Technically, the <em>Multiples</em> class is here is both an <em>iterator</em>
+(because it has the <code>next</code>/<code>__next__</code> methods) and <em>iterable</em>
+(because it has <code>__iter__</code> method that returns an iterator, which happens to be the same object).
+This is common feature of iterators that are not associated with any collection,
+like the ones defined in the built-in <a href="http://docs.python.org/2/library/itertools.html"><code>itertools</code> module</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>Note that if you engage in this kind of microoptimizations,
+I&#8217;d assume you have already <a href="https://www.python.org/doc/essays/list2str/">changed your global lookup into local ones</a> :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-let-unit.html#rust-let-unit">The &#8220;let&#8221; type trick in&nbsp;Rust</a></h2>
     <p>
       Posted on Wed 01 February 2017 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1513,172 +1712,6 @@ instead of forking a subprocess. But then again, regular programs could just run
 </li>
 </ol>
 </div>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python3-primer.html#python3-primer">The brave &#8220;new&#8221; world of Python&nbsp;3</a></h2>
-    <p>
-      Posted on Mon 15 August 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/python-3.html">Python 3</a>,      <a href="http://xion.io/tag/unicode.html">Unicode</a>,      <a href="http://xion.io/tag/lazy-evaluation.html">lazy evaluation</a>,      <a href="http://xion.io/tag/iterables.html">iterables</a>      &#8226; <a href="http://xion.io/post/code/python3-primer.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>I&#8217;ll blurt it straight up: I&#8217;m not a big fan of Python&nbsp;3.</p>
-<p>For a long time, I resisted the appeal of various incremental improvements
-that early 3.x releases offered.
-And the world agreed with me:
-a mere two years ago, Python 3 wasn&#8217;t even <a href="https://alexgaynor.net/2014/jan/03/pypi-download-statistics/">a blip on the PyPI radar</a>.</p>
-<p>Lately, however, things seem to be picking up some&nbsp;steam.</p>
-<p>As if to compensate for years of &#8220;good enough&#8221;,
-Python 3 development team has given in to a steadily accelerating feature creep.
-Sure, some of it results in <a href="https://www.python.org/dev/peps/pep-0498/">bad ideas</a>
-(or even <a href="https://www.python.org/dev/peps/pep-0628/">ideas you&#8217;d hope are jokes</a>),
-but it nevertheless causes an increasingly wide functional gap
-between the 2.x and 3.x&nbsp;series.</p>
-<p>Starting from around Python 3.5, this gap becomes really noticeable,
-even when partially bridged with many excellent backports.
-The ecosystem support is also mostly there,
-at least insofar as &#8220;not breaking horribly when a package is used in Python&nbsp;3&#8221;.</p>
-<p>And then, of course, there is <a href="https://hg.python.org/peps/rev/76d43e52d978">the 2.7 EoL date</a> looming ever&nbsp;closer.</p>
-<p>Given all those portents,
-even old curmudg&#8230; ahem&#8230; <em>seasoned developers</em> cannot really ignore Python 3 anymore.
-For better or for worse, 3.x is how Python will look like in the coming years and decades.
-Might as well prepare for&nbsp;it.</p>
-<p>In this post, I will discuss some important issues
-one should be aware of before trying to switch from Python 2 to 3.
-I won&#8217;t be talking about all the minute changes and additions,
-but cover the more significant, broader concepts
-that mark the divide between the 2.x and 3.x&nbsp;generations.</p>
-<p>The two concepts I&#8217;ll be mentioning here are
-<em>Unicode</em> (obviously) and <em>lazy vs. eager computation</em>.</p>
-<h4>Unicode&nbsp;handling</h4>
-<p>You have probably heard it before.
-Python 3 was going to solve your Unicode problems once and for all.
-You haven&#8217;t believed it, of course,
-like you wouldn&#8217;t believe in any other silver&nbsp;bullet.</p>
-<p>Still, it may be rather surprising to learn
-that in Python 3, you&#8217;ll actually see much <em>more</em> Unicode-related&nbsp;errors.</p>
-<p>And strange as it may sound, it is  a <em>good</em>&nbsp;thing.</p>
-<p>In any case, either version of Python gets the most important thing about Unicode right.
-They both distinguish, at the type level,
-between <em>strings</em> (of Unicode codepoints) and their <em>encodings</em> (sequences of bytes).
-The type that holds the latter is called <code>bytes</code> in both versions,
-while strings are stored within the <code>str</code> type in Python 3 and <code>unicode</code> in Python&nbsp;2.</p>
-<p>It is from this crucial distinction &#8212; or rather, failing to account for it &#8212;
-where all the dreaded Unicode errors ultimately&nbsp;stem.</p>
-<p>But where Python 2 does poorly is in the choice of defaults.
-You probably know all too well that <code>bytes</code> there is just an alias for <code>str</code>.
-That <code>str</code> is a fully functional string type,
-even though it can only contain <span class="caps">ASCII</span> characters.
-Moreover, it is also the <em>default</em>:
-quoted string literals, for example, will be of this type unless specially&nbsp;marked.</p>
-<p>This poor choice of defaults is the primary source of latent Unicode bugs in Python 2&nbsp;programs.</p>
-<p>What Python 3 does here is to help <em>expose those bugs</em> sooner.
-If you already deal with Unicode correctly in your programs
-&#8212; maybe because you watched <a href="https://www.youtube.com/watch?v=sgHbC6udIqc">this excellent talk by Ned Batchelder</a> &#8212;
-your main benefit will be not having to write that <code>u""</code> quotes anymore.
-Otherwise, it&#8217;ll force you to consider the issue from the very beginning,
-rather than letting you write &#8220;working&#8221; programs
-that crash the moment they have to process some non-<span class="caps">ASCII</span>&nbsp;input.</p>
-<h4>Laziness by&nbsp;default</h4>
-<p>The second major change that Python 3 brings is of similar nature.
-It is also a change of <em>defaults</em>, but the impetus for it is much less&nbsp;evident.</p>
-<p>What&#8217;s different in Python 3 is that many built-in functions and methods which used to return <code>list</code>s
-are now giving out bespoke objects that only <em>mostly</em> behave like <code>list</code>s.
-Included in these are functions like <code>map</code> or <code>filter</code>,
-as well as common <code>dict</code>ionary methods such as <code>keys</code> or <code>values</code>.</p>
-<p>This change is usually presented as removal of unnecessary&nbsp;cruft:</p>
-<ul>
-<li><code>itertools.ifilter</code> is now just <code>filter</code></li>
-<li><code>xrange</code> is now just <code>range</code></li>
-<li><code>dict.iteritems</code> is now just <code>dict.items</code></li>
-</ul>
-<p>and so&nbsp;on.</p>
-<p>In some cases, this is exactly what happens.
-For example, there is virtually no downside to the new implementation of <code>range</code>,
-especially considering the way it is used most&nbsp;often.</p>
-<p>But not every built-in managed to preserve all the functionality of <code>list</code>s.
-Indeed, many have <a href="https://docs.python.org/3/library/functions.html?highlight=iterator#map">downgraded</a>
-their <span class="caps">API</span> guaratees to those of mere <em>generators</em>,
-i.e. the most simplistic and limited flavor of Python iterables.
-Working with them is trickier and more error-prone than with lists,
-which is due to <a href="http://xion.org.pl/2012/02/08/generator-pitfalls/">various pitfalls</a>
-that generators expose us&nbsp;to.</p>
-<p>Navigating around those gotchas used to be something that Python code had to opt-in to,
-by explicitly importing <a href="https://docs.python.org/2.7/library/itertools.html">the <code>itertools</code> module</a>
-and using its functions in place of the built-ins.
-What you could gain in return was increased performance, and a lesser memory footprint.
-All those benefits came from making the computations <em>lazy</em>
-and refraining from storage of the intermediate&nbsp;results.</p>
-<p>In Python 3, however, laziness is <em>preordained</em>.
-Even if we don&#8217;t need or care about the aforementioned perks,
-we have to devise some way of dealing with the pervasive&nbsp;generators.</p>
-<p>One option is to embrace lazy evaluation fully,
-and adapt to handling unspecified iterables throughout our code bases.<br>
-The risk is an increased frequency of bugs stemming from generator misuse &#8212;
-including a common mistake of trying to iterate over lazy <code>foos</code> the second time,
-deeper down a long function, after it&#8217;s been already&nbsp;exhausted.</p>
-<p>The alternative is to engage in a lot of &#8220;defensive <code>list</code>ing&#8221;:
-wrapping of unknown (or known-but-lazy) iterables in <code>list()</code> calls
-in order to &#8220;sanitize&#8221; them for later (re)use.<br>
-Examples include immediate <code>list</code>ification of a generator&nbsp;object:</p>
-<div class="highlight"><pre><span class="n">primes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="n">is_prime</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)))</span>
-</pre></div>
-
-
-<p>or preemptive conversion of an incoming iterable&nbsp;argument:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">do_something</span><span class="p">(</span><span class="n">foos</span><span class="p">):</span>
-    <span class="n">foos</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">foos</span><span class="p">)</span>
-    <span class="c"># ...the rest of a long function...</span>
-</pre></div>
-
-
-<p>Even if you choose the first path, and somehow use lazy generators everywhere,
-conversions are still required at the serialization&nbsp;boundaries:</p>
-<div class="highlight"><pre><span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;foo&#39;</span><span class="p">:</span> <span class="mi">42</span><span class="p">}</span>
-<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">()})</span>  <span class="c"># TypeError: dict_keys([&#39;foo&#39;]) is not JSON serializable</span>
-<span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s">&#39;keys&#39;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">keys</span><span class="p">())})</span>  <span class="c"># works</span>
-</pre></div>
-
-
-<p>At least in this case, the lazy iterable will vocally fail with an exception,
-rather than silently doing nothing (in case of repeated iteration)
-or always posing as truthy even when it&#8217;s empty (in <code>if iterable:</code> checks).</p>
-<h4>from __future__ import&nbsp;doubts</h4>
-<p>So, here they are: the highlights of Python 3.
-If you are disappointed they all turned out to be mixed blessings,
-don&#8217;t worry: you are
-<a href="http://lucumr.pocoo.org/2011/12/7/thoughts-on-python3/">in</a>
-<a href="http://lucumr.pocoo.org/2014/1/5/unicode-in-2-and-3/">a</a>
-<a href="http://lucumr.pocoo.org/2014/5/12/everything-about-unicode/">good</a>
-<a href="http://lucumr.pocoo.org/2014/8/16/the-python-i-would-like-to-see/">company</a>.</p>
-<p>The truth is that Python 3 is more finnicky, less forgiving,
-and much less beginner-friendly than its predecessor.
-Its various <a href="https://www.python.org/dev/peps/pep-0237/">superficial simplifications</a> are almost squarely balanced
-by many new concerns that are thrust upon an unsuspecting programmer from the very&nbsp;beginning.</p>
-<p>In one possible view, this is simply a sign that the language has <em>matured</em>.
-Perhaps it&#8217;s not a coincidence
-that almost exactly <a href="http://python-history.blogspot.com/2009/01/brief-timeline-of-python.html">18 years</a>
-has passed between the first public version of Python (0.9)
-and the release of Python 3.0.
-By no conceivable means it is a toy language anymore,
-and it&#8217;s adequately equipped to tackle challenges presented by the computing world of&nbsp;today.</p>
-<p>But on the other hand, it&#8217;s clear something is being gradually lost in the&nbsp;process.</p>
-<p>It&#8217;s becoming harder to claim the language favors simplicity
-over <a href="https://www.python.org/dev/peps/pep-0492/">complexity</a>.<br>
-It is no longer so easy to pick <a href="https://www.python.org/dev/peps/pep-3101/">which way</a>
-is the <em>obvious</em> way to do it.<br>
-It is increasingly often that <a href="https://www.python.org/dev/peps/pep-3113/">ugly replaces beautiful</a>
-and <a href="https://www.python.org/dev/peps/pep-3108/">nested replaces flat</a>.</p>
-<p>Little by little, Python itself is becoming less and less <em>pythonic</em>.
-The pace isn&#8217;t breakneck, but it&#8217;s definitely noticeable.
-But who knows? Maybe after two decades,
-a wholesale redefinition of the language&#8217;s core principles really <em>is</em> in&nbsp;order.</p>
-<p>&#8230;Well, certainly that&#8217;s necessary if some of the <a href="https://www.python.org/dev/peps/pep-0526/">latest ideas</a>
-are about to get&nbsp;in!</p>
   </div>
 </article>
 

@@ -27,7 +27,7 @@
 <meta property="og:url" content="http://xion.io"/>
 <meta property="og:image" content="http://xion.io/logo.jpeg">
 
-  <title>Karol Kuczmarski's Blog &ndash; Tag: strings</title>
+  <title>Karol Kuczmarski's Blog &ndash; Tag: ownership</title>
 </head>
 <body>
   <aside>
@@ -209,84 +209,6 @@ i.e. <code>AsRef&lt;Path&gt;</code>.&#160;<a class="footnote-backref" href="#fnr
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-string-args.html#rust-string-args">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">str.startswith() with tuple&nbsp;argument</a></h2>
-    <p>
-      Posted on Tue 28 June 2016 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/tuples.html">tuples</a>      &#8226; <a href="http://xion.io/post/code/python-startswith-tuple.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>Here&#8217;s a little known trick that&#8217;s applicable to Python&#8217;s <a href="http://bugs.python.org/issue1491485"><code>startswith</code></a>
-and <a href="http://bugs.python.org/issue1491485"><code>endswith</code></a> methods of <code>str</code> (and <code>unicode</code>).</p>
-<p>Suppose you&#8217;re checking whether a string starts with some&nbsp;prefix:</p>
-<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">):</span>
-    <span class="c"># totally an URL</span>
-</pre></div>
-
-
-<p>You eventually add more possible prefixes (or suffixes) to your&nbsp;condition:</p>
-<div class="highlight"><pre><span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;https://&#39;</span><span class="p">):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>Later on you notice the repetition and refactor it into something like&nbsp;this:</p>
-<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">]</span>
-<span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">SCHEMES</span><span class="p">):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>or if you&#8217;re feeling extra&nbsp;functional:</p>
-<div class="highlight"><pre><span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">,</span> <span class="n">SCHEMES</span><span class="p">)):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>Turns out, however, that <code>startswith</code> (and <code>endswith</code>) support this use case natively.
-Rather than passing just a single string as the argument,
-you can provide a <em>tuple</em> of strings&nbsp;instead:</p>
-<div class="highlight"><pre><span class="n">SCHEMES</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http://&#39;</span><span class="p">,</span> <span class="s">&#39;https://&#39;</span><span class="p">,</span> <span class="s">&#39;ftp://&#39;</span><span class="p">,</span> <span class="s">&#39;git://&#39;</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">SCHEMES</span><span class="p">):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>Either method will then check the original string against every element of the passed tuple.
-Both will only return <code>True</code> if <em>at least one</em> of the strings is recognized as prefix/suffix.
-As you can see, that&#8217;s exactly what we would previously do with <code>any</code>.</p>
-<p>Somewhat surprisingly, however, the feature only works for actual <em>tuples</em>.
-Trying to pass a seemingly equivalent iterable &#8212; a <code>list</code> or <code>set</code>, for example &#8212;
-will be met with interpreter&#8217;s&nbsp;refusal:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">is_jpeg</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">endswith</span><span class="p">([</span><span class="s">&#39;.jpg&#39;</span><span class="p">,</span> <span class="s">&#39;.jpeg&#39;</span><span class="p">])</span>
-</pre></div>
-
-
-<!---->
-
-<div class="highlight"><pre>TypeError: endswith first arg must be str, unicode, or tuple, not list
-</pre></div>
-
-
-<p>If you dig into it, there doesn&#8217;t seem to be a compelling reason for this behavior.
-The <a href="http://bugs.python.org/issue1491485">relevant feature request</a> talks about
-consistency with the built-in <code>isinstance</code> function,
-but it&#8217;s quite difficult to see how those two are&nbsp;related.</p>
-<p>In any case, this can be worked around without much&nbsp;difficulty:</p>
-<div class="highlight"><pre><span class="n">PROTOCOLS</span> <span class="o">=</span> <span class="p">(</span><span class="s">&#39;http&#39;</span><span class="p">,</span> <span class="s">&#39;https&#39;</span><span class="p">,</span> <span class="s">&#39;ftp&#39;</span><span class="p">,</span> <span class="s">&#39;git&#39;</span><span class="p">)</span>
-<span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="s">&#39;://&#39;</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">PROTOCOLS</span><span class="p">)):</span>
-    <span class="c"># ...</span>
-</pre></div>
-
-
-<p>though ideally, you&#8217;d want to pack the prefixes in a tuple to begin&nbsp;with.</p>
-      <a class="btn" href="http://xion.io/post/code/python-startswith-tuple.html#python-startswith-tuple">Continue reading</a>
   </div>
 </article>
 

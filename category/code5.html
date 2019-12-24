@@ -63,6 +63,242 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Actually, Python enums are pretty <span class="caps">OK</span></a></h2>
+    <p>
+      Posted on Sun 25 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/enums.html">enums</a>,      <a href="http://xion.io/tag/serialization.html">serialization</a>      &#8226; <a href="http://xion.io/post/code/python-enums-are-ok.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Little over two years ago, I was writing about
+<a href="http://xion.org.pl/2013/05/13/we-dont-need-no-enums-in-python/">my skepticism</a> towards the
+<a href="https://www.python.org/dev/peps/pep-0435/">addition of enum types to Python</a>. My stance has changed somewhat since then,
+and I now think there is some non-trivial value that enums can add to Python code. It becomes especially apparent
+in the circumstances involving any kind of persistence,
+from <a href="https://docs.python.org/2/library/pickle.html">pickling</a> to&nbsp;databases.</p>
+<p>I will elaborate on that through the rest of this&nbsp;post.</p>
+<h4>Revision</h4>
+<p>First, let&#8217;s recap (or perhaps introduce) the important facts about enums in Python. An <em>enum</em>, or an enumeration type,
+is a special class that inherits from <code>enum.Enum</code><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup> and defines one or more&nbsp;constants:</p>
+<div class="highlight"><pre><span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">Enum</span>
+
+<span class="k">class</span> <span class="nc">Cutlery</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">knife</span> <span class="o">=</span> <span class="s">&#39;knife&#39;</span>
+    <span class="n">fork</span> <span class="o">=</span> <span class="s">&#39;fork&#39;</span>
+    <span class="n">spoon</span> <span class="o">=</span> <span class="s">&#39;spoon&#39;</span>
+</pre></div>
+
+
+<p>Their values are then converted into singleton objects with distinct identity.
+They available as attributes of the enumeration&nbsp;type:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span>
+</pre></div>
+
+
+<p>As a shorthand for when the values themselves are not important, the <code>Enum</code> class can be directly invoked
+with constant names as&nbsp;strings:</p>
+<div class="highlight"><pre><span class="n">Cutlery</span> <span class="o">=</span> <span class="n">Enum</span><span class="p">(</span><span class="s">&#39;Cutlery&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">])</span>
+</pre></div>
+
+
+<p>Resulting class offers some useful <span class="caps">API</span> that we&#8217;d expect from an enumeration type in any programming&nbsp;language:</p>
+<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">Cutlery</span><span class="p">)</span>
+<span class="p">[</span><span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span><span class="p">:</span> <span class="s">&#39;knife&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">fork</span><span class="p">:</span> <span class="s">&#39;fork&#39;</span><span class="o">&gt;</span><span class="p">,</span> <span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span><span class="p">]</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="p">[</span><span class="n">c</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">Cutlery</span><span class="p">]</span>
+<span class="p">[</span><span class="s">&#39;knife&#39;</span><span class="p">,</span> <span class="s">&#39;fork&#39;</span><span class="p">,</span> <span class="s">&#39;spoon&#39;</span><span class="p">]</span>
+<span class="o">&gt;&gt;</span> <span class="n">Cutlery</span><span class="o">.</span><span class="n">knife</span> <span class="ow">in</span> <span class="n">Cutlery</span>
+<span class="bp">True</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spoon&#39;</span><span class="p">)</span>
+<span class="o">&lt;</span><span class="n">Cutlery</span><span class="o">.</span><span class="n">spoon</span><span class="p">:</span> <span class="s">&#39;spoon&#39;</span><span class="o">&gt;</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">Cutlery</span><span class="p">(</span><span class="s">&#39;spork&#39;</span><span class="p">)</span>
+<span class="n">Traceback</span> <span class="p">(</span><span class="n">most</span> <span class="n">recent</span> <span class="n">call</span> <span class="n">last</span><span class="p">):</span>
+<span class="c"># (...)</span>
+<span class="ne">ValueError</span><span class="p">:</span> <span class="s">&#39;spork&#39;</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">a</span> <span class="n">valid</span> <span class="n">Cutlery</span>
+</pre></div>
+
+
+<h4>How it was done&nbsp;previously</h4>
+<p>Of course, there is nothing really groundbreaking about assigning some values to &#8220;constants&#8221;. It&#8217;s been done like that
+since times immemorial, and quite often those constants have been grouped within finite&nbsp;sets.</p>
+<p>Here&#8217;s an example of a comment model in some imaginary <span class="caps">ORM</span>, complete with a status&nbsp;&#8220;enumeration&#8221;:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="n">APPROVED</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+    <span class="n">REJECTED</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+    <span class="n">IN_REVIEW</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+    <span class="n">STATES</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">([</span><span class="n">APPROVED</span><span class="p">,</span> <span class="n">REJECTED</span><span class="p">,</span> <span class="n">IN_REVIEW</span><span class="p">])</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">String</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="n">STATES</span><span class="p">)</span>
+
+<span class="c"># usage</span>
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Boo&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">IN_REVIEW</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Converting it to use an <code>Enum</code> is relatively&nbsp;straightforward:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="n">approved</span> <span class="o">=</span> <span class="s">&#39;approved&#39;</span>
+        <span class="n">rejected</span> <span class="o">=</span> <span class="s">&#39;rejected&#39;</span>
+        <span class="n">in_review</span> <span class="o">=</span> <span class="s">&#39;in_review&#39;</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">()</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">TextProperty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">StringProperty</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="p">[</span><span class="n">s</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">State</span><span class="p">])</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Meh.&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span><span class="o">.</span><span class="n">value</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>It is not apparent, though, if there is any immediate benefit of doing so. True, we no longer need to define the <code>STATES</code>
+set explicitly, but saving on this bit of boilerplate is balanced out by having to access the enum&#8217;s <code>value</code>
+when assigning it to a string&nbsp;property.</p>
+<p>All in all, it seems like a wash &#8212; though at least we&#8217;ve established that enums are <em>no worse</em> than their alternatives&nbsp;:)</p>
+<h4>Enums are&nbsp;interoperable</h4>
+<p>Obviously, this doesn&#8217;t exactly sound like high praise. Thing is, we haven&#8217;t really replaced the previous solution
+<em>completely</em>. Remnants of it still linger in the way the <code>state</code> property is declared. Even though it&#8217;s supposed to hold
+enum constants, it is defined as string, which at this point is more of an implementation detail of how those constants
+are&nbsp;serialized.</p>
+<p>What were really need here is a kind of <code>EnumProperty</code> that&#8217;d allow us to work solely with enum objects.
+Before the introduction of a standard <code>Enum</code> base, however, there was little incentive for ORMs and other similiar
+libraries to provide such a functionality. But now, it makes much more sense to support enums as first-class citizens,
+at least for data exchange and serialization, because users can be expected to already prefer the standard <code>Enum</code>
+in their own&nbsp;code.</p>
+<p>Thus, the previous example changes into something along these&nbsp;lines:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="c"># ...</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">EnumProperty</span><span class="p">(</span><span class="n">State</span><span class="p">)</span>
+
+<span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span><span class="n">author</span><span class="o">=</span><span class="s">&quot;Xion&quot;</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="s">&quot;Yay!&quot;</span><span class="p">)</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">Comment</span><span class="o">.</span><span class="n">State</span><span class="o">.</span><span class="n">approved</span>  <span class="c"># no .value!</span>
+<span class="n">comment</span><span class="o">.</span><span class="n">save</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Details of <code>EnumProperty</code>, or some equivalent construct, are of course specific to any given data management library.
+In SQLAlchemy, for example, a <a href="https://gist.github.com/Xion/5564b907e5f4e883511c">custom column type</a>
+can handle the necessary serialization and deserialization between Python code and <span class="caps">SQL</span> queries,
+allowing you to define your models like this<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup>:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Model</span><span class="p">):</span>
+    <span class="k">class</span> <span class="nc">State</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+        <span class="c"># ...</span>
+
+    <span class="n">author</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">String</span><span class="p">(</span><span class="mi">255</span><span class="p">))</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">Text</span><span class="p">)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">EnumType</span><span class="p">(</span><span class="n">State</span><span class="p">,</span> <span class="n">impl</span><span class="o">=</span><span class="n">String</span><span class="p">(</span><span class="mi">32</span><span class="p">)))</span>
+
+<span class="c"># usage like above</span>
+</pre></div>
+
+
+<p>In any case, the point is to have Python code operate solely on enum objects, while the persistence layer takes
+care of converting between them and their serializable&nbsp;values.</p>
+<h4>Enums are&nbsp;extensible</h4>
+<p>The other advantage <code>Enum</code>s have over loose collections of constants is that they are proper <em>types</em>.
+Like all user-defined types in Python, they can have additional methods and properties defined on their instances,
+or even on the type&nbsp;itself.</p>
+<p>Although this capability is (by default) not as powerful as e.g. in Java &#8212; where <em>each enum constant</em> can
+<a href="https://gist.github.com/chandrasekhar4u/431839b9eac715c08b71">override a method in its own way</a> &#8212; it can nevertheless
+be quite convenient at times. Typical use cases include constant&nbsp;classification:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_horizontal</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_vertical</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="ow">in</span> <span class="p">(</span><span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">,</span> <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">)</span>
+</pre></div>
+
+
+<p>and&nbsp;conversion:</p>
+<div class="highlight"><pre>    <span class="k">def</span> <span class="nf">as_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">left</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">up</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">right</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="n">Direction</span><span class="o">.</span><span class="n">down</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+</pre></div>
+
+
+<p>For the latter, it would be handy to have the Java&#8217;s ability to
+<a href="https://docs.oracle.com/javase/tutorial/java/javaOO/enum.html">attach additional data</a> to an enum constant.
+As it turns out, Python supports this feature natively in a very similar way.
+We simply have to override enum&#8217;s <code>__new__</code> method to parse out any extra values from the initializer
+and turn them into attributes of the enum&nbsp;instance:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">Direction</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">left</span> <span class="o">=</span> <span class="mi">37</span><span class="p">,</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">up</span> <span class="o">=</span> <span class="mi">38</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">right</span> <span class="o">=</span> <span class="mi">39</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">down</span> <span class="o">=</span> <span class="mi">40</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">,</span> <span class="n">keycode</span><span class="p">,</span> <span class="n">vector</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="nb">object</span><span class="o">.</span><span class="n">__new__</span><span class="p">(</span><span class="n">cls</span><span class="p">)</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_value_</span> <span class="o">=</span> <span class="n">keycode</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">vector</span> <span class="o">=</span> <span class="n">vector</span>
+        <span class="k">return</span> <span class="n">obj</span>
+</pre></div>
+
+
+<p>It&#8217;s possible, in fact, to insert any arbitrary computation here that yields the final <code>_value_</code> of an enum constant<sup id="fnref:3"><a class="footnote-ref" href="#fn:3" rel="footnote">3</a></sup>.
+This trick can be used to, for example, construct enums that
+<a href="https://docs.python.org/3/library/enum.html#autonumber">automatically number themselves</a>.</p>
+<p>Finally, we can add static methods, class methods, or <a href="http://stackoverflow.com/a/3203659">class properties</a> to the
+<code>Enum</code> subclass, just like we would do with any other&nbsp;class:</p>
+<div class="highlight"><pre><span class="k">class</span> <span class="nc">MyEnum</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="c"># ...</span>
+
+    <span class="nd">@classproperty</span>
+    <span class="k">def</span> <span class="nf">__values__</span><span class="p">(</span><span class="n">cls</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">m</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">cls</span><span class="p">]</span>
+</pre></div>
+
+
+<h4>Enums just&nbsp;are</h4>
+<p>All these things are possible primarly because of the most notable aspect of Python enums: their existence
+as an <em>explicit concept</em>. A syntactically unorganized bunch of constants cannot offer half of the highlighted features
+because there is nowhere to pin them&nbsp;on.</p>
+<p>For that reason alone, using enums as an explicit &#8212; rather than implicit &#8212; pattern seems worthwhile.
+The one benefit we&#8217;re certain to reap is better code structure through separation of important&nbsp;concepts.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>The <code>enum</code> module is part of the Python standard library
+<a href="https://docs.python.org/3/library/enum.html">since version 3.4</a>
+but <a href="https://pypi.python.org/pypi/enum/">a fully functional backport</a> is available for Python 2.x as well.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+<li id="fn:2">
+<p>It is even possible to instruct SQLAlchemy how to map Python enums to
+<a href="http://www.postgresql.org/docs/9.1/static/datatype-enum.html"><code>ENUM</code> types</a> in database engines that support it,
+but details are outside of the scope of this article.&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
+</li>
+<li id="fn:3">
+<p>If you&#8217;re fine with the enum&#8217;s <code>value</code> being the <em>whole</em> tuple (everything after the <code>=</code> sign),
+you can override <code>__init__</code> instead of <code>__new__</code>
+(cf. <a href="https://docs.python.org/3/library/enum.html#planet">the planet example</a> from standard docs).&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/python-enums-are-ok.html#python-enums-are-ok">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/jinja-classlist.html#jinja-classlist"><span class="caps">CSS</span> class helper for&nbsp;Jinja</a></h2>
     <p>
       Posted on Thu 22 October 2015 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1262,193 +1498,6 @@ as a part of their flow.&#160;<a class="footnote-backref" href="#fnref:2" rev="f
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/requests-query-string-auth.html#requests-query-string-auth">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/flask-auto-error-pages.html#flask-auto-error-pages">Automatic error pages in&nbsp;Flask</a></h2>
-    <p>
-      Posted on Tue 08 September 2015 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/flask.html">Flask</a>,      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/http.html">HTTP</a>,      <a href="http://xion.io/tag/errors.html">errors</a>      &#8226; <a href="http://xion.io/post/code/flask-auto-error-pages.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In <a href="http://flask.pocoo.org">Flask</a>, a popular web framework for Python, it&#8217;s pretty easy to implement custom handlers
-for specific <span class="caps">HTTP</span> errors. All you have to do is to write a function and annotate it with the <code>@errorhandler</code> decorator:</p>
-<div class="highlight"><pre><span class="nd">@app.errorhandler</span><span class="p">(</span><span class="mi">404</span><span class="p">)</span>
-<span class="k">def</span> <span class="nf">not_found</span><span class="p">(</span><span class="n">error</span><span class="p">):</span>
-    <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s">&#39;errors/404.html&#39;</span><span class="p">)</span>
-</pre></div>
-
-
-<p>Albeit simple, the above example is actually very realistic. There&#8217;s rarely anything else to do in response to serious
-request error than to send back some <span class="caps">HTML</span> with an appropriate message. If you have more handlers like that, though,
-you&#8217;ll notice they get pretty repetitive: for each erroneous <span class="caps">HTTP</span> status code (404, 403, 400, etc.),
-pick a corresponding template and simply render&nbsp;it.</p>
-<p>Which is, of course, why we&#8217;d want to deal with all in a little smarter way and with less&nbsp;boilerplate.</p>
-<h4>Just add a&nbsp;template</h4>
-<p>Ideally, we would like to avoid writing any Python code at all for each individual error handler. Since all we&#8217;re doing
-revolves around predefined templates, let&#8217;s just define the handlers automatically based on the <span class="caps">HTML</span> files&nbsp;themselves.</p>
-<p>Assuming we store them in the same template directory &#8212; say, <code>errors/</code> &#8212; and name their files after
-numeric status codes (e.g. <em>404.html</em>), getting all those codes is quite simple<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span><span class="p">,</span> <span class="n">PurePath</span>
-
-<span class="kn">from</span> <span class="nn">mywebapp</span> <span class="kn">import</span> <span class="n">app</span>
-
-
-<span class="c">#: Path to the directory where HTML templates for error pages are stored.</span>
-<span class="n">ERRORS_DIR</span> <span class="o">=</span> <span class="n">PurePath</span><span class="p">(</span><span class="s">&#39;errors&#39;</span><span class="p">)</span>
-
-
-<span class="k">def</span> <span class="nf">get_supported_error_codes</span><span class="p">():</span>
-    <span class="sd">&quot;&quot;&quot;Returns an iterable of HTTP status codes for which we have</span>
-<span class="sd">    a custom error page templates defined.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">error_templates_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span><span class="p">,</span> <span class="n">ERRORS_DIR</span><span class="p">)</span>
-
-    <span class="n">potential_error_templates</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">entry</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">error_templates_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s">&#39;*.html&#39;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_file</span><span class="p">())</span>
-    <span class="k">for</span> <span class="n">template</span> <span class="ow">in</span> <span class="n">potential_error_templates</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">code</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">template</span><span class="o">.</span><span class="n">stem</span><span class="p">)</span>  <span class="c"># e.g. 404.html</span>
-        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
-            <span class="k">pass</span>  <span class="c"># could be some base.html template, or similar</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">:</span>
-                <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="s">&quot;Found error template for non-error HTTP status </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
-                <span class="k">continue</span>
-            <span class="k">yield</span> <span class="n">code</span>
-</pre></div>
-</td></tr></table>
-
-<p>Once we have them, we can try wiring up the handlers programmatically and making them do the right&nbsp;thing.</p>
-<h4>One function to handle them&nbsp;all</h4>
-<p>Although I&#8217;ve used a plural here, in reality we only need a single handler, as it&#8217;ll be perfectly capable of
-dealing with any <span class="caps">HTTP</span> error we bind it to. To help distinguishing between the different status codes,
-Flask by default invokes our error handlers with an
-<a href="http://werkzeug.pocoo.org/docs/0.10/exceptions/#werkzeug.exceptions.HTTPException"><code>HTTPException</code></a> argument
-that has the <code>code</code> as an&nbsp;attribute:</p>
-<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre> 1
- 2
- 3
- 4
- 5
- 6
- 7
- 8
- 9
-10
-11
-12
-13
-14
-15
-16
-17
-18
-19
-20
-21
-22
-23
-24
-25
-26
-27
-28
-29</pre></div></td><td class="code"><div class="highlight"><pre><span class="kn">from</span> <span class="nn">flask</span> <span class="kn">import</span> <span class="n">render_template</span>
-<span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">TemplateNotFound</span>
-
-
-<span class="k">def</span> <span class="nf">error_handler</span><span class="p">(</span><span class="n">error</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Universal handler for all HTTP errors.</span>
-
-<span class="sd">    :param error: :class:`~werkzeug.exceptions.HTTPException`</span>
-<span class="sd">                  representing the HTTP error.</span>
-
-<span class="sd">    :return: HTTP response to be returned</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">code</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">error</span><span class="p">,</span> <span class="s">&#39;code&#39;</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">code</span><span class="p">:</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-            <span class="s">&quot;Got spurious argument to HTTP error handler: </span><span class="si">%r</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
-
-    <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s">&quot;HTTP error </span><span class="si">%s</span><span class="s">, rendering error page&quot;</span><span class="p">,</span> <span class="n">code</span><span class="p">)</span>
-    <span class="n">template</span> <span class="o">=</span> <span class="n">ERRORS_DIR</span> <span class="o">/</span> <span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s">.html&#39;</span> <span class="o">%</span> <span class="n">code</span><span class="p">)</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">template</span><span class="p">)),</span> <span class="n">code</span>
-    <span class="k">except</span> <span class="n">TemplateNotFound</span><span class="p">:</span>
-        <span class="c"># shouldn&#39;t happen if the handler has been wired up properly</span>
-        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">fatal</span><span class="p">(</span><span class="s">&quot;Missing template for HTTP error page: </span><span class="si">%s</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">template</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">FATAL_ERROR_RESPONSE</span>
-
-<span class="c">#: Response emitted when an error occurs in the error handler itself.</span>
-<span class="n">FATAL_ERROR_RESPONSE</span> <span class="o">=</span> <span class="p">(</span><span class="s">&quot;Internal Server Error&quot;</span><span class="p">,</span> <span class="mi">500</span><span class="p">)</span>
-</pre></div>
-</td></tr></table>
-
-<p>Catching <code>TemplateNotFound</code> exception is admittedly a little paranoid here, as it can occur pretty much exclusively
-due to a programming error elsewhere. Feel free to treat it as a failed assertion about application&#8217;s internal state
-and e.g. convert to <code>AssertionError</code> if&nbsp;desirable.</p>
-<h4>The&nbsp;setup</h4>
-<p>The final step is to actually set up the&nbsp;handler(s):</p>
-<div class="highlight"><pre><span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="n">get_supported_error_codes</span><span class="p">():</span>
-    <span class="n">app</span><span class="o">.</span><span class="n">errorhandler</span><span class="p">(</span><span class="n">code</span><span class="p">)(</span><span class="n">error_handler</span><span class="p">)</span>
-</pre></div>
-
-
-<p>It may look a bit wonky, but it&#8217;s just a simple desugaring of the standard Python decorator syntax from the first example.
-There exists a more direct approach of putting the handler inside <code>app.error_handler_spec</code> dictionary,
-but it is <a href="http://flask.pocoo.org/docs/0.10/api/#flask.Flask.errorhandler">discouraged by Flask documentation</a>.</p>
-<p>Where to put the above code, though? I posit it&#8217;s perfectly fine to place in the module&#8217;s global scope,
-because the error handlers (and other request handlers) are traditionally defined at import time&nbsp;anyway.</p>
-<p>Also notice that the default error handling we&#8217;ve defined here doesn&#8217;t preclude more specialized variants
-for select <span class="caps">HTTP</span> codes. All you have to do is ensure that your custom <code>@app.errorhandler</code> definition occurs
-<em>after</em> the above&nbsp;loop.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Note that I&#8217;m using the <a href="https://docs.python.org/3/library/pathlib.html"><em>pathlib</em> module</a> here
-&#8212; and you should, too, since it&#8217;s all around awesome. However, it is only a part of the standard library
-since Python 3.4, so you will most likely need to get <a href="https://pypi.python.org/pypi/pathlib/">the backport</a> first.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/flask-auto-error-pages.html#flask-auto-error-pages">Continue reading</a>
   </div>
 </article>
 

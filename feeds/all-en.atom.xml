@@ -1,5 +1,141 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2018-11-27T19:27:00+01:00</updated><entry><title>Yes, the npm ecosystem is at fault</title><link href="http://xion.io/post/programming/another-npm-snafu.html" rel="alternate"></link><updated>2018-11-27T19:27:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-11-27:post/programming/another-npm-snafu.html</id><summary type="html">&lt;p&gt;Even if you are like me and don&amp;#8217;t use any (server-side) Javascript, or node.js, or npm,
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Karol Kuczmarski's Blog</title><link href="http://xion.io/" rel="alternate"></link><link href="http://xion.io/feeds/all-en.atom.xml" rel="self"></link><id>http://xion.io/</id><updated>2019-12-24T14:22:00+00:00</updated><entry><title>Taking string arguments in Rust</title><link href="http://xion.io/post/code/rust-string-args.html" rel="alternate"></link><updated>2019-12-24T14:22:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2019-12-24:post/code/rust-string-args.html</id><summary type="html">&lt;p&gt;Strings of text seem to always be a complicated topic when it comes to programming.
+This counts double for low-level languages
+which expose the programmer to the full complexity of memory management and&amp;nbsp;allocation.&lt;/p&gt;
+&lt;p&gt;Rust is, obviously, one of those languages.
+Strings in Rust are therefore represented using two distinct types:
+&lt;code&gt;str&lt;/code&gt; (the string &lt;em&gt;slice&lt;/em&gt;) and &lt;code&gt;String&lt;/code&gt; (the owned/allocated string).
+Learning &lt;a href="https://doc.rust-lang.org/book/second-edition/ch08-02-strings.html"&gt;how to juggle those types&lt;/a&gt;
+is something you need to do very early if you want to be productive in the&amp;nbsp;language.&lt;/p&gt;
+&lt;p&gt;But even after you&amp;#8217;ve programmed in Rust for some time,
+you may still trip on some more subtle issues with string handling.
+In this post, I will concentrate on just one common task:
+writing a function that takes a &lt;em&gt;string argument&lt;/em&gt;.
+We&amp;#8217;ll see that even there, we can encounter a fair number of&amp;nbsp;gotchas.&lt;/p&gt;
+&lt;h4&gt;Just reading&amp;nbsp;it&lt;/h4&gt;
+&lt;p&gt;Let&amp;#8217;s start with a simple case:
+a function which merely &lt;em&gt;reads&lt;/em&gt; its string&amp;nbsp;argument:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello, {}!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;As you&amp;#8217;re probably well aware,
+using &lt;code&gt;str&lt;/code&gt; rather than &lt;code&gt;String&lt;/code&gt; is the idiomatic approach here.
+Because a &lt;code&gt;&amp;amp;str&lt;/code&gt; reference is essentially an address + length,
+it can point to any string wheresoever:
+a &lt;code&gt;'static&lt;/code&gt; literal, a heap-allocated &lt;code&gt;String&lt;/code&gt;, or any portion or substring&amp;nbsp;thereof:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;world&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Alice&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Dennis Ritchie&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mf"&gt;0.&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="mi"&gt;6&lt;/span&gt;&lt;span class="p"&gt;]);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Contrast this with an argument of type &lt;code&gt;&amp;amp;String&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello, {}!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;which mandates an actual, full-blown &lt;code&gt;String&lt;/code&gt; object:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Bob&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="c1"&gt;// (the other examples won&amp;#39;t work)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;There are virtually no circumstances when you would want to do this,
+as it potentially forces the caller to needlessly put the string on the heap.
+Even if you anticipate all function calls to involve actual &lt;code&gt;String&lt;/code&gt; objects,
+the automatic &lt;code&gt;Deref&lt;/code&gt; coercion from &lt;code&gt;&amp;amp;String&lt;/code&gt; to &lt;code&gt;&amp;amp;str&lt;/code&gt;
+should still allow you to use the more universal, &lt;code&gt;str&lt;/code&gt;-based &lt;span class="caps"&gt;API&lt;/span&gt;.&lt;/p&gt;
+&lt;h4&gt;Hiding the&amp;nbsp;reference&lt;/h4&gt;
+&lt;p&gt;If &lt;em&gt;rustc&lt;/em&gt; can successfully turn a &lt;code&gt;&amp;amp;String&lt;/code&gt; into &lt;code&gt;&amp;amp;str&lt;/code&gt;,
+then perhaps it should also be possible to simply use &lt;code&gt;String&lt;/code&gt; when that&amp;#8217;s more&amp;nbsp;convenient?&lt;/p&gt;
+&lt;p&gt;In general, this kind of &amp;#8220;reverse &lt;code&gt;Deref&lt;/code&gt;&amp;#8221; doesn&amp;#8217;t happen in Rust
+outside of method calls with &lt;code&gt;&amp;amp;self&lt;/code&gt;.
+It seems, however, that it would sometimes be desirable;
+one reasonable use case involves chains of iterator adapters,
+most importantly &lt;code&gt;map&lt;/code&gt; and &lt;code&gt;for_each&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;strings&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;vec&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Alice&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Bob&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;()];&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;strings&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into_iter&lt;/span&gt;&lt;span class="p"&gt;().&lt;/span&gt;&lt;span class="n"&gt;for_each&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Since the compiler doesn&amp;#8217;t take advantage of&lt;code&gt;Deref&lt;/code&gt; coercions when inferring closure types,
+their argument types have to match exactly.
+As a result, we often need explicit &lt;code&gt;|x| foo(x)&lt;/code&gt; closures
+which suffer from poorer readability in long &lt;code&gt;Iterator&lt;/code&gt; or &lt;code&gt;Stream&lt;/code&gt;-based&amp;nbsp;expressions.&lt;/p&gt;
+&lt;p&gt;We can make the above code work
+&amp;#8212; and also retain the ability to make calls like &lt;code&gt;hello("Charlie");&lt;/code&gt; &amp;#8212;
+by using one of the built-in traits that generalize over the borrowing relationships.
+The one that works best for accepting string arguments is called &lt;code&gt;AsRef&lt;/code&gt;&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;AsRef&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;N&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="nb"&gt;println&lt;/span&gt;&lt;span class="o"&gt;!&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Hello, {}!&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;as_ref&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;Its sole method, &lt;code&gt;AsRef::as_ref&lt;/code&gt;, returns a reference to the trait&amp;#8217;s type parameter.
+In the case above, that reference will obviously be of type &lt;code&gt;&amp;amp;str&lt;/code&gt;,
+which circles back to our initial example, one with a direct &lt;code&gt;&amp;amp;str&lt;/code&gt; argument.&lt;/p&gt;
+&lt;p&gt;The difference is, however, that &lt;code&gt;AsRef&amp;lt;str&amp;gt;&lt;/code&gt; is implemented
+&lt;a href="https://play.rust-lang.org/?gist=91f084a1ae0527f3af1cba3fca421da6&amp;amp;version=stable"&gt;for all interesting string types&lt;/a&gt;
+&amp;#8212; both in their owned and borrowed versions.
+This obviates the need for &lt;code&gt;Deref&lt;/code&gt; coercions and makes the &lt;span class="caps"&gt;API&lt;/span&gt; more&amp;nbsp;convenient.&lt;/p&gt;
+&lt;h4&gt;Own&amp;nbsp;it&lt;/h4&gt;
+&lt;p&gt;Things get a little more complicated when the string parameter is needed
+for more than just reading. For storage and potential mutation,
+a &lt;code&gt;&amp;amp;str&lt;/code&gt; reference is not enough: you need an actual, full-blown &lt;code&gt;String&lt;/code&gt; object.&lt;/p&gt;
+&lt;p&gt;Now, you may think this is not a huge obstacle.
+After all, it&amp;#8217;s pretty easy to &amp;#8220;turn&amp;#8221; &lt;code&gt;&amp;amp;str&lt;/code&gt; into a &lt;code&gt;String&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;struct&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Greetings&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="n"&gt;Vec&lt;/span&gt;&lt;span class="o"&gt;&amp;lt;&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;&amp;gt;&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+
+&lt;span class="k"&gt;impl&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Greetings&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="c1"&gt;// Don&amp;#39;t do this!&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="kt"&gt;str&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;        &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;clone&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;But I strongly advise against this practice, at least in public APIs.
+If you expose such function to your users, you are essentially tricking them
+into thinking their input will only ever be read, not copied,
+which has implications on both performance and memory&amp;nbsp;usage.&lt;/p&gt;
+&lt;p&gt;Instead, if you need to take ownership of the resulting &lt;code&gt;String&lt;/code&gt;,
+it is much better to indicate this in the function signature&amp;nbsp;directly:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="k"&gt;pub&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;fn&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="o"&gt;&amp;amp;&lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;:&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="w"&gt;    &lt;/span&gt;&lt;span class="bp"&gt;self&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;names&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;push&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;);&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="p"&gt;}&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;This shifts the burden on creating the &lt;code&gt;String&lt;/code&gt; onto the caller,
+but that&amp;#8217;s not necessarily a bad thing.
+On their side, the added boilerplate can pretty&amp;nbsp;minimal:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kd"&gt;let&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="k"&gt;mut&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;greetings&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="w"&gt; &lt;/span&gt;&lt;span class="n"&gt;Greetings&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;new&lt;/span&gt;&lt;span class="p"&gt;();&lt;/span&gt;&lt;span class="w"&gt;&lt;/span&gt;
+&lt;span class="n"&gt;grettings&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;String&lt;/span&gt;&lt;span class="o"&gt;::&lt;/span&gt;&lt;span class="n"&gt;from&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Dylan&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;));&lt;/span&gt;&lt;span class="w"&gt;  &lt;/span&gt;&lt;span class="c1"&gt;// uhm...&lt;/span&gt;
+&lt;span class="n"&gt;greetings&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Eva&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_string&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;      &lt;/span&gt;&lt;span class="c1"&gt;// somewhat better...&lt;/span&gt;
+&lt;span class="n"&gt;grettings&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Frank&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;to_owned&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;     &lt;/span&gt;&lt;span class="c1"&gt;// not too bad&lt;/span&gt;
+&lt;span class="n"&gt;greetings&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;hello&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Gene&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;.&lt;/span&gt;&lt;span class="n"&gt;into&lt;/span&gt;&lt;span class="p"&gt;());&lt;/span&gt;&lt;span class="w"&gt;          &lt;/span&gt;&lt;span class="c1"&gt;// good enough&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+
+&lt;p&gt;while clearly indicating where does the memory allocation&amp;nbsp;happen.&lt;/p&gt;
+&lt;div class="footnote"&gt;
+&lt;hr /&gt;
+&lt;ol&gt;
+&lt;li id="fn:1"&gt;
+&lt;p&gt;It is also idiomatically used for functions taking &lt;code&gt;Path&lt;/code&gt; parameters,
+i.e. &lt;code&gt;AsRef&amp;lt;Path&amp;gt;&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ol&gt;
+&lt;/div&gt;</summary><category term="Rust"></category><category term="strings"></category><category term="arguments"></category><category term="borrowing"></category><category term="ownership"></category></entry><entry><title>Yes, the npm ecosystem is at fault</title><link href="http://xion.io/post/programming/another-npm-snafu.html" rel="alternate"></link><updated>2018-11-27T19:27:00+01:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2018-11-27:post/programming/another-npm-snafu.html</id><summary type="html">&lt;p&gt;Even if you are like me and don&amp;#8217;t use any (server-side) Javascript, or node.js, or npm,
 it may feel like every other week there are news about
 &lt;a href="https://github.com/dominictarr/event-stream/issues/116"&gt;yet another npm snafu&lt;/a&gt;.&lt;/p&gt;
 &lt;p&gt;The latest incident could be the most severe one yet,
@@ -1777,436 +1913,4 @@ are basically a class of their own when it comes to testing ease,
 so it wouldn&amp;#8217;t really be fair to hold them up for comparison.&amp;#160;&lt;a class="footnote-backref" href="#fnref:7" rev="footnote" title="Jump back to footnote 7 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
 &lt;/li&gt;
 &lt;/ol&gt;
-&lt;/div&gt;</summary><category term="Rust"></category><category term="gisht"></category><category term="CLI"></category><category term="GitHub"></category><category term="Python"></category><category term="testing"></category></entry><entry><title>Currying and API design</title><link href="http://xion.io/post/programming/currying-api-design.html" rel="alternate"></link><updated>2017-11-12T14:07:00+00:00</updated><author><name>Karol Kuczmarski</name></author><id>tag:xion.io,2017-11-12:post/programming/currying-api-design.html</id><summary type="html">&lt;p&gt;In functional programming, &lt;em&gt;currying&lt;/em&gt; is one of the concepts
-that contribute greatly to its expressive power.
-Its importance could be compared to something as ubiquitous
-as chaining method calls (&lt;code&gt;foo.bar().baz()&lt;/code&gt;) in imperative, object-oriented&amp;nbsp;languages.&lt;/p&gt;
-&lt;p&gt;Although a simple idea on the surface,
-it has significant consequences for the way functional APIs are designed.
-This post is an overview of various techniques
-that help utilize currying effectively when writing your functions.
-While the examples are written in Haskell syntax,
-I believe it should be useful for developers working in other functional languages,&amp;nbsp;too.&lt;/p&gt;
-&lt;h4&gt;The&amp;nbsp;basics&lt;/h4&gt;
-&lt;p&gt;Let&amp;#8217;s start with a short&amp;nbsp;recap.&lt;/p&gt;
-&lt;p&gt;Intuitively, we say that an &lt;em&gt;N&lt;/em&gt;-argument function is &lt;em&gt;curried&lt;/em&gt;
-if you can invoke it with a single argument and get back an (&lt;em&gt;N&lt;/em&gt;-1)-argument function.
-Repeat this &lt;em&gt;N&lt;/em&gt; times,
-and it&amp;#8217;ll be equivalent to supplying all &lt;em&gt;N&lt;/em&gt; arguments at&amp;nbsp;once.&lt;/p&gt;
-&lt;p&gt;Here&amp;#8217;s an example: the &lt;code&gt;Data.Text&lt;/code&gt; module in Haskell
-contains the following function called &lt;code&gt;splitOn&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt; &lt;span class="n"&gt;text&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It&amp;#8217;s a fairly standard string splitting function,
-taking a separator as its first argument,
-with the second one being a string to perform the splitting&amp;nbsp;on:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;  &lt;span class="c1"&gt;-- produces [&amp;quot;1&amp;quot;, &amp;quot;2&amp;quot;, &amp;quot;3&amp;quot;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Both arguments are of type &lt;code&gt;Text&lt;/code&gt; (Haskell strings),
-while the return type is &lt;code&gt;[Text]&lt;/code&gt; &amp;#8212; a &lt;em&gt;list&lt;/em&gt; of strings.
-This add up to the signature (type) of &lt;code&gt;splitOn&lt;/code&gt;,
-written above as &lt;code&gt;Text -&amp;gt; Text -&amp;gt; [Text]&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;Like all functions in Haskell, however, &lt;code&gt;splitOn&lt;/code&gt; is &lt;em&gt;curried&lt;/em&gt;.
-We don&amp;#8217;t have to provide it with both arguments at once;
-instead, we can stop at one in order to obtain &lt;em&gt;another function&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This new function is a &lt;em&gt;partially applied&lt;/em&gt; version of &lt;code&gt;splitOn&lt;/code&gt;,
-with its first argument (the separator) already filled in.
-To complete the call, all you need to do now is provide the text to&amp;nbsp;split:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;  &lt;span class="c1"&gt;-- also produces [&amp;quot;1&amp;quot;, &amp;quot;2&amp;quot;, &amp;quot;3&amp;quot;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;and, unsurprisingly, you&amp;#8217;ll get the exact same&amp;nbsp;result.&lt;/p&gt;
-&lt;p&gt;Compare now the type signatures of both &lt;code&gt;splitOn&lt;/code&gt; and &lt;code&gt;splitOnComma&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="nf"&gt;splitOnComma&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It may be puzzling at first why the same arrow symbol (&lt;code&gt;-&amp;gt;&lt;/code&gt;) is used
-for what seems like two distinct meanings: the &amp;#8220;argument separator&amp;#8221;,
-and the return type&amp;nbsp;indicator.&lt;/p&gt;
-&lt;p&gt;But for curried functions, both of those meanings are in fact &lt;em&gt;identical&lt;/em&gt;!&lt;/p&gt;
-&lt;p&gt;Indeed, we can make it more explicit by defining &lt;code&gt;splitOn&lt;/code&gt; as:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;or&amp;nbsp;even:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;TypeOf&lt;/span&gt; &lt;span class="n"&gt;splitOnComma&lt;/span&gt; &lt;span class="c1"&gt;-- (not a real Haskell syntax)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;From this perspective, what &lt;code&gt;splitOn&lt;/code&gt; actually returns is not &lt;code&gt;[Text]&lt;/code&gt;
-but a &lt;em&gt;function&lt;/em&gt;  from &lt;code&gt;Text&lt;/code&gt; to &lt;code&gt;[Text]&lt;/code&gt; (&lt;code&gt;Text -&amp;gt; [Text]&lt;/code&gt;).
-And conversely, a call with two&amp;nbsp;arguments:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;is instead &lt;em&gt;two function calls&lt;/em&gt;, each taking just &lt;em&gt;one argument&lt;/em&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;1,2,3&amp;quot;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This is why the &lt;code&gt;-&amp;gt;&lt;/code&gt; arrow isn&amp;#8217;t actually ambiguous:
-it always signifies the &lt;em&gt;mapping&lt;/em&gt; of an argument type to a result type.
-And it&amp;#8217;s always just one argument, too,&amp;nbsp;because:&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;Currying makes all functions take only one&amp;nbsp;argument.&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;p&gt;It&amp;#8217;s just that sometimes, what those single-argument functions return
-will be yet another&amp;nbsp;function.&lt;/p&gt;
-&lt;h4&gt;Least used arguments go &lt;em&gt;first&lt;/em&gt;&lt;/h4&gt;
-&lt;p&gt;Now that we have a firmer grasp on the idea of currying,
-we can see how it influences &lt;span class="caps"&gt;API&lt;/span&gt;&amp;nbsp;design.&lt;/p&gt;
-&lt;p&gt;There is one thing in particular you will notice almost immediately,
-especially if you are coming from imperative languages
-that support default argument values and/or function overloading.
-It&amp;#8217;s the particular &lt;em&gt;order of arguments&lt;/em&gt;
-that a well designed, functional &lt;span class="caps"&gt;API&lt;/span&gt; will almost certainly&amp;nbsp;follow.&lt;/p&gt;
-&lt;p&gt;See the &lt;code&gt;splitOn&lt;/code&gt; function&amp;nbsp;again:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="nf"&gt;splitOn&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt; &lt;span class="n"&gt;text&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;It is no accident that it puts the &lt;code&gt;sep&lt;/code&gt;arator as its first argument.
-This choice &amp;#8212; as opposed to the alternative where &lt;code&gt;text&lt;/code&gt; goes first &amp;#8212;
-produces much more useful results when the function is applied partially
-through&amp;nbsp;currying.&lt;/p&gt;
-&lt;p&gt;Say, for instance, that you want to splice a list of strings
-where the individual pieces can be&amp;nbsp;comma-separated:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;spliceOnComma&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="nf"&gt;spliceOnComma&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;1&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;2,3&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;4,5,6&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;7&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;span class="c1"&gt;-- ^ This should produce [&amp;quot;1&amp;quot;, &amp;quot;2&amp;quot;, &amp;quot;3&amp;quot;, &amp;quot;4&amp;quot;, &amp;quot;5&amp;quot;, &amp;quot;6&amp;quot;, &amp;quot;7&amp;quot;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Because the separator appears first in a &lt;code&gt;splitOn&lt;/code&gt; call,
-you can do it easily through a direct use of&amp;nbsp;currying:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;spliceOnComma&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concat&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;splitOn&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt;
-
-&lt;span class="c1"&gt;-- or equivalently, in a terser point-free style:&lt;/span&gt;
-&lt;span class="c1"&gt;-- spliceOnComma = concatMap $ splitOn &amp;quot;,&amp;quot;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;What we do here is apply the split to every string in the list &lt;code&gt;xs&lt;/code&gt;
-(with &lt;code&gt;map&lt;/code&gt;), followed by flattening the result &amp;#8212; a list of lists, &lt;code&gt;[[Text]]&lt;/code&gt; &amp;#8212;
-back to a regular &lt;code&gt;[Text]&lt;/code&gt; with &lt;code&gt;concat&lt;/code&gt;.&lt;/p&gt;
-&lt;p&gt;If we had the alternative version of &lt;code&gt;splitOn&lt;/code&gt;,
-one where the order of arguments is&amp;nbsp;reversed:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;splitOn&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;text&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="o"&gt;...&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;we&amp;#8217;d have no choice but to &amp;#8220;fix it&amp;#8221;, with either a lambda function
-or &lt;a href="http://hackage.haskell.org/package/base-4.10.0.0/docs/Prelude.html#v:flip"&gt;the &lt;code&gt;flip&lt;/code&gt; combinator&lt;/a&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;spliceOnComma&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concat&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="nf"&gt;\&lt;/span&gt;&lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;splitOn&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;x&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt;
-&lt;span class="nf"&gt;spliceOnComma&amp;#39;&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;concat&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;map&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;flip&lt;/span&gt; &lt;span class="n"&gt;splitOn&amp;#39;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;,&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="n"&gt;xs&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Putting the delimiter first is simply more convenient.
-It is much more likely you&amp;#8217;ll be splitting multiple strings on the same separator,
-as opposed to a single string and multiple separators.
-The argument order of &lt;code&gt;splitOn&lt;/code&gt; is making the common use case slightly easier
-by moving the more &amp;#8220;stable&amp;#8221; parameter to the&amp;nbsp;front.&lt;/p&gt;
-&lt;p&gt;This practice generalizes to all curried functions,
-forming a simple&amp;nbsp;rule:&lt;/p&gt;
-&lt;blockquote&gt;
-&lt;p&gt;The more likely it is for an argument to remain &lt;em&gt;constant&lt;/em&gt; between calls,
-the sooner it should appear in the function&amp;nbsp;signature.&lt;/p&gt;
-&lt;/blockquote&gt;
-&lt;p&gt;Note how this is different compared to any language
-where functions may take variable number of arguments.
-In Python, for example, the equivalent of &lt;code&gt;splitOn&lt;/code&gt; is defined&amp;nbsp;as:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;split&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sep&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;and the implicit default value for &lt;code&gt;sep&lt;/code&gt; is essentially &amp;#8220;any whitespace character&amp;#8221;.
-In many cases, this is exactly what we want,
-making the following calls possible&lt;sup id="fnref:1"&gt;&lt;a class="footnote-ref" href="#fn:1" rel="footnote"&gt;1&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="o"&gt;&amp;gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class="nb"&gt;str&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;split&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Alice has a cat&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;Alice&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;has&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;a&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;cat&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;So, as a less-used argument, &lt;code&gt;sep&lt;/code&gt; actually goes last in &lt;code&gt;str.split&lt;/code&gt;,
-as it is often desirable to omit it altogether.
-Under the currying regime, however, we put it &lt;em&gt;first&lt;/em&gt;,
-so that we can fix it to a chosen value and obtain a more specialized version of the&amp;nbsp;function.&lt;/p&gt;
-&lt;h4&gt;The fewer arguments, the&amp;nbsp;better&lt;/h4&gt;
-&lt;p&gt;Another thing you&amp;#8217;d encounter in languages with flexible function definitions
-is the proliferation of optional&amp;nbsp;arguments:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="n"&gt;response&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
-                        &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;arg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
-                        &lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;field&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;value&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
-                        &lt;span class="n"&gt;auth&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;user&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;pass&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt;
-                        &lt;span class="n"&gt;headers&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;User-Agent&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Amazing App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
-                        &lt;span class="n"&gt;cookies&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;c_is&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;for_cookie&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;},&lt;/span&gt;
-                        &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;{&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;attachment.txt&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s"&gt;&amp;#39;file.txt&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;#39;rb&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;)},&lt;/span&gt;
-                        &lt;span class="n"&gt;allow_redirects&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="bp"&gt;False&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;
-                        &lt;span class="n"&gt;timeout&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="mf"&gt;5.0&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Trying to translate this directly to a functional paradigm
-would result in extremely unreadable function calls &amp;#8212;
-doubly so when you don&amp;#8217;t actually need all those arguments
-and have to provide some canned&amp;nbsp;defaults:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="kt"&gt;Requests&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt;
-    &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="n"&gt;&amp;#39;arg&amp;#39;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="mi"&gt;42&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
-    &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;Nothing&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt; &lt;span class="kt"&gt;True&lt;/span&gt; &lt;span class="kt"&gt;Nothing&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;What does that &lt;code&gt;True&lt;/code&gt; mean, for example?
-Or what exactly does each empty list signify?
-It&amp;#8217;s impossible to know just by looking at the function call&amp;nbsp;alone.&lt;/p&gt;
-&lt;p&gt;Long argument lists are thus detrimental to the quality of functional APIs.
-It&amp;#8217;s much harder to correctly apply the previous rule (least used arguments first)
-when there are so many possible&amp;nbsp;permutations.&lt;/p&gt;
-&lt;p&gt;What should we do then?&amp;#8230;
-In some cases, including the above example of an &lt;span class="caps"&gt;HTTP&lt;/span&gt; library,
-we cannot simply cut out features in the name of elegance.
-The necessary information needs to go &lt;em&gt;somewhere&lt;/em&gt;,
-meaning we need to find at least somewhat acceptable place for&amp;nbsp;it.&lt;/p&gt;
-&lt;p&gt;Fortunately, we have a couple of options
-that should help us with solving this&amp;nbsp;problem.&lt;/p&gt;
-&lt;h5&gt;Combinators /&amp;nbsp;builders&lt;/h5&gt;
-&lt;p&gt;Looking back at the last example in Python,
-we can see why the function call remains readable
-even if it sprouts a dozen or so additional&amp;nbsp;arguments.&lt;/p&gt;
-&lt;p&gt;The obvious reason is that
-each one has been uniquely identified by a &lt;em&gt;name&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;In order to emulate some form of what&amp;#8217;s called keyword arguments,
-we can split the single function call into multiple stages.
-Each one would then supply one piece of data,
-with a matching function name serving as a readability&amp;nbsp;cue:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
-            &lt;span class="n"&gt;withHeaders&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Amazing App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
-            &lt;span class="n"&gt;withBasicAuth&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;user&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;pass&amp;quot;&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
-            &lt;span class="n"&gt;withData&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;field&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;value&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
-                &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;If we follow this approach,
-the caller would only invoke those intermediate functions
-that fit his particular use case.
-The &lt;span class="caps"&gt;API&lt;/span&gt; above could still offer &lt;code&gt;withCookies&lt;/code&gt;, &lt;code&gt;withFiles&lt;/code&gt;,
-or any of the other combinators,
-but their usage shall be completely&amp;nbsp;optional.&lt;/p&gt;
-&lt;p&gt;Pretty neat,&amp;nbsp;right?&lt;/p&gt;
-&lt;p&gt;Thing is, the implementation would be a little involved here.
-We would clearly need to carry some data between the various &lt;code&gt;withFoo&lt;/code&gt; calls,
-which requires some additional data types in addition to plain functions.
-At minimum, we need something to represent the &lt;code&gt;Request&lt;/code&gt;,
-as it is created by the &lt;code&gt;get&lt;/code&gt; function:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;get&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;and then &amp;#8220;piped&amp;#8221; through &lt;code&gt;withFoo&lt;/code&gt; transformers like this&amp;nbsp;one:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;withBasicAuth&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;so that it can we can finally send&amp;nbsp;it:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;sendRequest&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;IO&lt;/span&gt; &lt;span class="kt"&gt;Response&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Such &lt;code&gt;Request&lt;/code&gt; type needs to keep track of all the additional parameters
-that may have been tacked onto&amp;nbsp;it:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;type&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;Param&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;  &lt;span class="c1"&gt;-- Text is the URL&lt;/span&gt;
-
-&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Param&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Header&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
-           &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kt"&gt;BasicAuth&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;
-           &lt;span class="o"&gt;|&lt;/span&gt; &lt;span class="kt"&gt;Data&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
-           &lt;span class="c1"&gt;-- and so on&lt;/span&gt;
-
-&lt;span class="c1"&gt;-- example&lt;/span&gt;
-&lt;span class="nf"&gt;withBasicAuth&lt;/span&gt; &lt;span class="n"&gt;user&lt;/span&gt; &lt;span class="n"&gt;pass&lt;/span&gt; &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;params&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt;
-    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;url&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;params&lt;/span&gt; &lt;span class="o"&gt;++&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="kt"&gt;BasicAuth&lt;/span&gt; &lt;span class="n"&gt;user&lt;/span&gt; &lt;span class="n"&gt;pass&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;All of a sudden, what would be a single function explodes into a collection of data types
-and associated&amp;nbsp;combinators.&lt;/p&gt;
-&lt;p&gt;In Haskell at least,
-we can forgo some of the boilerplate by automatically deriving an instance
-of &lt;a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Monoid.html"&gt;&lt;code&gt;Monoid&lt;/code&gt;&lt;/a&gt;
-(or perhaps a &lt;a href="https://hackage.haskell.org/package/base-4.10.0.0/docs/Data-Semigroup.html"&gt;&lt;code&gt;Semigroup&lt;/code&gt;&lt;/a&gt;).
-Rather than invoking a series of combinators,
-clients would then build their requests through repeated &lt;code&gt;mappend&lt;/code&gt;s&lt;sup id="fnref:2"&gt;&lt;a class="footnote-ref" href="#fn:2" rel="footnote"&gt;2&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt; &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;
-                          &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;header&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Awesome App&amp;quot;&lt;/span&gt;
-                          &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;basicAuth&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;user&amp;quot;&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;pass&amp;quot;&lt;/span&gt;
-                          &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;body&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;field&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;value&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This mini-&lt;a href="https://en.wikipedia.org/wiki/Domain-specific_language"&gt;&lt;span class="caps"&gt;DSL&lt;/span&gt;&lt;/a&gt;
-looks very similar to keyword arguments in Python,
-as well as the equivalent Builder pattern from Java, Rust, and others.
-What&amp;#8217;s disappointing, however,
-is that it doesn&amp;#8217;t easily beat those solutions in terms of compile-time safety.
-Unless you invest into some tricky type-level hacks,
-there is nothing to prevent the users from building invalid requests at&amp;nbsp;runtime:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;let&lt;/span&gt; &lt;span class="n"&gt;reqParams&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/foo&amp;quot;&lt;/span&gt;
-&lt;span class="c1"&gt;--&lt;/span&gt;
-&lt;span class="c1"&gt;-- ... lots of code in between ...&lt;/span&gt;
-&lt;span class="c1"&gt;--&lt;/span&gt;
-&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
-            &lt;span class="n"&gt;reqParams&lt;/span&gt; &lt;span class="o"&gt;&amp;lt;&amp;gt;&lt;/span&gt; &lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/bar&amp;quot;&lt;/span&gt; &lt;span class="c1"&gt;-- woops!&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Compared to a plain function (with however many arguments),
-we have actually lost some measure of correctness&amp;nbsp;here.&lt;/p&gt;
-&lt;h5&gt;Record&amp;nbsp;types&lt;/h5&gt;
-&lt;p&gt;In many cases, fortunately,
-there is another way to keep our calls both flexible and safe against runtime errors.
-We just need to change the representation of the input type (here, &lt;code&gt;Request&lt;/code&gt;)
-into a &lt;em&gt;record&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Record is simply a user-defined type that&amp;#8217;s a collection of &lt;em&gt;named fields&lt;/em&gt;.&lt;/p&gt;
-&lt;p&gt;Most languages (especially imperative ones: C, C++, Go, Rust, &amp;#8230;) call those &lt;em&gt;structures&lt;/em&gt;,
-and use the &lt;code&gt;struct&lt;/code&gt; keyword to signify a record definition.
-In functional programming parlance, they are also referred to as &lt;em&gt;product types&lt;/em&gt;;
-this is because the joint record type is a Cartesian product of its individual field types&lt;sup id="fnref:3"&gt;&lt;a class="footnote-ref" href="#fn:3" rel="footnote"&gt;3&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;Going back to our example,
-it shouldn&amp;#8217;t be difficult to define a record representing an &lt;span class="caps"&gt;HTTP&lt;/span&gt; &lt;code&gt;Request&lt;/code&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="kr"&gt;data&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;reqURL&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt;
-                       &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqMethod&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Method&lt;/span&gt;
-                       &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqHeaders&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
-                       &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqPostData&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
-                       &lt;span class="p"&gt;}&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;In fact, I suspect most programmers would naturally reach for this notation&amp;nbsp;first.&lt;/p&gt;
-&lt;p&gt;Having this definition,
-calls to &lt;code&gt;sendRequest&lt;/code&gt; can be rewritten to take a record instance
-that we construct on the spot&lt;sup id="fnref:4"&gt;&lt;a class="footnote-ref" href="#fn:4" rel="footnote"&gt;4&lt;/a&gt;&lt;/sup&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
-    &lt;span class="kt"&gt;Request&lt;/span&gt; &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;reqURL&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/bar&amp;quot;&lt;/span&gt;
-            &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqMethod&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;GET&lt;/span&gt;
-            &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqHeaders&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Awesome App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt;
-            &lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;reqPostData&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="kt"&gt;[]&lt;/span&gt;
-            &lt;span class="p"&gt;}&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Compare this snippet to the Python example from the beginning of this section.
-It comes remarkably close, right?
-The &lt;code&gt;Request&lt;/code&gt; record and its fields can indeed work quite nicely
-as substitutes for keyword&amp;nbsp;arguments.&lt;/p&gt;
-&lt;p&gt;But besides the readability boon of having &amp;#8220;argument&amp;#8221; names at the call site.
-we&amp;#8217;ve also gained stronger correctness checks.
-For example, there is no way anymore to accidentally supply the &lt;span class="caps"&gt;URL&lt;/span&gt; field&amp;nbsp;twice.&lt;/p&gt;
-&lt;h4&gt;Different functions for different&amp;nbsp;things&lt;/h4&gt;
-&lt;p&gt;Astute readers may have noticed at least two things about the previous&amp;nbsp;solutions.&lt;/p&gt;
-&lt;p&gt;First, they are not mutually incompatible.
-Quite the opposite, actually: they compose very neatly, allowing us to combine
-builder functions with the &lt;em&gt;record update&lt;/em&gt; syntax in the final &lt;span class="caps"&gt;API&lt;/span&gt;:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;response&lt;/span&gt; &lt;span class="ow"&gt;&amp;lt;-&lt;/span&gt; &lt;span class="n"&gt;sendRequest&lt;/span&gt; &lt;span class="o"&gt;$&lt;/span&gt;
-    &lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;get&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;http://example.com/baz&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
-    &lt;span class="p"&gt;{&lt;/span&gt; &lt;span class="n"&gt;reqHeaders&lt;/span&gt; &lt;span class="ow"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="s"&gt;&amp;quot;User-Agent&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s"&gt;&amp;quot;My Awesome App&amp;quot;&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="p"&gt;}&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;This cuts out basically all the boilerplate of record-based calls,
-leaving only the parts that actually differ from the defaults&lt;sup id="fnref:5"&gt;&lt;a class="footnote-ref" href="#fn:5" rel="footnote"&gt;5&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
-&lt;p&gt;But on the second and more important note:
-we don&amp;#8217;t seem to be talking about &lt;em&gt;currying&lt;/em&gt; anymore.
-Does it mean it loses its usefulness
-once we go beyond certain threshold of&amp;nbsp;complexity?&amp;#8230;&lt;/p&gt;
-&lt;p&gt;Thankfully, the answer is no.
-While some APIs may require more advanced techniques
-to access the full breadth of their functionality,
-it is always possible to expose some carefully constructed facade
-that is conducive to partial&amp;nbsp;application.&lt;/p&gt;
-&lt;p&gt;Consider, for example, the functionality exposed by this set of &lt;span class="caps"&gt;HTTP&lt;/span&gt;&amp;nbsp;wrappers:&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span class="nf"&gt;head&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;span class="nf"&gt;headWith&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;span class="nf"&gt;get&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;span class="nf"&gt;getWith&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;span class="nf"&gt;postForm&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;span class="nf"&gt;postFormWith&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Header&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="p"&gt;[(&lt;/span&gt;&lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="kt"&gt;Text&lt;/span&gt;&lt;span class="p"&gt;)]&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;span class="nf"&gt;toURL&lt;/span&gt; &lt;span class="ow"&gt;::&lt;/span&gt; &lt;span class="kt"&gt;Method&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;URL&lt;/span&gt; &lt;span class="ow"&gt;-&amp;gt;&lt;/span&gt; &lt;span class="kt"&gt;Request&lt;/span&gt;
-&lt;/pre&gt;&lt;/div&gt;
-
-
-&lt;p&gt;Each one is obviously curry-friendly&lt;sup id="fnref:6"&gt;&lt;a class="footnote-ref" href="#fn:6" rel="footnote"&gt;6&lt;/a&gt;&lt;/sup&gt;.
-Combined, they also offer a pretty comprehensive &lt;span class="caps"&gt;API&lt;/span&gt; surface.
-And should they prove insufficient,
-you&amp;#8217;d still have the builder pattern and/or record updates to fall back on &amp;#8212;
-either for specialized one-off cases, or for writing your own&amp;nbsp;wrappers.&lt;/p&gt;
-&lt;p&gt;Naturally, this technique of layered &lt;span class="caps"&gt;API&lt;/span&gt; design &amp;#8212;
-with simple wrappers hiding a progressively more advanced core &amp;#8212;
-isn&amp;#8217;t limited to just functional programming.
-In some way, it is what &lt;em&gt;good&lt;/em&gt; &lt;span class="caps"&gt;API&lt;/span&gt; design looks like in general.
-But in &lt;span class="caps"&gt;FP&lt;/span&gt; languages, it becomes especially important,
-because the expressive benefits of partial application are so paramount&amp;nbsp;there&lt;/p&gt;
-&lt;p&gt;Fortunately, these principles seem to be followed pretty consistently,
-at least within the Haskell ecosystem.
-You can see it in the design of
-&lt;a href="https://www.stackage.org/haddock/lts-9.12/http-client-0.5.7.0/Network-HTTP-Client.html"&gt;the &lt;code&gt;http-client&lt;/code&gt; package&lt;/a&gt;,
-which is the real world extension of the &lt;span class="caps"&gt;HTTP&lt;/span&gt; interface outlined here.
-More evidently, it can be observed in any of the numerous packages
-the expose both a basic &lt;code&gt;foo&lt;/code&gt; and a more customizable &lt;code&gt;fooWith&lt;/code&gt; functions;
-popular examples include
-&lt;a href="https://www.stackage.org/haddock/lts-9.12/async-2.1.1.1/Control-Concurrent-Async.html#v:cancelWith"&gt;the &lt;code&gt;async&lt;/code&gt; package&lt;/a&gt;,
-&lt;a href="https://hackage.haskell.org/package/zlib-0.6.1.2/docs/Codec-Compression-Zlib.html#g:2"&gt;the &lt;code&gt;zlib&lt;/code&gt; library&lt;/a&gt;,
-and &lt;a href="https://www.stackage.org/haddock/lts-9.12/regex-compat-tdfa-0.95.1.4/Text-Regex.html"&gt;the &lt;code&gt;Text.Regex&lt;/code&gt; module&lt;/a&gt;.&lt;/p&gt;
-&lt;div class="footnote"&gt;
-&lt;hr /&gt;
-&lt;ol&gt;
-&lt;li id="fn:1"&gt;
-&lt;p&gt;It&amp;#8217;d be more common in Python to write this as &lt;code&gt;"Alice has a cat".split()&lt;/code&gt;,
-but this form would make it less obvious how the arguments are passed.&amp;#160;&lt;a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:2"&gt;
-&lt;p&gt;A great example of this pattern can be found
-in the &lt;a href="http://hackage.haskell.org/package/optparse-applicative"&gt;&lt;em&gt;optparse-applicative&lt;/em&gt; package&lt;/a&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:3"&gt;
-&lt;p&gt;Tuples (like &lt;code&gt;(Int, String)&lt;/code&gt;) are also product types.
-They can be thought of as ad-hoc records where field indices serve as rudimentary &amp;#8220;names&amp;#8221;.
-In fact, some languages even use the dotted notation to access fields
-of both records/structs (&lt;code&gt;x.foo&lt;/code&gt;) and tuples (&lt;code&gt;y.0&lt;/code&gt;).&amp;#160;&lt;a class="footnote-backref" href="#fnref:3" rev="footnote" title="Jump back to footnote 3 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:4"&gt;
-&lt;p&gt;For simplicity, I&amp;#8217;m gonna assume the &lt;code&gt;URL&lt;/code&gt; and &lt;code&gt;Header&lt;/code&gt; types
-can be &amp;#8220;magically&amp;#8221; constructed from string literals
-through the &lt;span class="caps"&gt;GHC&lt;/span&gt;&amp;#8217;s &lt;code&gt;OverloadedStrings&lt;/code&gt; extension.&amp;#160;&lt;a class="footnote-backref" href="#fnref:4" rev="footnote" title="Jump back to footnote 4 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:5"&gt;
-&lt;p&gt;In many languages,
-we can specify more formally what the &amp;#8220;default&amp;#8221; means for a compound-type like &lt;code&gt;Request&lt;/code&gt;,
-and sometimes even &lt;em&gt;derive&lt;/em&gt; it automatically.
-Examples include
-&lt;a href="https://hackage.haskell.org/package/data-default-0.7.1.1/docs/Data-Default.html#t:Default"&gt;the &lt;code&gt;Default&lt;/code&gt; typeclass&lt;/a&gt; in Haskell,
-&lt;a href="https://doc.rust-lang.org/std/default/trait.Default.html"&gt;the &lt;code&gt;Default&lt;/code&gt; trait&lt;/a&gt; in Rust,
-and the default/argumentless/trivial constructors in C++ &lt;em&gt;et al&lt;/em&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:5" rev="footnote" title="Jump back to footnote 5 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;li id="fn:6"&gt;
-&lt;p&gt;Haskell programmers may especially notice how the last function is designed specifically
-for infix application: &lt;code&gt;response &amp;lt;- sendRequest $ POST `toUrl` url&lt;/code&gt;.&amp;#160;&lt;a class="footnote-backref" href="#fnref:6" rev="footnote" title="Jump back to footnote 6 in the text"&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
-&lt;/li&gt;
-&lt;/ol&gt;
-&lt;/div&gt;</summary><category term="functional programming"></category><category term="currying"></category><category term="partial application"></category><category term="Haskell"></category><category term="API"></category><category term="abstraction"></category></entry></feed>
+&lt;/div&gt;</summary><category term="Rust"></category><category term="gisht"></category><category term="CLI"></category><category term="GitHub"></category><category term="Python"></category><category term="testing"></category></entry></feed>

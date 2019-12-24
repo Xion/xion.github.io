@@ -63,6 +63,157 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-string-args.html#rust-string-args">Taking string arguments in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Tue 24 December 2019 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/borrowing.html">borrowing</a>,      <a href="http://xion.io/tag/ownership.html">ownership</a>      &#8226; <a href="http://xion.io/post/code/rust-string-args.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Strings of text seem to always be a complicated topic when it comes to programming.
+This counts double for low-level languages
+which expose the programmer to the full complexity of memory management and&nbsp;allocation.</p>
+<p>Rust is, obviously, one of those languages.
+Strings in Rust are therefore represented using two distinct types:
+<code>str</code> (the string <em>slice</em>) and <code>String</code> (the owned/allocated string).
+Learning <a href="https://doc.rust-lang.org/book/second-edition/ch08-02-strings.html">how to juggle those types</a>
+is something you need to do very early if you want to be productive in the&nbsp;language.</p>
+<p>But even after you&#8217;ve programmed in Rust for some time,
+you may still trip on some more subtle issues with string handling.
+In this post, I will concentrate on just one common task:
+writing a function that takes a <em>string argument</em>.
+We&#8217;ll see that even there, we can encounter a fair number of&nbsp;gotchas.</p>
+<h4>Just reading&nbsp;it</h4>
+<p>Let&#8217;s start with a simple case:
+a function which merely <em>reads</em> its string&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you&#8217;re probably well aware,
+using <code>str</code> rather than <code>String</code> is the idiomatic approach here.
+Because a <code>&amp;str</code> reference is essentially an address + length,
+it can point to any string wheresoever:
+a <code>'static</code> literal, a heap-allocated <code>String</code>, or any portion or substring&nbsp;thereof:</p>
+<div class="highlight"><pre><span class="n">hello</span><span class="p">(</span><span class="s">&quot;world&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Alice&quot;</span><span class="p">));</span><span class="w"></span>
+<span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="s">&quot;Dennis Ritchie&quot;</span><span class="p">[</span><span class="mf">0.</span><span class="p">.</span><span class="mi">6</span><span class="p">]);</span><span class="w"></span>
+</pre></div>
+
+
+<p>Contrast this with an argument of type <code>&amp;String</code>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>which mandates an actual, full-blown <code>String</code> object:</p>
+<div class="highlight"><pre><span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Bob&quot;</span><span class="p">));</span><span class="w"></span>
+<span class="c1">// (the other examples won&#39;t work)</span>
+</pre></div>
+
+
+<p>There are virtually no circumstances when you would want to do this,
+as it potentially forces the caller to needlessly put the string on the heap.
+Even if you anticipate all function calls to involve actual <code>String</code> objects,
+the automatic <code>Deref</code> coercion from <code>&amp;String</code> to <code>&amp;str</code>
+should still allow you to use the more universal, <code>str</code>-based <span class="caps">API</span>.</p>
+<h4>Hiding the&nbsp;reference</h4>
+<p>If <em>rustc</em> can successfully turn a <code>&amp;String</code> into <code>&amp;str</code>,
+then perhaps it should also be possible to simply use <code>String</code> when that&#8217;s more&nbsp;convenient?</p>
+<p>In general, this kind of &#8220;reverse <code>Deref</code>&#8221; doesn&#8217;t happen in Rust
+outside of method calls with <code>&amp;self</code>.
+It seems, however, that it would sometimes be desirable;
+one reasonable use case involves chains of iterator adapters,
+most importantly <code>map</code> and <code>for_each</code>:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">strings</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;Alice&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Bob&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()];</span><span class="w"></span>
+<span class="n">strings</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">for_each</span><span class="p">(</span><span class="n">hello</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>Since the compiler doesn&#8217;t take advantage of<code>Deref</code> coercions when inferring closure types,
+their argument types have to match exactly.
+As a result, we often need explicit <code>|x| foo(x)</code> closures
+which suffer from poorer readability in long <code>Iterator</code> or <code>Stream</code>-based&nbsp;expressions.</p>
+<p>We can make the above code work
+&#8212; and also retain the ability to make calls like <code>hello("Charlie");</code> &#8212;
+by using one of the built-in traits that generalize over the borrowing relationships.
+The one that works best for accepting string arguments is called <code>AsRef</code><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="o">&lt;</span><span class="n">N</span><span class="o">:</span><span class="w"> </span><span class="n">AsRef</span><span class="o">&lt;</span><span class="kt">str</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="n">N</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">.</span><span class="n">as_ref</span><span class="p">());</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Its sole method, <code>AsRef::as_ref</code>, returns a reference to the trait&#8217;s type parameter.
+In the case above, that reference will obviously be of type <code>&amp;str</code>,
+which circles back to our initial example, one with a direct <code>&amp;str</code> argument.</p>
+<p>The difference is, however, that <code>AsRef&lt;str&gt;</code> is implemented
+<a href="https://play.rust-lang.org/?gist=91f084a1ae0527f3af1cba3fca421da6&amp;version=stable">for all interesting string types</a>
+&#8212; both in their owned and borrowed versions.
+This obviates the need for <code>Deref</code> coercions and makes the <span class="caps">API</span> more&nbsp;convenient.</p>
+<h4>Own&nbsp;it</h4>
+<p>Things get a little more complicated when the string parameter is needed
+for more than just reading. For storage and potential mutation,
+a <code>&amp;str</code> reference is not enough: you need an actual, full-blown <code>String</code> object.</p>
+<p>Now, you may think this is not a huge obstacle.
+After all, it&#8217;s pretty easy to &#8220;turn&#8221; <code>&amp;str</code> into a <code>String</code>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Greetings</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">names</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">impl</span><span class="w"> </span><span class="n">Greetings</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// Don&#39;t do this!</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">names</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">name</span><span class="p">.</span><span class="n">clone</span><span class="p">());</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>But I strongly advise against this practice, at least in public APIs.
+If you expose such function to your users, you are essentially tricking them
+into thinking their input will only ever be read, not copied,
+which has implications on both performance and memory&nbsp;usage.</p>
+<p>Instead, if you need to take ownership of the resulting <code>String</code>,
+it is much better to indicate this in the function signature&nbsp;directly:</p>
+<div class="highlight"><pre><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="bp">self</span><span class="p">.</span><span class="n">names</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">name</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>This shifts the burden on creating the <code>String</code> onto the caller,
+but that&#8217;s not necessarily a bad thing.
+On their side, the added boilerplate can pretty&nbsp;minimal:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">greetings</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Greetings</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="n">grettings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Dylan&quot;</span><span class="p">));</span><span class="w">  </span><span class="c1">// uhm...</span>
+<span class="n">greetings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="s">&quot;Eva&quot;</span><span class="p">.</span><span class="n">to_string</span><span class="p">());</span><span class="w">      </span><span class="c1">// somewhat better...</span>
+<span class="n">grettings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="s">&quot;Frank&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">());</span><span class="w">     </span><span class="c1">// not too bad</span>
+<span class="n">greetings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="s">&quot;Gene&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">());</span><span class="w">          </span><span class="c1">// good enough</span>
+</pre></div>
+
+
+<p>while clearly indicating where does the memory allocation&nbsp;happen.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It is also idiomatically used for functions taking <code>Path</code> parameters,
+i.e. <code>AsRef&lt;Path&gt;</code>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-string-args.html#rust-string-args">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-patterns-ref.html#rust-patterns-ref">& vs. ref in Rust&nbsp;patterns</a></h2>
     <p>
       Posted on Thu 02 June 2016 in <a href="http://xion.io/category/code.html">Code</a>

@@ -63,6 +63,157 @@
 
 <article>
   <header>
+    <h2><a href="http://xion.io/post/code/rust-string-args.html#rust-string-args">Taking string arguments in&nbsp;Rust</a></h2>
+    <p>
+      Posted on Tue 24 December 2019 in <a href="http://xion.io/category/code.html">Code</a>
+      &#8226; Tagged with
+      <a href="http://xion.io/tag/rust.html">Rust</a>,      <a href="http://xion.io/tag/strings.html">strings</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/borrowing.html">borrowing</a>,      <a href="http://xion.io/tag/ownership.html">ownership</a>      &#8226; <a href="http://xion.io/post/code/rust-string-args.html#disqus_thread">Leave a comment</a>
+    </p>
+  </header>
+  <div>
+      <p>Strings of text seem to always be a complicated topic when it comes to programming.
+This counts double for low-level languages
+which expose the programmer to the full complexity of memory management and&nbsp;allocation.</p>
+<p>Rust is, obviously, one of those languages.
+Strings in Rust are therefore represented using two distinct types:
+<code>str</code> (the string <em>slice</em>) and <code>String</code> (the owned/allocated string).
+Learning <a href="https://doc.rust-lang.org/book/second-edition/ch08-02-strings.html">how to juggle those types</a>
+is something you need to do very early if you want to be productive in the&nbsp;language.</p>
+<p>But even after you&#8217;ve programmed in Rust for some time,
+you may still trip on some more subtle issues with string handling.
+In this post, I will concentrate on just one common task:
+writing a function that takes a <em>string argument</em>.
+We&#8217;ll see that even there, we can encounter a fair number of&nbsp;gotchas.</p>
+<h4>Just reading&nbsp;it</h4>
+<p>Let&#8217;s start with a simple case:
+a function which merely <em>reads</em> its string&nbsp;argument:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>As you&#8217;re probably well aware,
+using <code>str</code> rather than <code>String</code> is the idiomatic approach here.
+Because a <code>&amp;str</code> reference is essentially an address + length,
+it can point to any string wheresoever:
+a <code>'static</code> literal, a heap-allocated <code>String</code>, or any portion or substring&nbsp;thereof:</p>
+<div class="highlight"><pre><span class="n">hello</span><span class="p">(</span><span class="s">&quot;world&quot;</span><span class="p">);</span><span class="w"></span>
+<span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Alice&quot;</span><span class="p">));</span><span class="w"></span>
+<span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="s">&quot;Dennis Ritchie&quot;</span><span class="p">[</span><span class="mf">0.</span><span class="p">.</span><span class="mi">6</span><span class="p">]);</span><span class="w"></span>
+</pre></div>
+
+
+<p>Contrast this with an argument of type <code>&amp;String</code>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>which mandates an actual, full-blown <code>String</code> object:</p>
+<div class="highlight"><pre><span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Bob&quot;</span><span class="p">));</span><span class="w"></span>
+<span class="c1">// (the other examples won&#39;t work)</span>
+</pre></div>
+
+
+<p>There are virtually no circumstances when you would want to do this,
+as it potentially forces the caller to needlessly put the string on the heap.
+Even if you anticipate all function calls to involve actual <code>String</code> objects,
+the automatic <code>Deref</code> coercion from <code>&amp;String</code> to <code>&amp;str</code>
+should still allow you to use the more universal, <code>str</code>-based <span class="caps">API</span>.</p>
+<h4>Hiding the&nbsp;reference</h4>
+<p>If <em>rustc</em> can successfully turn a <code>&amp;String</code> into <code>&amp;str</code>,
+then perhaps it should also be possible to simply use <code>String</code> when that&#8217;s more&nbsp;convenient?</p>
+<p>In general, this kind of &#8220;reverse <code>Deref</code>&#8221; doesn&#8217;t happen in Rust
+outside of method calls with <code>&amp;self</code>.
+It seems, however, that it would sometimes be desirable;
+one reasonable use case involves chains of iterator adapters,
+most importantly <code>map</code> and <code>for_each</code>:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="n">strings</span><span class="o">:</span><span class="w"> </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">vec</span><span class="o">!</span><span class="p">[</span><span class="s">&quot;Alice&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;Bob&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">()];</span><span class="w"></span>
+<span class="n">strings</span><span class="p">.</span><span class="n">into_iter</span><span class="p">().</span><span class="n">for_each</span><span class="p">(</span><span class="n">hello</span><span class="p">);</span><span class="w"></span>
+</pre></div>
+
+
+<p>Since the compiler doesn&#8217;t take advantage of<code>Deref</code> coercions when inferring closure types,
+their argument types have to match exactly.
+As a result, we often need explicit <code>|x| foo(x)</code> closures
+which suffer from poorer readability in long <code>Iterator</code> or <code>Stream</code>-based&nbsp;expressions.</p>
+<p>We can make the above code work
+&#8212; and also retain the ability to make calls like <code>hello("Charlie");</code> &#8212;
+by using one of the built-in traits that generalize over the borrowing relationships.
+The one that works best for accepting string arguments is called <code>AsRef</code><sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>:</p>
+<div class="highlight"><pre><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="o">&lt;</span><span class="n">N</span><span class="o">:</span><span class="w"> </span><span class="n">AsRef</span><span class="o">&lt;</span><span class="kt">str</span><span class="o">&gt;&gt;</span><span class="p">(</span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="n">N</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="nb">println</span><span class="o">!</span><span class="p">(</span><span class="s">&quot;Hello, {}!&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="p">.</span><span class="n">as_ref</span><span class="p">());</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>Its sole method, <code>AsRef::as_ref</code>, returns a reference to the trait&#8217;s type parameter.
+In the case above, that reference will obviously be of type <code>&amp;str</code>,
+which circles back to our initial example, one with a direct <code>&amp;str</code> argument.</p>
+<p>The difference is, however, that <code>AsRef&lt;str&gt;</code> is implemented
+<a href="https://play.rust-lang.org/?gist=91f084a1ae0527f3af1cba3fca421da6&amp;version=stable">for all interesting string types</a>
+&#8212; both in their owned and borrowed versions.
+This obviates the need for <code>Deref</code> coercions and makes the <span class="caps">API</span> more&nbsp;convenient.</p>
+<h4>Own&nbsp;it</h4>
+<p>Things get a little more complicated when the string parameter is needed
+for more than just reading. For storage and potential mutation,
+a <code>&amp;str</code> reference is not enough: you need an actual, full-blown <code>String</code> object.</p>
+<p>Now, you may think this is not a huge obstacle.
+After all, it&#8217;s pretty easy to &#8220;turn&#8221; <code>&amp;str</code> into a <code>String</code>:</p>
+<div class="highlight"><pre><span class="k">struct</span><span class="w"> </span><span class="n">Greetings</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="n">Vec</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">names</span><span class="p">,</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+
+<span class="k">impl</span><span class="w"> </span><span class="n">Greetings</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="c1">// Don&#39;t do this!</span>
+<span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="o">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">names</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">name</span><span class="p">.</span><span class="n">clone</span><span class="p">());</span><span class="w"></span>
+<span class="w">    </span><span class="p">}</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>But I strongly advise against this practice, at least in public APIs.
+If you expose such function to your users, you are essentially tricking them
+into thinking their input will only ever be read, not copied,
+which has implications on both performance and memory&nbsp;usage.</p>
+<p>Instead, if you need to take ownership of the resulting <code>String</code>,
+it is much better to indicate this in the function signature&nbsp;directly:</p>
+<div class="highlight"><pre><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="n">hello</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"></span>
+<span class="w">    </span><span class="bp">self</span><span class="p">.</span><span class="n">names</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">name</span><span class="p">);</span><span class="w"></span>
+<span class="p">}</span><span class="w"></span>
+</pre></div>
+
+
+<p>This shifts the burden on creating the <code>String</code> onto the caller,
+but that&#8217;s not necessarily a bad thing.
+On their side, the added boilerplate can pretty&nbsp;minimal:</p>
+<div class="highlight"><pre><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">greetings</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Greetings</span><span class="o">::</span><span class="n">new</span><span class="p">();</span><span class="w"></span>
+<span class="n">grettings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="n">String</span><span class="o">::</span><span class="n">from</span><span class="p">(</span><span class="s">&quot;Dylan&quot;</span><span class="p">));</span><span class="w">  </span><span class="c1">// uhm...</span>
+<span class="n">greetings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="s">&quot;Eva&quot;</span><span class="p">.</span><span class="n">to_string</span><span class="p">());</span><span class="w">      </span><span class="c1">// somewhat better...</span>
+<span class="n">grettings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="s">&quot;Frank&quot;</span><span class="p">.</span><span class="n">to_owned</span><span class="p">());</span><span class="w">     </span><span class="c1">// not too bad</span>
+<span class="n">greetings</span><span class="p">.</span><span class="n">hello</span><span class="p">(</span><span class="s">&quot;Gene&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">());</span><span class="w">          </span><span class="c1">// good enough</span>
+</pre></div>
+
+
+<p>while clearly indicating where does the memory allocation&nbsp;happen.</p>
+<div class="footnote">
+<hr />
+<ol>
+<li id="fn:1">
+<p>It is also idiomatically used for functions taking <code>Path</code> parameters,
+i.e. <code>AsRef&lt;Path&gt;</code>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
+</li>
+</ol>
+</div>
+      <a class="btn" href="http://xion.io/post/code/rust-string-args.html#rust-string-args">Continue reading</a>
+  </div>
+  <hr />
+</article>
+<article>
+  <header>
     <h2><a href="http://xion.io/post/code/rust-examples.html#rust-examples">Add examples to your Rust&nbsp;libraries</a></h2>
     <p>
       Posted on Wed 28 February 2018 in <a href="http://xion.io/category/code.html">Code</a>
@@ -1970,206 +2121,6 @@ or both.&#160;<a class="footnote-backref" href="#fnref:3" rev="footnote" title="
 </ol>
 </div>
       <a class="btn" href="http://xion.io/post/code/rust-iter-patterns.html#rust-iter-patterns">Continue reading</a>
-  </div>
-  <hr />
-</article>
-<article>
-  <header>
-    <h2><a href="http://xion.io/post/code/python-generator-args.html#python-generator-args">Arguments to Python generator&nbsp;functions</a></h2>
-    <p>
-      Posted on Tue 14 March 2017 in <a href="http://xion.io/category/code.html">Code</a>
-      &#8226; Tagged with
-      <a href="http://xion.io/tag/python.html">Python</a>,      <a href="http://xion.io/tag/generators.html">generators</a>,      <a href="http://xion.io/tag/functions.html">functions</a>,      <a href="http://xion.io/tag/arguments.html">arguments</a>,      <a href="http://xion.io/tag/closures.html">closures</a>      &#8226; <a href="http://xion.io/post/code/python-generator-args.html#disqus_thread">Leave a comment</a>
-    </p>
-  </header>
-  <div>
-      <p>In Python, a <em>generator function</em> is one that
-contains a <code>yield</code> statement inside the function body.
-Although this language construct has many fascinating use cases
-(<a href="http://www.dabeaz.com/coroutines/Coroutines.pdf"><span class="caps">PDF</span></a>),
-the most common one is creating concise and readable&nbsp;iterators.</p>
-<h4>A typical&nbsp;case</h4>
-<p>Consider, for example, this simple&nbsp;function:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-        <span class="k">yield</span> <span class="n">x</span>
-        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-</pre></div>
-
-
-<p>which creates an (infinite) iterator over all multiples of given integer.
-A sample of its output looks like&nbsp;this:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">itertools</span> <span class="kn">import</span> <span class="n">islice</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="nb">list</span><span class="p">(</span><span class="n">islice</span><span class="p">(</span><span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span> <span class="mi">10</span><span class="p">))</span>
-<span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">35</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">45</span><span class="p">,</span> <span class="mi">50</span><span class="p">]</span>
-</pre></div>
-
-
-<p>If you were to replicate in a language such as Java or Rust
-&#8212; neither of which supports an equivalent of <code>yield</code> &#8212;
-you&#8217;d end up writing an <em>iterator</em> class.
-Python also has them, of&nbsp;course:</p>
-<div class="highlight"><pre><span class="k">class</span> <span class="nc">Multiples</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">of</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">of</span> <span class="o">=</span> <span class="n">of</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">=</span> <span class="mi">0</span>
-
-    <span class="k">def</span> <span class="nf">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="bp">self</span>
-
-    <span class="k">def</span> <span class="nf">next</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">current</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">of</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">current</span>
-
-    <span class="n">__next__</span> <span class="o">=</span> <span class="nb">next</span>  <span class="c"># Python 3</span>
-</pre></div>
-
-
-<p>but they are usually not the first choice<sup id="fnref:1"><a class="footnote-ref" href="#fn:1" rel="footnote">1</a></sup>.</p>
-<p>It&#8217;s also pretty easy to see why:
-they require explicit bookkeeping of any auxiliary state between iterations.
-Perhaps it&#8217;s not too much to ask for a trivial walk over integers,
-but it can get quite tricky if we were to iterate over recursive data structures,
-like trees or graphs. In <code>yield</code>-based generators, this isn&#8217;t a problem,
-because the state is stored within local variables on the coroutine&nbsp;stack.</p>
-<h4>Lazy!</h4>
-<p>It&#8217;s important to remember, however, that
-generator functions behave differently than regular functions do,
-even if the surface appearance often says&nbsp;otherwise.</p>
-<p>The difference I wanted to explore in this post becomes apparent
-when we add some argument checking to the initial&nbsp;example:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
-
-    <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-        <span class="k">yield</span> <span class="n">x</span>
-        <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-</pre></div>
-
-
-<p>With that <code>if</code> in place, passing a negative number shall result in an exception.
-Yet when we attempt to do just that, it will seem as if nothing is&nbsp;happening:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span> <span class="o">=</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">10</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span>
-</pre></div>
-
-
-<p>And to a certain degree, this is pretty much correct.
-Simply <em>calling</em> a generator function does comparatively little,
-and doesn&#8217;t actually execute any of its code!
-Instead, we get back a <em>generator object</em>:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">m</span>
-<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x10f0ceb40</span><span class="o">&gt;</span>
-</pre></div>
-
-
-<p>which is essentially a built-in analogue to the <code>Multiples</code> iterator instance.
-Commonly, it is said that both generator functions and iterator classes are <em>lazy</em>:
-they only do work when we asked (i.e. iterated&nbsp;over).</p>
-<h4>Getting&nbsp;eager</h4>
-<p>Oftentimes, this is perfectly okay.
-The laziness of generators is in fact one of their great strengths,
-which is particularly evident in the <a href="https://pymotw.com/2/itertools/">immense usefulness</a>
-of <a href="http://docs.python.org/2/library/itertools.html">the<code>itertools</code> module</a>.</p>
-<p>On the other hand, however,
-delaying argument checks and similar operations until later may hamper debugging.
-The classic engineering principle of <a href="https://en.wikipedia.org/wiki/Fail-fast">failing fast</a>
-applies here very fittingly: any errors should be signaled immediately.
-In Python, this means raising exceptions as soon as problems are&nbsp;detected.</p>
-<p>Fortunately, it is possible to reconcile the benefits of laziness
-with (more) defensive programming.
-We can make the generator functions only a <em>little</em> more eager,
-just enough to verify the correctness of their&nbsp;arguments.</p>
-<p>The trick is simple. We shall extract an <em>inner</em> generator function
-and only call it after we have checked the&nbsp;arguments:</p>
-<div class="highlight"><pre><span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Yields all multiples of given integer.&quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">of</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s">&quot;expected a natural number, got </span><span class="si">%r</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">of</span><span class="p">,))</span>
-
-    <span class="k">def</span> <span class="nf">multiples</span><span class="p">():</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">x</span>
-            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-
-    <span class="k">return</span> <span class="n">multiples</span><span class="p">()</span>
-</pre></div>
-
-
-<p>From the caller&#8217;s point of view, nothing has changed in the typical&nbsp;case:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
-<span class="o">&lt;</span><span class="n">generator</span> <span class="nb">object</span> <span class="n">multiples</span> <span class="n">at</span> <span class="mh">0x110579190</span><span class="o">&gt;</span>
-</pre></div>
-
-
-<p>but if we try to make an incorrect invocation now,
-the problem is detected <em>immediately</em>:</p>
-<div class="highlight"><pre><span class="o">&gt;&gt;&gt;</span> <span class="n">multiples</span><span class="p">(</span><span class="o">-</span><span class="mi">5</span><span class="p">)</span>
-</pre></div>
-
-
-<!-- -->
-
-<div class="highlight"><pre>Traceback (most recent call last):
-  File &quot;&lt;pyshell#2&gt;&quot;, line 1, in &lt;module&gt;
-    multiples(of=-5)
-  File &quot;&lt;pyshell#0&gt;&quot;, line 4, in multiples
-    raise ValueError(&quot;expected a natural number, got %r&quot; % (of,))
-ValueError: expected a natural number, got -5
-</pre></div>
-
-
-<p>Pretty neat, especially for something that requires only two lines of&nbsp;code!</p>
-<h4>The last&nbsp;(micro)optimization</h4>
-<p>Indeed, we didn&#8217;t even have to pass the arguments to the inner (generator) function,
-because they are already captured by the&nbsp;closure.</p>
-<p>Unfortunately, this also has a slight performance cost.
-A captured variable (also known as a <em>cell variable</em>) is stored on the function object itself,
-so Python has to emit
-<a href="http://holdenweb.blogspot.com/2014/07/closures-arent-easy.html">a different bytecode instruction</a>
-(<code>LOAD_DEREF</code>) that involves
-an <a href="http://stupidpythonideas.blogspot.com/2015/12/how-lookup-works.html">extra pointer dereference</a>.
-Normally, this is not a problem, but in a tight generator loop it can make a&nbsp;difference.</p>
-<p>We can eliminate this extra work<sup id="fnref:2"><a class="footnote-ref" href="#fn:2" rel="footnote">2</a></sup> by passing the parameters&nbsp;explicitly:</p>
-<div class="highlight"><pre>    <span class="c"># (snip)</span>
-
-    <span class="k">def</span> <span class="nf">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">):</span>
-        <span class="n">x</span> <span class="o">=</span> <span class="n">of</span>
-        <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
-            <span class="k">yield</span> <span class="n">x</span>
-            <span class="n">x</span> <span class="o">+=</span> <span class="n">of</span>
-
-    <span class="k">return</span> <span class="n">multiples</span><span class="p">(</span><span class="n">of</span><span class="p">)</span>
-</pre></div>
-
-
-<p>This turns them into local variables of the inner function,
-replacing the <code>LOAD_DEREF</code> instructions with (aptly named) <code>LOAD_FAST</code> ones.</p>
-<div class="footnote">
-<hr />
-<ol>
-<li id="fn:1">
-<p>Technically, the <em>Multiples</em> class is here is both an <em>iterator</em>
-(because it has the <code>next</code>/<code>__next__</code> methods) and <em>iterable</em>
-(because it has <code>__iter__</code> method that returns an iterator, which happens to be the same object).
-This is common feature of iterators that are not associated with any collection,
-like the ones defined in the built-in <a href="http://docs.python.org/2/library/itertools.html"><code>itertools</code> module</a>.&#160;<a class="footnote-backref" href="#fnref:1" rev="footnote" title="Jump back to footnote 1 in the text">&#8617;</a></p>
-</li>
-<li id="fn:2">
-<p>Note that if you engage in this kind of microoptimizations,
-I&#8217;d assume you have already <a href="https://www.python.org/doc/essays/list2str/">changed your global lookup into local ones</a> :)&#160;<a class="footnote-backref" href="#fnref:2" rev="footnote" title="Jump back to footnote 2 in the text">&#8617;</a></p>
-</li>
-</ol>
-</div>
-      <a class="btn" href="http://xion.io/post/code/python-generator-args.html#python-generator-args">Continue reading</a>
   </div>
 </article>
 
